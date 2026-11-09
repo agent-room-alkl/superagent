@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import { setupModule } from '../src/modules/setup/index.js';
 import { activateKey, InMemoryConfigRepo, publicView, revokeKey, StaticAllowlist, testKey, type SetupDeps } from '../src/modules/setup/service.js';
 import { InMemorySecretStore, redact } from '../src/modules/setup/secrets.js';
-import { InMemoryBudgetStore, maxBillableMicroUsd, actualMicroUsd, type Price } from '../src/modules/setup/budget.js';
+import { InMemoryBudgetStore, maxBillableMicroUsd, actualMicroUsd, SettlementRefused, type Price } from '../src/modules/setup/budget.js';
 import type { FetchLike } from '../src/modules/setup/providers.js';
 
 const GOOD = 'sk-ant-test-GOODKEY1234';
@@ -131,12 +131,23 @@ describe('Budget: bounded reservation keeps the cap hard under concurrency', () 
     expect(snap.reserved).toBeGreaterThanOrEqual(per); // frozen reservation still counted
   });
 
-  it('settlement cannot charge above the reservation', async () => {
+  it('settlement above the reservation is refused and frozen with the real figures, never clamped', async () => {
     const store = new InMemoryBudgetStore();
     store.setCap('t', 'm', 100_000);
     const id = (await store.reserve('t', 'm', 50_000))!;
-    expect(await store.settle(id, 80_000)).toBe(0);
-    expect(store.snapshot('t', 'm').spent).toBe(50_000);
+    await expect(store.settle(id, 80_000, { inputTokens: 9, outputTokens: 9 })).rejects.toBeInstanceOf(SettlementRefused);
+    expect(store.snapshot('t', 'm')).toEqual({ cap: 100_000, reserved: 50_000, spent: 0 }); // still held, nothing charged silently
+    expect(store.observed.get(id)).toEqual({ costMicroUsd: 80_000, inputTokens: 9, outputTokens: 9 });
+  });
+
+  it('settlement amounts must be non-negative safe integers; nothing changes otherwise', async () => {
+    const store = new InMemoryBudgetStore();
+    store.setCap('t', 'm', 100_000);
+    const id = (await store.reserve('t', 'm', 50_000))!;
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) await expect(store.settle(id, bad)).rejects.toThrow(/invalid settlement/);
+    expect(store.snapshot('t', 'm')).toEqual({ cap: 100_000, reserved: 50_000, spent: 0 });
+    expect(await store.settle(id, 20_000)).toBe(30_000);
+    expect(store.snapshot('t', 'm')).toEqual({ cap: 100_000, reserved: 0, spent: 20_000 });
   });
 });
 

@@ -4,7 +4,7 @@
  * left frozen for reconciliation. Prices for the gateway come from the verified-model record.
  */
 import type pg from 'pg';
-import { assertReservable, RESERVE_SQL, type BudgetStore, type ObservedUsage, type ReservationMeta } from './budget.js';
+import { assertReservable, assertSettleable, RESERVE_SQL, SettlementRefused, type BudgetStore, type ObservedUsage, type ReservationMeta } from './budget.js';
 import { validPricedModel, type PricedModel, type PriceBook } from './llm-gateway.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,13 +54,23 @@ export class PgBudgetStore implements BudgetStore {
   }
 
   async settle(id: string, actual: number, usage?: { inputTokens: number; outputTokens: number }): Promise<number> {
-    return tx(this.pool, async (c) => {
+    assertSettleable(actual);
+    const out = await tx(this.pool, async (c) => {
       const u = await this.lock(c, id, ['reserved', 'frozen_unknown']);
-      const charged = Math.min(Math.max(0, Math.ceil(actual)), u.reserved);
-      await c.query('UPDATE llm_budget SET reserved_micro_usd = reserved_micro_usd - $3, spent_micro_usd = spent_micro_usd + $4 WHERE tenant_id = $1 AND month = $2', [u.tenantId, u.month, u.reserved, charged]);
-      await c.query("UPDATE llm_usage SET status = 'settled', cost_micro_usd = $2, input_tokens = $3, output_tokens = $4 WHERE id = $1", [id, charged, usage?.inputTokens ?? 0, usage?.outputTokens ?? 0]);
-      return u.reserved - charged;
+      if (actual > u.reserved) {
+        // Never clamp: keep the reservation holding budget and record what was actually reported.
+        await c.query(
+          "UPDATE llm_usage SET status = 'frozen_unknown', cost_micro_usd = $2, input_tokens = $3, output_tokens = $4 WHERE id = $1",
+          [id, actual, usage?.inputTokens ?? 0, usage?.outputTokens ?? 0],
+        );
+        return { kind: 'refused' as const, reserved: u.reserved };
+      }
+      await c.query('UPDATE llm_budget SET reserved_micro_usd = reserved_micro_usd - $3, spent_micro_usd = spent_micro_usd + $4 WHERE tenant_id = $1 AND month = $2', [u.tenantId, u.month, u.reserved, actual]);
+      await c.query("UPDATE llm_usage SET status = 'settled', cost_micro_usd = $2, input_tokens = $3, output_tokens = $4 WHERE id = $1", [id, actual, usage?.inputTokens ?? 0, usage?.outputTokens ?? 0]);
+      return { kind: 'settled' as const, refund: u.reserved - actual };
     });
+    if (out.kind === 'refused') throw new SettlementRefused(out.reserved, actual);
+    return out.refund;
   }
 
   async release(id: string): Promise<void> {
