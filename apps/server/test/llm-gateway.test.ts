@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import pg from 'pg';
 import type { ChatRequest, LlmProvider } from '@superagent/shared';
 import { createLlmGateway, inputTokenUpperBound, LlmCallFailed, LlmUnavailable, StaticPriceBook, type PricedModel } from '../src/modules/setup/llm-gateway.js';
-import { InMemoryBudgetStore } from '../src/modules/setup/budget.js';
+import { InMemoryBudgetStore, SettlementRefused } from '../src/modules/setup/budget.js';
 import { InMemorySecretStore } from '../src/modules/setup/secrets.js';
 import { InMemoryConfigRepo } from '../src/modules/setup/service.js';
 import { ProviderHttpError } from '../src/modules/setup/providers.js';
@@ -191,6 +191,10 @@ describe('budgeted LLM gateway: reservation, settlement, release, freeze', () =>
     expect(budget.snapshot(T, '2026-11')).toMatchObject({ reserved: 0, spent: 0 });
   });
 
+  it('a gateway deadline outside 1..600000 ms is a configuration error', () => {
+    for (const ms of [0, -1, 1.5, 700_000]) expect(() => createLlmGateway({ repo, secrets, budget, prices: new StaticPriceBook({}), timeoutMs: ms })).toThrow(/timeoutMs/);
+  });
+
   it('rejects requests without a positive maxOutputTokens', async () => {
     await expect(gw().chat(T, 'primary', { ...req, maxOutputTokens: 0 })).rejects.toThrow(/maxOutputTokens/);
   });
@@ -218,7 +222,14 @@ const url = process.env.DATABASE_URL;
     const b = (await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s, cap_micro_usd::int c FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0];
     expect(b.r + b.s).toBeLessThanOrEqual(b.c);
 
-    expect(await store.settle(granted[0]!, 99_999_999, { inputTokens: 10, outputTokens: 5 })).toBe(0); // capped at the reservation
+    const before = (await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0];
+    await expect(store.settle(granted[3]!, -1)).rejects.toThrow(/invalid settlement/);
+    await expect(store.settle(granted[3]!, 1.5)).rejects.toThrow(/invalid settlement/);
+    await expect(store.settle(granted[3]!, 99_999_999, { inputTokens: 10, outputTokens: 5 })).rejects.toBeInstanceOf(SettlementRefused); // never clamped
+    expect((await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0]).toEqual(before);
+    const over = (await pool.query('SELECT status, cost_micro_usd::bigint::text cost FROM llm_usage WHERE id = $1', [granted[3]])).rows[0];
+    expect(over).toEqual({ status: 'frozen_unknown', cost: '99999999' });
+    expect(await store.settle(granted[0]!, 60_000, { inputTokens: 10, outputTokens: 5 })).toBe(0);
     await store.release(granted[1]!);
     await store.freeze(granted[2]!, { costMicroUsd: 70_000, inputTokens: 1000, outputTokens: 900 });
     await expect(store.release(granted[0]!)).rejects.toThrow(/not in/);
@@ -228,7 +239,7 @@ const url = process.env.DATABASE_URL;
     expect(by[granted[1]!]).toMatchObject({ status: 'released', cost: 0 });
     expect(by[granted[2]!]).toMatchObject({ status: 'frozen_unknown', cost: 70_000 });
     const after = (await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0];
-    expect(after).toEqual({ r: 14 * 60_000, s: 60_000 });
+    expect(after).toEqual({ r: 14 * 60_000, s: 60_000 }); // granted[2] and granted[3] frozen: still held
   });
 
   it('price book returns valid verified records only; a bound violation suspends the record', async () => {
