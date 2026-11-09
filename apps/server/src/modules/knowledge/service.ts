@@ -44,7 +44,7 @@ export class KnowledgeService {
     return {
       plugins: MANIFESTS.map(m => ({ ...m, enabled: !s.disabledPlugins.includes(m.id), configured: m.id === 'local-file' || !!this.deps.plugins?.[m.id] })),
       connections: s.source.connections.filter(c => s.connectionMeta[c.id]?.audience.includes(ctx.userId) && s.connectionMeta[c.id]!.projectIds.every(p => ctx.projectScopes.includes(p))).map(c => ({ id: c.id, name: s.connectionMeta[c.id]!.name, pluginId: c.pluginId, status: c.status })),
-      items: items.map(i => ({ id: i.id, title: i.title, version: i.version, status: i.status, confirmed: mayRead(s, ctx, i), locator: i.locator })),
+      items: items.map(i => ({ id: hash(i.id), title: i.title, version: i.version, status: i.status, confirmed: mayRead(s, ctx, i), locator: i.locator })),
       analyses: s.analyses.filter(r => r.actor.userId === ctx.userId).map(({ actor: _, ...run }) => run), recommendations: recs,
       parseJobs: s.parseJobs.filter(j => j.actor.userId === ctx.userId).map(j => ({ id: j.id, name: j.name, status: j.status, error: j.error })),
     };
@@ -104,7 +104,7 @@ export class KnowledgeService {
     requireManager(ctx); if (!this.deps.binary) throw new KnowledgeError('parser_unavailable', 'Azure 文档解析和文件存储尚未配置。', 503);
     return queueBinaryUpload(this.deps.repo, this.deps.binary, ctx, input);
   }
-  async confirm(ctx: UserContext, sourceId: string, version: string) { return this.deps.repo.transact(ctx, s => { confirmSource(s, ctx, sourceId, version); return { confirmed: true }; }); }
+  async confirm(ctx: UserContext, sourceId: string, version: string) { return this.deps.repo.transact(ctx, s => { const actual = s.source.items.find(i => i.id === sourceId || hash(i.id) === sourceId)?.id ?? sourceId; confirmSource(s, ctx, actual, version); return { confirmed: true }; }); }
   async search(ctx: UserContext, query: string): Promise<{ answer: string; hits: SearchHit[] }> {
     bounded(query, 200, '检索词'); const hits = await this.deps.repo.search(ctx, query.trim(), 12);
     // Recheck live state before returning citations; projection and mutation commit atomically in PG.
