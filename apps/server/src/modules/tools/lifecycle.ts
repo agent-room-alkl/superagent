@@ -217,7 +217,9 @@ export class ToolService {
     if (!latest.deploy.healthy) return at('deploy', 'health check failed');
     const inst = employeeId ? t.installations.find((i) => i.employeeId === employeeId) : t.installations[0];
     if (!inst) return at('install');
-    if (inst.status !== 'available') return at('available', inst.binding ? 'availability check failed' : 'account binding required');
+    // Installed but not yet callable (first binding pending, or a changed binding whose check has not passed):
+    // the card is back at "install" until the availability check passes for the current binding.
+    if (inst.status !== 'available') return at('install', inst.binding ? `availability check failed for binding v${inst.binding.version}` : 'account binding required');
     return { done: order, current: 'available' };
   }
 

@@ -9,6 +9,7 @@ import { authConfigFromEnv, type AuthConfig } from './auth.js';
 import type { AppOptions, ReadinessCheck } from './app.js';
 import type { SetupDeps } from './modules/setup/service.js';
 import { parseSourceDatabaseConfig, type SourceDatabaseConfig } from './modules/knowledge/database-config.js';
+import { createLlmGateway, StaticPriceBook, type LlmGateway } from './modules/setup/llm-gateway.js';
 
 export class BootstrapError extends Error {
   constructor(public missing: string[], detail?: string) {
@@ -30,6 +31,8 @@ export interface Runtime {
   config: RuntimeConfig;
   /** The one PostgreSQL pool for this process (null in AUTH_MODE=dev). Modules receive it from here, never create their own. */
   pool: pg.Pool | null;
+  /** Budgeted model access for every module (analysis, employees). Refuses with LlmUnavailable codes; never fakes. */
+  llm: LlmGateway;
   app: AppOptions & { auth: AuthConfig; setupDeps: SetupDeps; readiness: ReadinessCheck[] };
   close(): Promise<void>;
 }
@@ -63,12 +66,15 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factor
     ? await factories.keyVault(env.KEY_VAULT_URL!)
     : await (await import('./modules/setup/secrets.js')).createKeyVaultStore(env.KEY_VAULT_URL!);
   const { PgAllowlist, PgConfigRepo } = await import('./modules/setup/pg-repo.js');
+  const { PgBudgetStore, PgPriceBook } = await import('./modules/setup/pg-budget.js');
+  const repo = new PgConfigRepo(pool);
   return {
     pool,
+    llm: createLlmGateway({ repo, secrets, budget: new PgBudgetStore(pool), prices: new PgPriceBook(pool) }),
     config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT!, ...(sourceDatabases.length ? { sourceDatabases } : {}) },
     app: {
       auth: { ...auth, platformTenantId: env.PLATFORM_TENANT_ID! },
-      setupDeps: { repo: new PgConfigRepo(pool), secrets, allowlist: new PgAllowlist(pool) },
+      setupDeps: { repo, secrets, allowlist: new PgAllowlist(pool) },
       readiness: [{ name: 'postgres', check: async () => (await pool.query('SELECT 1 AS ok')).rows[0]?.ok === 1 }],
     },
     close: () => pool.end(),
@@ -78,11 +84,16 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factor
 async function devRuntime(auth: AuthConfig): Promise<Runtime> {
   const { InMemoryConfigRepo, StaticAllowlist } = await import('./modules/setup/service.js');
   const { InMemorySecretStore } = await import('./modules/setup/secrets.js');
+  const { InMemoryBudgetStore } = await import('./modules/setup/budget.js');
+  const repo = new InMemoryConfigRepo();
+  const secrets = new InMemorySecretStore();
   console.warn(JSON.stringify({ msg: 'AUTH_MODE=dev: in-memory stores, x-dev-user header accepted. Never use outside local development.' }));
   return {
     pool: null,
+    // Dev: no budget is set until a developer calls setCap on this store, so calls are refused with budget_not_set.
+    llm: createLlmGateway({ repo, secrets, budget: new InMemoryBudgetStore(), prices: new StaticPriceBook({}) }),
     config: { mode: 'dev', platformTenantId: auth.platformTenantId, blobUrl: null, docIntelEndpoint: null },
-    app: { auth, setupDeps: { repo: new InMemoryConfigRepo(), secrets: new InMemorySecretStore(), allowlist: new StaticAllowlist({}) }, readiness: [] },
+    app: { auth, setupDeps: { repo, secrets, allowlist: new StaticAllowlist({}) }, readiness: [] },
     close: async () => undefined,
   };
 }
