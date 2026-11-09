@@ -85,8 +85,22 @@ describe('tool lifecycle gates', () => {
     expect(svc.callable('emp-2')).toEqual([]); // another employee does not inherit the install or credentials
     svc.bind('invoice.lookup', 'emp-1', 'kv://cred-other', { projects: ['P-1'] }, () => false);
     expect(svc.callable('emp-1')).toEqual([]);
+    expect(svc.stage('invoice.lookup', 'emp-1')).toEqual({
+      done: ['placeholder', 'acquire', 'test', 'release', 'deploy'],
+      current: 'install',
+      blocker: 'availability check failed for binding v2',
+    });
+    // passing the check for the new binding moves the card to available again
+    svc.bind('invoice.lookup', 'emp-1', 'kv://cred-other', { projects: ['P-1'] }, () => true);
     expect(svc.stage('invoice.lookup', 'emp-1').current).toBe('available');
-    expect(svc.stage('invoice.lookup', 'emp-1').blocker).toMatch(/availability/);
+    expect(svc.callable('emp-1')).toEqual([{ toolId: 'invoice.lookup', version: '1.0.0', bindingVersion: 2 }]);
+  });
+
+  it('installed without a binding sits at install, not available', () => {
+    const svc = placeholder();
+    toAvailable(svc, { route: 'import', developer: 'd1', artifact: 'script' });
+    svc.install('invoice.lookup', 'emp-2');
+    expect(svc.stage('invoice.lookup', 'emp-2')).toMatchObject({ current: 'install', blocker: 'account binding required' });
   });
 
   it('upgrade keeps the old version for running work and supports rollback', () => {
