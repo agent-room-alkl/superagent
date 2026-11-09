@@ -56,6 +56,14 @@ const ROLE = {
     const env = JSON.stringify(job.properties.template.containers[0].env);
     expect(env).not.toMatch(/KEY_VAULT_URL|PG_HOST|DATABASE_URL/);
   });
+
+  it('keeps the knowledge container private and out of reach of the sandbox identity', () => {
+    const containers = resources.filter((r) => r.type === 'Microsoft.Storage/storageAccounts/blobServices/containers');
+    const knowledge = containers.find((r) => JSON.stringify(r.name).includes('knowledge'));
+    expect(knowledge).toBeDefined();
+    expect(knowledge.properties.publicAccess).toBe('None');
+    expect(forSandbox.some((r) => JSON.stringify(r.scope ?? '').includes('knowledge'))).toBe(false);
+  });
 });
 
 describe('sandbox runtime guard', () => {
