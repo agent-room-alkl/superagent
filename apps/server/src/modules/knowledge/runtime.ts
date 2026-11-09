@@ -5,6 +5,7 @@ import { AzureBinaryStore } from './binary.js';
 import { DocumentIntelligenceAdapter } from '../../plugins/document-intelligence.js';
 import { GatewayAnalysisModel, type AnalysisGateway } from '../analysis/gateway-model.js';
 import { configuredDatabases } from './database-config.js';
+import { PgKnowledgeAudit } from './audit.js';
 /** All identity/endpoints/pools originate from the fail-closed platform bootstrap. */
 export function createKnowledgeDeps(runtime: Runtime & { llm?: AnalysisGateway }): KnowledgeDeps {
   const model = runtime.llm ? new GatewayAnalysisModel(runtime.llm) : undefined;
@@ -13,6 +14,7 @@ export function createKnowledgeDeps(runtime: Runtime & { llm?: AnalysisGateway }
   if (!runtime.pool || !runtime.config.blobUrl || !runtime.config.docIntelEndpoint) throw Error('Knowledge requires persistent runtime dependencies');
   return {
     repo: new PgKnowledgeRepository(runtime.pool),
+    audit: new PgKnowledgeAudit(runtime.pool),
     model,
     database: database.gateway, close: database.close,
     binary: { blobs: new AzureBinaryStore(runtime.config.blobUrl), parser: new DocumentIntelligenceAdapter({ endpoint: runtime.config.docIntelEndpoint }) },

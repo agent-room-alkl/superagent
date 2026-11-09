@@ -1,6 +1,7 @@
 import type { KnowledgeSourcePlugin, UserContext } from '@superagent/shared';
 import { confirmSource, evidenceValid, hash, hydrate, id, invalidateAnalyses, KnowledgeError, mayRead, positionedChunks, requireManager, signature, snapshot, stamp, type KnowledgeState, type Evidence } from './domain.js';
 import type { Item } from './store.js';
+import type { AuditSink } from '../audit/audit.js';
 import type { KnowledgeRepository, SearchHit } from './repository.js';
 import { syncConnection } from './sync.js';
 import { createLocalFilePlugin } from './plugins/local-file.js';
@@ -15,6 +16,7 @@ export interface KnowledgeDeps {
   binary?: BinaryDeps;
   database?: DatabaseGateway;
   close?: () => Promise<void>;
+  audit?: AuditSink;
 }
 export const MANIFESTS = [
   { id: 'local-file', name: '本地文件', capabilities: ['文件导入', '版本与行定位'] },
@@ -204,6 +206,7 @@ export class KnowledgeService {
     const result = await this.deps.database!.run(ctx, conn.scope, template, input.args);
     const fresh = await this.deps.repo.read(ctx); this.databaseConnection(fresh, ctx, connectionId);
     if (!fresh.queryTemplates.some(t => t.id === template.id)) throw new KnowledgeError('template_stale', '查询模板已被撤回。', 409);
+    await this.deps.audit?.append({tenantId:ctx.tenantId,actor:ctx.userId,action:'knowledge.current_fact_queried',objectType:'knowledge',objectId:template.id,versionRef:hash(result.schemaVersion),result:'ok',detail:{connectionId,rowCount:result.rowCount,queriedAt:result.queriedAt}});
     return result;
   }
 }

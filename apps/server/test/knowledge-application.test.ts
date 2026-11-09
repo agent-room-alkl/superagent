@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import { Pool } from 'pg';
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import type { UserContext } from '@superagent/shared';
 import { KnowledgeService } from '../src/modules/knowledge/service.js';
 import { MemoryKnowledgeRepository, PgKnowledgeRepository } from '../src/modules/knowledge/repository.js';
@@ -56,9 +57,16 @@ describe('knowledge application: real source store + transactions', () => {
     expect((await f.service.overview(owner)).items).toEqual([]); expect((await f.service.search(owner, '付款')).hits).toEqual([]);
   });
   it('transactions roll back all writes on failed mutations', async () => {
-    const f = await confirmed(); const before = await f.repo.read(owner);
+    const f = await confirmed(); const before = await f.repo.read(owner), auditCount=f.repo.auditEntries.length;
     await expect(f.repo.transact(owner, s => { s.source.items = []; throw Error('fail'); })).rejects.toThrow('fail');
     expect(await f.repo.read(owner)).toEqual(before);
+    expect(f.repo.auditEntries).toHaveLength(auditCount);
+  });
+  it('audits source/approval changes as metadata while keeping source text out of the log', async () => {
+    const f=await confirmed();
+    expect(f.repo.auditEntries.some(e=>e.action==='knowledge.version_confirmation_changed'&&e.actor==='alice')).toBe(true);
+    expect(JSON.stringify(f.repo.auditEntries)).not.toContain('付款前核对金额');
+    expect(JSON.stringify(f.repo.auditEntries)).not.toContain('规则');
   });
   it('unconfigured external connectors and analysis return actionable errors', async () => {
     const f = await confirmed();
@@ -158,9 +166,12 @@ const dbUrl = process.env.DATABASE_URL;
   it('persists across instances, atomically invalidates ACL, supports FTS/trigram and escapes LIKE', async () => {
     await migrate(pool, undefined, () => undefined);
     await pool.query(await readFile(new URL('../migrations/0002_knowledge.sql', import.meta.url), 'utf8'));
-    const ctx = { ...owner, tenantId: `test-${Date.now()}` }, repo = new PgKnowledgeRepository(pool), service = new KnowledgeService({ repo });
+    const ctx = { ...owner, tenantId: randomUUID() }, repo = new PgKnowledgeRepository(pool), service = new KnowledgeService({ repo });
     const conn = await service.createConnection(ctx, { name: 'PG test', pluginId: 'local-file' }); await service.confirmConnection(ctx, conn.id); await service.upload(ctx, { connectionId: conn.id, name: 'pg.md', text: '付款 approval policy' });
     const item = (await repo.read(ctx)).source.items[0]!; await service.confirm(ctx, item.id, item.version);
+    const audit = await pool.query("SELECT action,actor,detail FROM audit_log WHERE tenant_id=$1 AND object_type='knowledge'",[ctx.tenantId]);
+    expect(audit.rows.some(r=>r.action==='knowledge.version_confirmation_changed'&&r.actor==='alice')).toBe(true);
+    expect(JSON.stringify(audit.rows)).not.toContain('付款 approval policy');
     expect((await new KnowledgeService({ repo: new PgKnowledgeRepository(pool) }).search(ctx, 'approval')).hits).toHaveLength(1);
     expect((await service.search({ ...ctx, userId: 'bob' }, '付款')).hits).toEqual([]);
     expect((await service.search(ctx, '%')).hits).toEqual([]);

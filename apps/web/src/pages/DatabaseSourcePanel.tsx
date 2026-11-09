@@ -115,6 +115,13 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
     } catch (caught) { if (sequence === requestSequence.current) setError(message(caught)); }
     finally { mutationActive.current = false; setBusy(''); }
   }
+  async function syncStructure() {
+    if (!selectedConnectionId || mutationActive.current) return;
+    mutationActive.current=true; setBusy('sync'); setError(''); setNotice(''); setFact(null);
+    try { const result=await request<{error?:string}>(`/connections/${encodeURIComponent(selectedConnectionId)}/sync`,{}); if(result.error) throw Error(result.error); await onRefresh(); setNotice('数据库表与列结构已读取，资料版本仍需在来源列表核对并确认。'); }
+    catch(caught) { setError(message(caught)); }
+    finally {mutationActive.current=false;setBusy('');}
+  }
 
   async function runTemplate(event: FormEvent) {
     event.preventDefault();
@@ -148,7 +155,7 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
         <h3>创建受控连接</h3>
         <label className="field"><span>DBA 批准的资源</span><select value={selectedResource?.id ?? ''} disabled={!!busy} onChange={event => setResourceId(event.target.value)}>{resources.map(resource => <option key={resource.id} value={resource.id}>{resource.name}</option>)}</select></label>
         {selectedResource ? <div className="database-source-scope"><p>每次查询最多 {selectedResource.maxRows} 行 · 资源 {selectedResource.id}</p><ul>{Object.entries(selectedResource.tables).map(([table, spec]) => <li key={table}><strong>{table}</strong><span>{spec.columns.join(', ') || '未配置可读列'}</span>{spec.sensitive?.length ? <small>敏感列由网关限制并脱敏：{spec.sensitive.join(', ')}</small> : null}</li>)}</ul></div> : null}
-        <label className="field"><span>数据库连接名称</span><input required maxLength={200} value={name} onChange={event => setName(event.target.value)} placeholder="例如：运营只读视图" /></label>
+        <label className="field"><span>数据库连接名称</span><input required maxLength={160} value={name} onChange={event => setName(event.target.value)} placeholder="例如：运营只读视图" /></label>
         <button className="btn" disabled={!!busy || !name.trim() || !selectedResource}>{busy === 'create' ? '创建中…' : '创建数据库连接草案'}</button>
       </form>
     </>}
@@ -157,10 +164,12 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
       <label className="field"><span>已确认的数据库连接</span><select value={selectedConnectionId} disabled={!!busy || !confirmed.length} onChange={event => { setConnectionId(event.target.value); setTemplateId(''); setNotice(''); }}>
         {!confirmed.length ? <option value="">请先在来源连接列表确认数据库连接</option> : confirmed.map(connection => <option key={connection.id} value={connection.id}>{connection.name}</option>)}
       </select></label>
+      <button className="btn" type="button" disabled={!!busy || !selectedConnectionId} onClick={()=>void syncStructure()}>{busy==='sync'?'正在读取结构…':'读取数据库结构知识'}</button>
+      <p className="helper">结构资料只记录批准的表、列和定位；实时查询记录会留在源数据库。</p>
       {!selectedConnectionId ? <p className="database-source-empty">确认连接后，可提交 SELECT 模板审批，再用获批模板查询当前事实。</p> : <div className="database-source-grid">
         <form className="database-source-form" onSubmit={approveTemplate}>
           <h3>1. 批准 SELECT 查询模板</h3>
-          <label className="field"><span>待批准的 SQL 模板</span><textarea required rows={5} maxLength={20000} spellCheck={false} value={sql} onChange={event => setSql(event.target.value)} placeholder="使用已批准的表和列；参数按 $1、$2 顺序绑定" /></label>
+          <label className="field"><span>待批准的 SQL 模板</span><textarea required rows={5} maxLength={8000} spellCheck={false} value={sql} onChange={event => setSql(event.target.value)} placeholder="使用已批准的表和列；参数按 $1、$2 顺序绑定" /></label>
           <label className="field"><span>参数名称（英文逗号分隔，可留空）</span><input maxLength={2000} value={parameterNames} onChange={event => setParameterNames(event.target.value)} placeholder="status, year" /></label>
           <p className="helper">此操作仅提交模板审批。网关会校验只读语句、字段范围和敏感列规则；审批成功后再选择模板执行。</p>
           <button className="btn" disabled={!!busy || !sql.trim()}>{busy === 'approve' ? '审批中…' : '提交并批准查询模板'}</button>

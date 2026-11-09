@@ -239,7 +239,7 @@ export function KnowledgePage() {
           {overview.connections.length ? <ul className="knowledge-source-list">{overview.connections.map(connection => <li key={connection.id}>
             <div><strong>{connection.name}</strong><small>{overview.plugins.find(plugin => plugin.id === connection.pluginId)?.name ?? connection.pluginId}</small></div>
             <span className={`knowledge-badge ${connection.status === 'confirmed' ? 'is-green' : ''}`}>{label(connection.status)}</span>
-            {connection.status === 'draft' ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>确认连接</button> : null}
+            {['draft','tested','pending_confirmation','sync_failed','needs_reauth'].includes(connection.status) ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>{connection.status==='draft'?'确认连接':'重新测试并确认连接'}</button> : null}
           </li>)}</ul> : <p className="knowledge-empty">还没有来源连接。先创建连接，再导入资料。</p>}
           <form onSubmit={createConnection} className="knowledge-form knowledge-inset">
             <label className="field"><span>连接名称</span><input required maxLength={160} value={connectionName} placeholder="例如：团队操作资料" onChange={event => setConnectionName(event.target.value)} /></label>

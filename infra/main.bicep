@@ -18,6 +18,9 @@ param entraClientId string
 @description('Platform tenant id (uuid) used for all rows of this single-tenant deployment. Stable per resource group.')
 param platformTenantId string = guid(resourceGroup().id, 'superagent-platform-tenant')
 
+@description('Optional approved read-only database sources JSON. Credential references only; never passwords or connection strings.')
+param sourceDatabasesJson string = ''
+
 @description('PostgreSQL admin group (Entra) object id and display name. Password auth is disabled.')
 param pgAdminGroupObjectId string
 param pgAdminGroupName string
@@ -266,6 +269,7 @@ var commonEnv = [
   { name: 'PG_USER', value: appIdentity.name }
   { name: 'BLOB_URL', value: storage.properties.primaryEndpoints.blob }
   { name: 'DOC_INTEL_ENDPOINT', value: docIntel.properties.endpoint }
+  { name: 'SOURCE_DATABASES_JSON', value: sourceDatabasesJson }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
 ]
 
