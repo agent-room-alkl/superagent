@@ -293,7 +293,7 @@ describe('read-only database gateway', () => {
 
   it('accepts approved parameterised SELECTs over allow-listed tables and columns', () => {
     expect(() => ok('SELECT id, amount, status FROM invoices WHERE vendor = $1 AND amount > $2', ['vendor', 'min'])).not.toThrow();
-    expect(() => ok("SELECT count(*) AS n, sum(amount) AS total FROM invoices i JOIN vendors v ON v.id = i.vendor WHERE i.status = 'open' GROUP BY v.name", [])).not.toThrow();
+    expect(() => ok("SELECT count(*) AS n, sum(i.amount) AS total FROM invoices i JOIN vendors v ON v.id = i.vendor WHERE i.status = 'open' GROUP BY v.name", [])).not.toThrow();
   });
 
   it('rejects writes, multiple statements, comments, SELECT *, unlisted tables/columns/functions and undeclared params', () => {
@@ -356,6 +356,21 @@ describe('read-only database gateway', () => {
     bad('SELECT id FROM invoices WHERE contact_email = $1', /cannot be filtered/, ['e']);
     bad('SELECT id FROM invoices ORDER BY contact_email', /cannot be filtered/);
     bad('SELECT id FROM invoices WHERE id = (SELECT max(id) FROM invoices WHERE contact_email = $1)', /cannot be filtered/, ['e']);
+  });
+
+  it('column allowlists are per table: no borrowing a column name from another joined table (T-52)', async () => {
+    const s2: DbScope = { tables: { invoices: { columns: ['id'] }, vendor: { columns: ['id', 'iban'] } }, audience: ['g'], maxRows: 10 };
+    const v = (sql: string) => () => validateTemplate({ id: 't', sql, params: [], approvedBy: 'o' }, s2);
+    expect(v('SELECT i.iban FROM invoices i JOIN vendor v ON i.id = v.id')).toThrow(/iban is not allow-listed for invoices/);
+    expect(v('SELECT invoices.iban FROM invoices JOIN vendor ON invoices.id = vendor.id')).toThrow(/iban is not allow-listed for invoices/);
+    expect(v('SELECT iban FROM invoices i JOIN vendor v ON i.id = v.id')).toThrow(/qualify iban/); // unqualified could resolve to invoices.iban
+    expect(v('SELECT x.iban FROM invoices i JOIN vendor v ON i.id = v.id')).toThrow(/(identifier|unknown table or alias) x /);
+    expect(v('SELECT v.iban FROM invoices i JOIN vendor v ON i.id = v.id')).not.toThrow();
+    expect(v('SELECT id FROM invoices WHERE id = $1')).toThrow(/undeclared parameter/); // single table: unqualified is fine
+    const log: string[] = [];
+    const db: DbClient = { async query(q) { log.push(q); return { rows: [] }; } };
+    await expect(runTemplate(db, { id: 't', sql: 'SELECT i.iban FROM invoices i JOIN vendor v ON i.id = v.id', params: [], approvedBy: 'o' }, [], s2, 's')).rejects.toBeInstanceOf(QueryGatewayError);
+    expect(log).toEqual([]); // nothing reached the database
   });
 
   it('refuses a disabled or unbounded timeout and a non-integer row cap instead of building SQL from them', async () => {
