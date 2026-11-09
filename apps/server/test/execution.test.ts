@@ -26,6 +26,8 @@ let tools: Record<string, ToolInfo>;
 let ledger: Map<string, Record<string, unknown>>;
 let calls: string[];
 let ex: SopExecutor;
+let refuse: string | null;
+let authCalls: [string, string | null][];
 let versionId: string;
 
 function publish(def: Record<string, unknown> = {}) {
@@ -44,7 +46,9 @@ beforeEach(() => {
     ['erp.lookup', (p) => (calls.push(`lookup:${p.invoiceNo}`), undefined)],
     ['erp.pay', (p) => { calls.push(`pay:${p.invoiceNo}`); ledger.set(String(p.invoiceNo), { ...p }); return { externalRef: `ERP-${p.invoiceNo}`, actual: { ...ledger.get(String(p.invoiceNo))! } }; }],
   ]);
-  ex = new SopExecutor({ sop: () => sop, inbox: () => inbox, gateway: new ToolGateway(), tools: (id) => tools[id] ?? null, connectors, reviewerOf: () => 'owner-1' });
+  refuse = null;
+  authCalls = [];
+  ex = new SopExecutor({ sop: () => sop, inbox: () => inbox, gateway: new ToolGateway(), tools: (id) => tools[id] ?? null, connectors, reviewerOf: () => 'owner-1', authorize: (_r, toolId, emp) => (authCalls.push([toolId, emp]), refuse) });
   versionId = publish();
 });
 
@@ -126,6 +130,28 @@ describe('SOP executor main line', () => {
     const draft = sop.draft('other', { requiredFields: [], employeeStatus: 'active', graph } as never);
     expect(() => ex.start({ tenantId: 't', versionId: draft.id, eventId: 'x', startedBy: 'o', data: {} })).toThrow(/published/);
     expect(() => ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).toThrow(/already opened/);
+  });
+
+  it('re-authorises every call at execution time: a refusal blocks the run and nothing is written', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-9', startedBy: 'owner-1', data: input });
+    expect(authCalls).toEqual([['erp.lookup', 'emp-1']]); // the read step was authorised for the performing employee
+    refuse = '数字员工当前状态为 paused，不能执行'; // e.g. the employee was paused after the approval was requested
+    const item = approvalOf(run.id);
+    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item)!;
+    expect(after.status).toBe('blocked');
+    expect(after.steps.find((s) => s.nodeId === 'w')).toMatchObject({ status: 'blocked', detail: '未授权，未写入：数字员工当前状态为 paused，不能执行' });
+    expect(authCalls.at(-1)).toEqual(['erp.pay', 'emp-1']);
+    expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
+    expect(ledger.size).toBe(0);
+  });
+
+  it('a read step is refused too when not authorised', () => {
+    refuse = '工具 erp.lookup 没有为该数字员工安装并绑定账号';
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-10', startedBy: 'owner-1', data: input });
+    expect(run.status).toBe('blocked');
+    expect(run.steps.find((s) => s.nodeId === 'r')!.detail).toContain('未授权');
+    expect(calls).toEqual([]);
+    expect(inbox.all().filter((i) => i.kind === 'action_approval')).toEqual([]);
   });
 
   it('runs are tenant-scoped: another tenant cannot list, read or resume them', () => {

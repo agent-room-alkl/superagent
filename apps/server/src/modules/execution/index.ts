@@ -4,6 +4,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import { ToolGateway } from '../gateway/gateway.js';
+import { employeesState } from '../employees/index.js';
 import { inboxState, workItemEvents } from '../humanwork/index.js';
 import { sopState } from '../sop/index.js';
 import { toolsState } from '../tools/index.js';
@@ -22,6 +23,20 @@ function toolInfo(toolId: string) {
   }
 }
 
+/** Call-time authorisation: the performing employee is online and the tool is installed and bound for it. */
+function authorize(_run: unknown, toolId: string, employeeId: string | null): string | null {
+  if (!employeeId) return '流程里没有负责执行这一步的数字员工';
+  let status: string;
+  try {
+    status = employeesState.current.get(employeeId).status;
+  } catch {
+    return `数字员工 ${employeeId} 不存在`;
+  }
+  if (status !== 'online' && status !== 'busy') return `数字员工当前状态为 ${status}，不能执行`;
+  if (!toolsState.current.callable(employeeId).some((t) => t.toolId === toolId)) return `工具 ${toolId} 没有为该数字员工安装并绑定账号`;
+  return null;
+}
+
 export const executionState = {
   current: new SopExecutor({
     sop: () => sopState.current,
@@ -30,6 +45,7 @@ export const executionState = {
     tools: toolInfo,
     connectors,
     reviewerOf: (run) => run.startedBy,
+    authorize,
   }),
 };
 

@@ -57,6 +57,11 @@ export interface ExecutorDeps {
   connectors: Map<string, Connector>;
   /** Who receives approvals and exceptions (the SOP owner by default). */
   reviewerOf: (execution: Execution) => string;
+  /**
+   * Re-authorisation at the moment of the call (PRD §5.7), not at trigger time: may this employee call this tool now?
+   * Returns null when allowed, otherwise the reason. The gateway refuses and nothing is invoked when it is not null.
+   */
+  authorize: (execution: Execution, toolId: string, employeeId: string | null) => string | null;
 }
 
 export class ExecutionError extends Error {
@@ -200,6 +205,8 @@ export class SopExecutor {
       if (payloadHash(approved) !== payloadHash(params)) return this.block(run, step, '批准的参数与本次写入不一致');
       approvalHash = payloadHash(params);
     }
+    const employeeId = this.employeeFor(run, step.nodeId);
+    let refusal: string | null = null;
     const result = this.deps.gateway.execute({
       tenantId: run.tenantId,
       instanceId: run.instanceId,
@@ -209,7 +216,7 @@ export class SopExecutor {
       payload: params,
       intended: write ? params : undefined,
       approvalHash,
-      authorize: () => true,
+      authorize: () => (refusal = this.deps.authorize(structuredClone(run), toolId, employeeId)) === null,
       call: () => {
         const r = connector(params);
         return r ?? undefined;
@@ -236,6 +243,7 @@ export class SopExecutor {
       run.exceptionItemId = ex.id;
       return false;
     }
+    if (result.action.reason === 'unauthorized') return this.block(run, step, `未授权，未写入：${refusal ?? '执行时鉴权未通过'}`);
     return this.block(run, step, result.action.reason === 'approval_mismatch' ? '批准与写入参数不匹配' : `未执行：${result.action.reason ?? result.action.status}`);
   }
 
@@ -255,6 +263,17 @@ export class SopExecutor {
         const t = this.deps.tools(n.ref);
         if (t && (t.effect === 'write' || t.effect === 'external')) return n;
       }
+    }
+    return null;
+  }
+
+  /** The digital employee that performs a tool step: the nearest employee node before it in run order. */
+  private employeeFor(run: Execution, toolNodeId: string): string | null {
+    const graph = (this.deps.sop().get(run.versionId).definition as { graph?: SopGraph }).graph!;
+    const order = run.steps.map((s) => s.nodeId);
+    for (const id of order.slice(0, order.indexOf(toolNodeId)).reverse()) {
+      const n = graph.nodes.find((x) => x.id === id)!;
+      if (n.kind === 'employee') return n.ref ?? null;
     }
     return null;
   }
