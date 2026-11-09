@@ -30,3 +30,7 @@
   .versions th:nth-child(3), .versions td:nth-child(3) { display: none; }
   .graph-editor .row > * { flex: 1 1 100%; }
 }
+.pack-items { border: 1px solid var(--color-soft-rule); border-radius: var(--radius-sm); padding: var(--space-sm); display: grid; gap: var(--space-2xs); }
+.pack-item { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-xs); align-items: start; }
+.pack-item small { grid-column: 2; color: var(--color-muted); }
+.onto-list li .btn { margin-left: var(--space-xs); }

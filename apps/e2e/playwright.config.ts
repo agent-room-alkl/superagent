@@ -23,7 +23,7 @@ export default defineConfig({
   webServer: {
     command: 'npx tsx server/start.ts',
     url: `http://127.0.0.1:${PORT}/healthz`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false, // always a fresh in-memory server: specs must never inherit state from an earlier run
     env: { PORT: String(PORT), NODE_ENV: 'test' },
     timeout: 60_000,
   },
