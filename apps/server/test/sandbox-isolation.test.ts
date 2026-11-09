@@ -57,7 +57,7 @@ const ROLE = {
     expect(env).not.toMatch(/KEY_VAULT_URL|PG_HOST|DATABASE_URL/);
   });
 
-  it('keeps the knowledge container private and out of the sandbox identity's reach', () => {
+  it('keeps the knowledge container private and out of reach of the sandbox identity', () => {
     const containers = resources.filter((r) => r.type === 'Microsoft.Storage/storageAccounts/blobServices/containers');
     const knowledge = containers.find((r) => JSON.stringify(r.name).includes('knowledge'));
     expect(knowledge).toBeDefined();
