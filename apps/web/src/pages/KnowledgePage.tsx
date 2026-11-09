@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import './KnowledgePage.css';
+import { DatabaseSourcePanel } from './DatabaseSourcePanel';
 
 interface Evidence { sourceId: string; version: string; start: number; end: number; locator: string; quote: string }
 interface Plugin { id: string; name: string; enabled: boolean; configured: boolean; capabilities: string[] }
 interface Connection { id: string; name: string; pluginId: string; status: string }
 interface Item { id: string; title: string; version: string; status: string; confirmed: boolean; locator: string }
 interface Recommendation {
-  id: string; kind: string; name: string; description: string; humanLocked: boolean; deleted: boolean;
+  id: string; kind: string; name: string; description: string; humanLocked: boolean; deleted: boolean; stale?: boolean;
   proposedChange?: { name: string; description: string; evidence?: Evidence[] }; evidence: Evidence[];
+  relation?: { from:string;to:string;label:string };
 }
 interface Overview {
   plugins: Plugin[]; connections: Connection[]; items: Item[];
   analyses: { id: string; status: string; stage: string }[]; recommendations: Recommendation[];
   parseJobs: { id: string; name: string; status: string; error: string | null }[];
+  databaseResources?: { id: string; name: string; tables: Record<string, { columns: string[]; sensitive?: string[] }>; maxRows: number }[];
 }
 interface SearchResult { answer: string; hits: Evidence[] }
 const ROOT = '/api/v1/knowledge';
@@ -23,7 +26,7 @@ const labels: Record<string, string> = {
   paused: '已暂停', revoked: '权限已撤销', deleted: '已删除', parse_failed: '解析失败', parsed: '已解析 · 待确认',
   queued: '排队中', running: '进行中', completed: '已完成', failed: '失败', stale: '依据已变化',
   parse: '解析', extract: '提取', recommend: '生成建议', complete: '完成',
-  employee: '员工', tool: '工具', sop: 'SOP', object: '业务对象',
+  employee: '员工', tool: '工具', sop: 'SOP', object: '业务对象', relation:'对象关系',
   outcome_unknown: '结果未知 · 需人工核对',
 };
 const label = (value: string) => labels[value] ?? value;
@@ -46,6 +49,21 @@ function EvidenceList({ evidence }: { evidence: Evidence[] }) {
     </li>)}
   </ol> : <p className="knowledge-empty">没有可定位依据，不能据此生成或采纳建议。</p>;
 }
+function ItemPreview({ item }: { item: Item }) {
+  const [preview, setPreview] = useState<{ chunks: { text: string; locator: string }[]; truncated: boolean } | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  async function read() {
+    setLoading(true); setError('');
+    try { setPreview(await request(`/items/${encodeURIComponent(item.id)}/preview?version=${encodeURIComponent(item.version)}`)); }
+    catch (caught) { setPreview(null); setError(errorMessage(caught)); } finally { setLoading(false); }
+  }
+  return <details className="knowledge-item-preview"><summary onClick={() => { if (!preview && !loading) void read(); }}>查看当前版本原文与定位</summary>
+    {loading ? <p role="status">正在核对源权限并读取…</p> : null}
+    {error ? <p className="knowledge-alert" role="alert">{error}</p> : null}
+    {preview ? <>{preview.chunks.map((c, n) => <div key={n}><small>{c.locator}</small><blockquote>{c.text}</blockquote></div>)}{preview.truncated ? <p className="helper">预览达到 200,000 字符上限，请同时核对原始文件。</p> : null}</> : null}
+  </details>;
+}
 
 function RecommendationCard({ recommendation: r, disabled, onAction }: {
   recommendation: Recommendation; disabled: boolean;
@@ -63,6 +81,8 @@ function RecommendationCard({ recommendation: r, disabled, onAction }: {
       <span className="knowledge-kind">{label(r.kind)}草案</span>
       <span className={`knowledge-badge ${r.humanLocked ? 'is-gold' : ''}`}>{r.humanLocked ? '人工锁定' : '建议 · 待核对'}</span>
     </div>
+    {r.stale ? <p className="knowledge-alert">依据版本已变化，旧引用已撤回。人工内容保留，请核对新建议后决定是否采纳。</p> : null}
+    {r.relation?<p className="helper">{r.relation.from} → {r.relation.to} · {r.relation.label}</p>:null}
     <form onSubmit={save} className="knowledge-form">
       <label className="field"><span>名称</span><input required maxLength={160} value={name} onChange={event => setName(event.target.value)} /></label>
       <label className="field"><span>说明</span><textarea required maxLength={4000} rows={3} value={description} onChange={event => setDescription(event.target.value)} /></label>
@@ -75,6 +95,7 @@ function RecommendationCard({ recommendation: r, disabled, onAction }: {
       <strong>分析提出了修改，尚未覆盖人工内容</strong>
       <p>{r.proposedChange.name}</p><p>{r.proposedChange.description}</p>
       {r.proposedChange.evidence ? <EvidenceList evidence={r.proposedChange.evidence} /> : null}
+      <button className="btn" type="button" disabled={disabled} onClick={() => void onAction(`adopt:${r.id}`, `/recommendations/${encodeURIComponent(r.id)}/adopt`, {}, '修改已由人工采纳并锁定。')}>核对后采纳这次修改</button>
     </div> : null}
     <details><summary>查看依据 · {r.evidence.length} 处</summary><EvidenceList evidence={r.evidence} /></details>
   </article>;
@@ -220,7 +241,7 @@ export function KnowledgePage() {
           {overview.connections.length ? <ul className="knowledge-source-list">{overview.connections.map(connection => <li key={connection.id}>
             <div><strong>{connection.name}</strong><small>{overview.plugins.find(plugin => plugin.id === connection.pluginId)?.name ?? connection.pluginId}</small></div>
             <span className={`knowledge-badge ${connection.status === 'confirmed' ? 'is-green' : ''}`}>{label(connection.status)}</span>
-            {connection.status === 'draft' ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>确认连接</button> : null}
+            {['draft','tested','pending_confirmation','sync_failed','needs_reauth'].includes(connection.status) ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>{connection.status==='draft'?'确认连接':'重新测试并确认连接'}</button> : null}
           </li>)}</ul> : <p className="knowledge-empty">还没有来源连接。先创建连接，再导入资料。</p>}
           <form onSubmit={createConnection} className="knowledge-form knowledge-inset">
             <label className="field"><span>连接名称</span><input required maxLength={160} value={connectionName} placeholder="例如：团队操作资料" onChange={event => setConnectionName(event.target.value)} /></label>
@@ -252,12 +273,13 @@ export function KnowledgePage() {
             <span className={`knowledge-badge ${job.status === 'completed' ? 'is-green' : job.status === 'outcome_unknown' || job.status === 'failed' ? 'is-warning' : ''}`}>{label(job.status)}</span>
           </li>)}</ul></div> : null}
           {overview.items.length ? <ul className="knowledge-source-list knowledge-items">{overview.items.map(item => <li key={item.id}>
-            <div><strong>{item.title}</strong><small>版本 {item.version} · {item.locator}</small><small>{label(item.status)} · {item.confirmed ? '当前版本已人工确认' : '尚未确认用于检索'}</small></div>
+            <div><strong>{item.title}</strong><small>版本 {item.version} · {item.locator}</small><small>{label(item.status)} · {item.confirmed ? '当前版本已人工确认' : '尚未确认用于检索'}</small><ItemPreview key={`${item.id}:${item.version}`} item={item} /></div>
             {item.confirmed ? <span className="knowledge-badge is-green">已确认</span> : !['deleted', 'revoked', 'parse_failed'].includes(item.status) ? <button className="btn" disabled={!!busy} title={`核对原始资料后确认版本 ${item.version}`} onClick={() => void action(`item:${item.id}`, `/items/${encodeURIComponent(item.id)}/confirm`, { version: item.version }, '当前资料版本已确认；是否可用仍由源权限决定。')}>确认此版本</button> : <span className="knowledge-badge">不可用</span>}
           </li>)}</ul> : <p className="knowledge-empty">还没有资料。上传后将在这里显示解析与确认状态。</p>}
         </section>
       </div>
 
+      <DatabaseSourcePanel resources={overview.databaseResources ?? []} connections={overview.connections} onRefresh={load} />
       <section className="panel knowledge-section" aria-labelledby="knowledge-search-heading">
         <div className="knowledge-section-head"><span className="knowledge-step">03</span><div><h2 id="knowledge-search-heading">有依据地查询</h2><p className="helper">权限未知、未确认、已撤销或过期版本不应进入结果。</p></div></div>
         <form className="knowledge-search-form" onSubmit={search}><label className="field"><span>查询企业资料</span><input required maxLength={200} value={query} onChange={event => setQuery(event.target.value)} placeholder="输入需要查证的问题或关键词" /></label><button className="btn primary" disabled={searching || !!busy || !query.trim()}>{searching ? '查询中…' : '查询依据'}</button></form>

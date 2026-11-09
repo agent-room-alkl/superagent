@@ -8,6 +8,7 @@ import type pg from 'pg';
 import { authConfigFromEnv, type AuthConfig } from './auth.js';
 import type { AppOptions, ReadinessCheck } from './app.js';
 import type { SetupDeps } from './modules/setup/service.js';
+import { parseSourceDatabaseConfig, type SourceDatabaseConfig } from './modules/knowledge/database-config.js';
 import { createLlmGateway, StaticPriceBook, type LlmGateway } from './modules/setup/llm-gateway.js';
 
 export class BootstrapError extends Error {
@@ -23,6 +24,7 @@ export interface RuntimeConfig {
   platformTenantId: string;
   blobUrl: string | null;
   docIntelEndpoint: string | null;
+  sourceDatabases?: SourceDatabaseConfig[];
 }
 
 export interface Runtime {
@@ -53,7 +55,8 @@ export function checkProductionEnv(env: NodeJS.ProcessEnv): string[] {
 
 export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factories?: Partial<Factories>): Promise<Runtime> {
   const auth = authConfigFromEnv(env); // throws for AUTH_MODE=dev in production
-  if (auth.mode === 'dev') return devRuntime(auth);
+  const sourceDatabases = parseSourceDatabaseConfig(env.SOURCE_DATABASES_JSON);
+  if (auth.mode === 'dev') { const runtime = await devRuntime(auth); if (sourceDatabases.length) runtime.config.sourceDatabases = sourceDatabases; return runtime; }
 
   const missing = checkProductionEnv(env);
   if (missing.length) throw new BootstrapError(missing);
@@ -68,7 +71,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factor
   return {
     pool,
     llm: createLlmGateway({ repo, secrets, budget: new PgBudgetStore(pool), prices: new PgPriceBook(pool) }),
-    config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT! },
+    config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT!, ...(sourceDatabases.length ? { sourceDatabases } : {}) },
     app: {
       auth: { ...auth, platformTenantId: env.PLATFORM_TENANT_ID! },
       setupDeps: { repo, secrets, allowlist: new PgAllowlist(pool) },

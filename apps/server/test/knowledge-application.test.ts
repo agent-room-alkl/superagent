@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import { Pool } from 'pg';
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import type { UserContext } from '@superagent/shared';
 import { KnowledgeService } from '../src/modules/knowledge/service.js';
 import { MemoryKnowledgeRepository, PgKnowledgeRepository } from '../src/modules/knowledge/repository.js';
@@ -36,9 +37,11 @@ describe('knowledge application: real source store + transactions', () => {
   });
   it('unknown ACL cannot be confirmed and removes old citations immediately', async () => {
     const f = await confirmed();
+    expect((await f.service.preview(owner, f.item.id, f.item.version)).chunks[1]).toMatchObject({ text: '付款前核对金额。', start: 4 });
     await f.repo.transact(owner, s => { s.source.items[0]!.acl = null; invalidateAnalyses(s); });
     await expect(f.service.confirm(owner, f.item.id, f.item.version)).rejects.toMatchObject({ code: 'source_denied' });
     expect((await f.service.search(owner, '付款')).hits).toEqual([]);
+    await expect(f.service.preview(owner, f.item.id, f.item.version)).rejects.toMatchObject({ code: 'not_found' });
   });
   it('changed upload withdraws approval, and retry never silently restores it', async () => {
     const f = await confirmed(); await f.service.upload(owner, { connectionId: f.conn.id, name: 'policy.md', text: '新付款规则' });
@@ -54,9 +57,16 @@ describe('knowledge application: real source store + transactions', () => {
     expect((await f.service.overview(owner)).items).toEqual([]); expect((await f.service.search(owner, '付款')).hits).toEqual([]);
   });
   it('transactions roll back all writes on failed mutations', async () => {
-    const f = await confirmed(); const before = await f.repo.read(owner);
+    const f = await confirmed(); const before = await f.repo.read(owner), auditCount=f.repo.auditEntries.length;
     await expect(f.repo.transact(owner, s => { s.source.items = []; throw Error('fail'); })).rejects.toThrow('fail');
     expect(await f.repo.read(owner)).toEqual(before);
+    expect(f.repo.auditEntries).toHaveLength(auditCount);
+  });
+  it('audits source/approval changes as metadata while keeping source text out of the log', async () => {
+    const f=await confirmed();
+    expect(f.repo.auditEntries.some(e=>e.action==='knowledge.version_confirmation_changed'&&e.actor==='alice')).toBe(true);
+    expect(JSON.stringify(f.repo.auditEntries)).not.toContain('付款前核对金额');
+    expect(JSON.stringify(f.repo.auditEntries)).not.toContain('规则');
   });
   it('unconfigured external connectors and analysis return actionable errors', async () => {
     const f = await confirmed();
@@ -114,6 +124,22 @@ describe('analysis stage worker', () => {
     await service.startAnalysis(owner); await runAnalysis(f.repo, model, owner, queued);
     const state = await f.repo.read(owner); expect(state.analyses[0]!.status).toBe('stale'); expect(state.recommendations).toEqual([]);
   });
+  it('changed versions preserve human content, withdraw old quotes and require explicit proposal adoption', async () => {
+    const f = await confirmed(); let queued = '';
+    const model = { recommend: async () => proposal(evidence(await f.repo.read(owner)), '模型名称') }, service = new KnowledgeService({ repo:f.repo,model,enqueue:async(_ctx,run)=>{queued=run;} });
+    await service.startAnalysis(owner); await runAnalysis(f.repo,model,owner,queued);
+    const rec = (await f.repo.read(owner)).recommendations[0]!;
+    await service.editRecommendation(owner,rec.id,{name:'人工保留',description:'人工职责'});
+    await service.upload(owner,{connectionId:f.conn.id,name:'policy.md',text:'规则\n\n付款前复核金额与审批。'});
+    const current = (await f.repo.read(owner)).source.items.find(i=>i.current)!; await service.confirm(owner,current.id,current.version);
+    await service.startAnalysis(owner); await runAnalysis(f.repo,model,owner,queued);
+    const visible = (await service.overview(owner)).recommendations[0]!;
+    expect(visible).toMatchObject({name:'人工保留',humanLocked:true,stale:true,evidence:[],proposedChange:{name:'模型名称'}});
+    await service.adoptRecommendation(owner,rec.id);
+    expect((await service.overview(owner)).recommendations[0]).toMatchObject({name:'模型名称',humanLocked:true,stale:false});
+    await f.repo.transact(owner,s=>{s.source.items.find(i=>i.current)!.acl=null;invalidateAnalyses(s);});
+    expect((await service.overview(owner)).recommendations).toEqual([]);
+  });
   it('rejects invented quotes and arbitrary model fields rather than publishing tools', async () => {
     const f = await confirmed(); let queued = '';
     const model = { recommend: async () => proposal({ ...evidence(await f.repo.read(owner)), quote: 'invented' }) };
@@ -125,6 +151,19 @@ describe('analysis stage worker', () => {
     const f = await confirmed(); let queued = '', calls = 0;
     const model = { recommend: async () => { calls++; return []; } }; const service = new KnowledgeService({ repo: f.repo, model, enqueue: async (_ctx, run) => { queued = run; } });
     await service.startAnalysis(owner); await Promise.all([runAnalysis(f.repo, model, owner, queued), runAnalysis(f.repo, model, owner, queued)]); expect(calls).toBe(1);
+  });
+  it('ontology relations require evidence and visible object endpoints, and withdraw after endpoint deletion', async () => {
+    const f=await confirmed();let queued='';const e=evidence(await f.repo.read(owner));
+    const p=(key:string,kind:string)=>({key,kind,name:key,description:'有依据的业务草案',evidence:[e]});
+    const relation={...p('pays','relation'),relation:{from:'invoice',to:'customer',label:'开给'}};
+    const model={recommend:async()=>[relation,p('invoice','object'),p('customer','object')]};
+    const service=new KnowledgeService({repo:f.repo,model,enqueue:async(_ctx,run)=>{queued=run;}});
+    await service.startAnalysis(owner);await runAnalysis(f.repo,model,owner,queued);
+    expect((await service.overview(owner)).recommendations.find(r=>r.kind==='relation')).toMatchObject({relation:{from:'invoice',to:'customer',label:'开给'}});
+    const object=(await f.repo.read(owner)).recommendations.find(r=>r.key==='customer')!;await service.editRecommendation(owner,object.id,{},true);
+    expect((await service.overview(owner)).recommendations.some(r=>r.kind==='relation')).toBe(false);
+    await service.startAnalysis(owner);await runAnalysis(f.repo,model,owner,queued);
+    expect((await f.repo.read(owner)).analyses.at(-1)).toMatchObject({status:'failed',error:'unsupported_relation'});
   });
   it('an expired lease during a model call becomes unknown without a second billable request', async () => {
     const f = await confirmed(); let queued = '', calls = 0;
@@ -140,9 +179,12 @@ const dbUrl = process.env.DATABASE_URL;
   it('persists across instances, atomically invalidates ACL, supports FTS/trigram and escapes LIKE', async () => {
     await migrate(pool, undefined, () => undefined);
     await pool.query(await readFile(new URL('../migrations/0002_knowledge.sql', import.meta.url), 'utf8'));
-    const ctx = { ...owner, tenantId: `test-${Date.now()}` }, repo = new PgKnowledgeRepository(pool), service = new KnowledgeService({ repo });
+    const ctx = { ...owner, tenantId: randomUUID() }, repo = new PgKnowledgeRepository(pool), service = new KnowledgeService({ repo });
     const conn = await service.createConnection(ctx, { name: 'PG test', pluginId: 'local-file' }); await service.confirmConnection(ctx, conn.id); await service.upload(ctx, { connectionId: conn.id, name: 'pg.md', text: '付款 approval policy' });
     const item = (await repo.read(ctx)).source.items[0]!; await service.confirm(ctx, item.id, item.version);
+    const audit = await pool.query("SELECT action,actor,detail FROM audit_log WHERE tenant_id=$1 AND object_type='knowledge'",[ctx.tenantId]);
+    expect(audit.rows.some(r=>r.action==='knowledge.version_confirmation_changed'&&r.actor==='alice')).toBe(true);
+    expect(JSON.stringify(audit.rows)).not.toContain('付款 approval policy');
     expect((await new KnowledgeService({ repo: new PgKnowledgeRepository(pool) }).search(ctx, 'approval')).hits).toHaveLength(1);
     expect((await service.search({ ...ctx, userId: 'bob' }, '付款')).hits).toEqual([]);
     expect((await service.search(ctx, '%')).hits).toEqual([]);

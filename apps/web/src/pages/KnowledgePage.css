@@ -81,3 +81,6 @@
   .knowledge-source-list li > div { min-width: 55%; }
   .knowledge-intro { font-size: 13px; }
 }
+.knowledge-item-preview { margin-top: 10px; max-width: 100%; }
+.knowledge-item-preview summary { color: var(--gold); cursor: pointer; font-size: 12px; }
+.knowledge-item-preview blockquote { margin: 8px 0 16px; padding-left: 12px; border-left: 2px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }

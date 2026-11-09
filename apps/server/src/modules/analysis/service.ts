@@ -12,9 +12,11 @@ export function validateProposals(value: unknown): Omit<Recommendation, 'id' | '
     if (!v || typeof v !== 'object') throw new KnowledgeError('invalid_model_output', '分析草案无效。', 422);
     const p = v as Record<string, unknown>;
     for (const [key, max] of [['key', 120], ['name', 160], ['description', 4000]] as const) if (typeof p[key] !== 'string' || !p[key].trim() || p[key].length > max) throw new KnowledgeError('invalid_model_output', '分析草案字段无效。', 422);
-    if (!['employee', 'tool', 'sop', 'object'].includes(String(p.kind)) || !Array.isArray(p.evidence) || !p.evidence.length || p.evidence.length > 12) throw new KnowledgeError('invalid_model_output', '草案类型或依据无效。', 422);
+    if (!['employee', 'tool', 'sop', 'object','relation'].includes(String(p.kind)) || !Array.isArray(p.evidence) || !p.evidence.length || p.evidence.length > 12) throw new KnowledgeError('invalid_model_output', '草案类型或依据无效。', 422);
+    const relation=p.relation as Record<string,unknown>|undefined;
+    if(p.kind==='relation'&&(!relation||typeof relation!=='object'||Array.isArray(relation)||['from','to','label'].some(k=>typeof relation[k]!=='string'||!(relation[k] as string).trim()||(relation[k] as string).length>(k==='label'?160:120))))throw new KnowledgeError('invalid_model_output','关系端点与说明无效。',422);
     for (const e of p.evidence) if (!e || typeof e !== 'object' || typeof e.sourceId !== 'string' || typeof e.version !== 'string' || typeof e.locator !== 'string' || typeof e.quote !== 'string' || e.quote.length > 1200 || !Number.isSafeInteger(e.start) || !Number.isSafeInteger(e.end)) throw new KnowledgeError('invalid_model_output', '草案引用无效。', 422);
-    return { key: p.key as string, name: p.name as string, description: p.description as string, kind: p.kind as Recommendation['kind'], evidence: p.evidence as Evidence[] };
+    return { key: p.key as string, name: p.name as string, description: p.description as string, kind: p.kind as Recommendation['kind'], evidence: p.evidence as Evidence[], ...(p.kind==='relation'?{relation:{from:relation!.from as string,to:relation!.to as string,label:relation!.label as string}}:{}) };
   });
 }
 /** Reference-only durable queue handler. Worker retries are safe; source changes during model calls discard results. */

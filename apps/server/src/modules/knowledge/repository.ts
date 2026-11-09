@@ -1,6 +1,8 @@
 import type { UserContext } from '@superagent/shared';
 import { Pool, type PoolClient } from 'pg';
 import { emptyState, itemSignature, positionedChunks, type Evidence, type KnowledgeState } from './domain.js';
+import { appendPgAudit, auditDiff, auditSnapshot } from './audit.js';
+import type { AuditEntry } from '../audit/audit.js';
 export interface SearchHit extends Evidence { title: string; score: number }
 export interface KnowledgeRepository {
   read(ctx: UserContext): Promise<KnowledgeState>;
@@ -8,6 +10,7 @@ export interface KnowledgeRepository {
   search(ctx: UserContext, query: string, limit: number): Promise<SearchHit[]>;
 }
 interface IndexedChunk extends Evidence { title: string; principals: string[]; projectIds: string[] }
+const normalized = (value: KnowledgeState): KnowledgeState => ({ ...emptyState(), ...value });
 export function indexableChunks(state: KnowledgeState): IndexedChunk[] {
   const result: IndexedChunk[] = [], seen = new Set<string>();
   for (const item of state.source.items) {
@@ -26,7 +29,7 @@ export function indexableChunks(state: KnowledgeState): IndexedChunk[] {
 export class PgKnowledgeRepository implements KnowledgeRepository {
   constructor(readonly pool: Pool) {}
   async read(ctx: UserContext): Promise<KnowledgeState> {
-    const r = await this.pool.query<{ doc: KnowledgeState }>('SELECT doc FROM knowledge_tenants WHERE tenant_id=$1', [ctx.tenantId]); return r.rows[0]?.doc ?? emptyState();
+    const r = await this.pool.query<{ doc: KnowledgeState }>('SELECT doc FROM knowledge_tenants WHERE tenant_id=$1', [ctx.tenantId]); return r.rows[0] ? normalized(r.rows[0].doc) : emptyState();
   }
   async transact<T>(ctx: UserContext, change: (state: KnowledgeState) => T | Promise<T>): Promise<T> {
     const client = await this.pool.connect();
@@ -34,7 +37,8 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
       await client.query('BEGIN');
       await client.query('INSERT INTO knowledge_tenants(tenant_id,doc) VALUES($1,$2::jsonb) ON CONFLICT DO NOTHING', [ctx.tenantId, JSON.stringify(emptyState())]);
       const result = await client.query<{ doc: KnowledgeState }>('SELECT doc FROM knowledge_tenants WHERE tenant_id=$1 FOR UPDATE', [ctx.tenantId]);
-      const state = result.rows[0]!.doc, value = await change(state);
+      const state = normalized(result.rows[0]!.doc), before = auditSnapshot(state), value = await change(state);
+      for (const entry of auditDiff(before,auditSnapshot(state))) await appendPgAudit(client,{...entry,tenantId:ctx.tenantId,actor:ctx.userId});
       await client.query('UPDATE knowledge_tenants SET doc=$2::jsonb,updated_at=now() WHERE tenant_id=$1', [ctx.tenantId, JSON.stringify(state)]);
       await this.replaceIndex(client, ctx.tenantId, state); await client.query('COMMIT'); return value;
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
@@ -57,9 +61,10 @@ export class PgKnowledgeRepository implements KnowledgeRepository {
 /** Explicit test/local adapter, never a production fallback. */
 export class MemoryKnowledgeRepository implements KnowledgeRepository {
   private tenants = new Map<string, KnowledgeState>(); private pending: Promise<unknown> = Promise.resolve();
+  readonly auditEntries: AuditEntry[] = [];
   async read(ctx: UserContext) { return structuredClone(this.tenants.get(ctx.tenantId) ?? emptyState()); }
   async transact<T>(ctx: UserContext, change: (state: KnowledgeState) => T | Promise<T>): Promise<T> {
-    const work = this.pending.then(async () => { const state = await this.read(ctx), result = await change(state); this.tenants.set(ctx.tenantId, state); return structuredClone(result); }); this.pending = work.catch(() => undefined); return work;
+    const work = this.pending.then(async () => { const state = await this.read(ctx), before=auditSnapshot(state), result = await change(state); this.tenants.set(ctx.tenantId, state); this.auditEntries.push(...auditDiff(before,auditSnapshot(state)).map(e=>({...e,tenantId:ctx.tenantId,actor:ctx.userId}))); return structuredClone(result); }); this.pending = work.catch(() => undefined); return work;
   }
   async search(ctx: UserContext, query: string, limit: number): Promise<SearchHit[]> {
     return indexableChunks(await this.read(ctx)).filter(c => c.principals.includes(ctx.userId) && c.projectIds.every(p => ctx.projectScopes.includes(p)) && c.quote.toLocaleLowerCase().includes(query.toLocaleLowerCase())).slice(0, limit).map(c => ({ ...c, score: 1 }));
