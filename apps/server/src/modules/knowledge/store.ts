@@ -28,12 +28,16 @@ export interface Item {
   acl: AclEntry[] | null; // null = unknown
   status: ItemStatus;
   current: boolean; // latest version for this externalId
+  /** Version the connection owner confirmed for use in analysis (T-40); a new version starts unconfirmed. */
+  confirmedVersion: string | null;
 }
 
 export interface Chunk {
   itemId: string;
   text: string;
   locator: string; // e.g. "policy.md#L12" / "invoice.pdf p.2" / "invoices.amount"
+  start: number; // offsets into the parsed item text (UTF-16 code units)
+  end: number;
 }
 
 export class KnowledgeStore {
@@ -46,6 +50,10 @@ export class KnowledgeStore {
 
   currentItem(connectionId: string, externalId: string): Item | undefined {
     return [...this.items.values()].find((i) => i.connectionId === connectionId && i.externalId === externalId && i.current);
+  }
+
+  dropChunks(itemId: string): void {
+    this.chunks = this.chunks.filter((c) => c.itemId !== itemId);
   }
 
   cite(itemId: string, citer: string): void {

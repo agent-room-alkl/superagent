@@ -3,7 +3,7 @@
  * through Document Intelligence. ACL is the uploader-chosen audience (known by construction).
  */
 import type { AclResult, ConnectionConfig, KnowledgeSourcePlugin, SourceContent, SourceItemRef } from '@superagent/shared';
-import type { DocParser } from '../docintel.js';
+import type { DocParser } from '../parser.js';
 
 export interface UploadedFile {
   name: string;
