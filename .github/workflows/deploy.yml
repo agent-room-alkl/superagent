@@ -1,0 +1,82 @@
+name: deploy
+
+# Manual deploys. Azure login uses OIDC federated credentials — no long-lived secrets in GitHub.
+# Required repository/environment variables (not secrets): AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
+# AZURE_RESOURCE_GROUP, ENTRA_TENANT_ID, ENTRA_CLIENT_ID, PG_ADMIN_GROUP_ID, PG_ADMIN_GROUP_NAME.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: staging or prod
+        required: true
+        default: staging
+        type: choice
+        options: [staging, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # The prod environment should be configured with required reviewers (manual approval).
+    environment: ${{ inputs.environment }}
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      ENV_NAME: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure infrastructure (first pass creates the registry)
+        id: infra
+        run: |
+          IMAGE_PLACEHOLDER="mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+          out=$(az deployment group create -g "$RG" -f infra/main.bicep \
+            -p env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" \
+               entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
+               pgAdminGroupObjectId="${{ vars.PG_ADMIN_GROUP_ID }}" pgAdminGroupName="${{ vars.PG_ADMIN_GROUP_NAME }}" \
+            --query properties.outputs -o json)
+          echo "acr=$(echo "$out" | jq -r .acrLoginServer.value)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        run: |
+          az acr login -n "${{ steps.infra.outputs.acr }}"
+          IMAGE="${{ steps.infra.outputs.acr }}/superagent:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy new revision
+        id: deploy
+        run: |
+          out=$(az deployment group create -g "$RG" -f infra/main.bicep \
+            -p env="$ENV_NAME" image="$IMAGE" \
+               entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
+               pgAdminGroupObjectId="${{ vars.PG_ADMIN_GROUP_ID }}" pgAdminGroupName="${{ vars.PG_ADMIN_GROUP_NAME }}" \
+            --query properties.outputs -o json)
+          echo "url=$(echo "$out" | jq -r .webUrl.value)" >> "$GITHUB_OUTPUT"
+
+      - name: Run migrations job and wait
+        run: |
+          JOB="sa-${ENV_NAME}-migrate"
+          EXEC=$(az containerapp job start -g "$RG" -n "$JOB" --query name -o tsv)
+          for i in $(seq 1 60); do
+            STATUS=$(az containerapp job execution show -g "$RG" -n "$JOB" --job-execution-name "$EXEC" --query properties.status -o tsv)
+            echo "migrate: $STATUS"
+            [ "$STATUS" = "Succeeded" ] && exit 0
+            [ "$STATUS" = "Failed" ] && exit 1
+            sleep 10
+          done
+          exit 1
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 30); do curl -fsS "${{ steps.deploy.outputs.url }}/healthz" && exit 0; sleep 5; done
+          exit 1

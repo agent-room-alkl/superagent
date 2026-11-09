@@ -20,6 +20,7 @@ COPY --from=build /app/packages/shared/package.json packages/shared/
 COPY --from=build /app/packages/shared/dist packages/shared/dist
 COPY --from=build /app/apps/server/package.json apps/server/
 COPY --from=build /app/apps/server/dist apps/server/dist
+COPY --from=build /app/apps/server/migrations apps/server/migrations
 COPY --from=build /app/apps/web/dist apps/web/dist
 USER node
 EXPOSE 8080
