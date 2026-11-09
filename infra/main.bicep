@@ -22,6 +22,9 @@ param pgAdminGroupName string
 @description('Production hardening: VNet integration + private endpoints for Postgres, Key Vault, Blob')
 param enablePrivateNetworking bool = false
 
+@description('Production hardening: Azure Front Door Premium with a managed WAF policy in front of the web app')
+param enableFrontDoor bool = false
+
 @allowed(['Burstable', 'GeneralPurpose'])
 param pgTier string = 'Burstable'
 param pgSku string = 'Standard_B1ms'
@@ -183,12 +186,27 @@ resource appDocIntelUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   }
 }
 
+// ---------- Optional private networking ----------
+module network 'network.bicep' = if (enablePrivateNetworking) {
+  name: 'network'
+  params: {
+    prefix: prefix
+    location: location
+    postgresId: pg.id
+    keyVaultId: kv.id
+    storageId: storage.id
+    docIntelId: docIntel.id
+  }
+}
+
 // ---------- Container Apps ----------
 resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${prefix}-cae'
   location: location
   properties: {
     appLogsConfiguration: { destination: 'log-analytics', logAnalyticsConfiguration: { customerId: logs.properties.customerId, sharedKey: logs.listKeys().primarySharedKey } }
+    vnetConfiguration: enablePrivateNetworking ? { infrastructureSubnetId: network!.outputs.appsSubnetId, internal: false } : null
+    workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
   }
 }
 
@@ -321,6 +339,66 @@ resource sandbox 'Microsoft.App/jobs@2024-03-01' = {
   dependsOn: [sandboxAcrPull]
 }
 
+// ---------- Optional Front Door + WAF ----------
+resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@2024-02-01' = if (enableFrontDoor) {
+  name: replace('${prefix}waf', '-', '')
+  location: 'global'
+  sku: { name: 'Premium_AzureFrontDoor' }
+  properties: {
+    policySettings: { enabledState: 'Enabled', mode: 'Prevention' }
+    managedRules: { managedRuleSets: [{ ruleSetType: 'Microsoft_DefaultRuleSet', ruleSetVersion: '2.1', ruleSetAction: 'Block' }] }
+  }
+}
+resource afd 'Microsoft.Cdn/profiles@2024-02-01' = if (enableFrontDoor) {
+  name: '${prefix}-afd'
+  location: 'global'
+  sku: { name: 'Premium_AzureFrontDoor' }
+}
+resource afdEndpoint 'Microsoft.Cdn/profiles/afdEndpoints@2024-02-01' = if (enableFrontDoor) {
+  parent: afd
+  name: '${prefix}-web'
+  location: 'global'
+  properties: { enabledState: 'Enabled' }
+}
+resource afdOrigins 'Microsoft.Cdn/profiles/originGroups@2024-02-01' = if (enableFrontDoor) {
+  parent: afd
+  name: 'web'
+  properties: {
+    loadBalancingSettings: { sampleSize: 4, successfulSamplesRequired: 3 }
+    healthProbeSettings: { probePath: '/healthz', probeProtocol: 'Https', probeRequestType: 'GET', probeIntervalInSeconds: 60 }
+  }
+}
+resource afdOrigin 'Microsoft.Cdn/profiles/originGroups/origins@2024-02-01' = if (enableFrontDoor) {
+  parent: afdOrigins
+  name: 'web-app'
+  properties: { hostName: web.properties.configuration.ingress.fqdn, originHostHeader: web.properties.configuration.ingress.fqdn, httpsPort: 443 }
+}
+resource afdRoute 'Microsoft.Cdn/profiles/afdEndpoints/routes@2024-02-01' = if (enableFrontDoor) {
+  parent: afdEndpoint
+  name: 'default'
+  properties: {
+    originGroup: { id: afdOrigins.id }
+    supportedProtocols: ['Https']
+    httpsRedirect: 'Enabled'
+    forwardingProtocol: 'HttpsOnly'
+    patternsToMatch: ['/*']
+    linkToDefaultDomain: 'Enabled'
+  }
+  dependsOn: [afdOrigin]
+}
+resource afdSecurity 'Microsoft.Cdn/profiles/securityPolicies@2024-02-01' = if (enableFrontDoor) {
+  parent: afd
+  name: 'waf'
+  properties: {
+    parameters: {
+      type: 'WebApplicationFirewall'
+      wafPolicy: { id: wafPolicy.id }
+      associations: [{ domains: [{ id: afdEndpoint.id }], patternsToMatch: ['/*'] }]
+    }
+  }
+}
+
+output frontDoorHost string = enableFrontDoor ? afdEndpoint!.properties.hostName : ''
 output webUrl string = 'https://${web.properties.configuration.ingress.fqdn}'
 output acrLoginServer string = acr.properties.loginServer
 output keyVaultUri string = kv.properties.vaultUri

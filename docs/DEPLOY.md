@@ -20,8 +20,14 @@ stored in Key Vault by the app itself.
 | Document Intelligence (S0) | PDF / scanned document parsing | Local auth disabled; app identity = Cognitive Services User |
 | Application Insights | Telemetry | 50% sampling, 30-day log retention |
 
-Production hardening: set `enablePrivateNetworking=true` to disable public network access on PostgreSQL, Key Vault,
-Storage and Document Intelligence (private endpoints and VNet integration must then be added for the environment).
+Production hardening (both optional parameters):
+
+- `enablePrivateNetworking=true` deploys `infra/network.bicep`: a VNet with an apps subnet (Container Apps environment is
+  injected into it) and a private-endpoint subnet; private endpoints + private DNS zones for PostgreSQL, Key Vault, Blob
+  and Document Intelligence; public network access on those services is disabled.
+- `enableFrontDoor=true` adds Azure Front Door Premium with a managed WAF policy (Default Rule Set 2.1, prevention mode)
+  in front of the web app, HTTPS only. Follow-up: restrict the Container App ingress to Front Door traffic
+  (`X-Azure-FDID` header check or IP restrictions) so the origin cannot be called directly.
 
 ## One-time setup
 
