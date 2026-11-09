@@ -54,9 +54,11 @@ export interface ReservationMeta {
 }
 
 export interface BudgetStore {
-  /** Opens (or re-caps) the month from the configured cap; Setup's monthlyCapMicroUsd is the source of truth. */
-  openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void>;
-  /** Atomically reserve; returns a reservation id or null when the cap would be exceeded. */
+  /**
+   * Atomically reserve against the tenant's CURRENT cap (read inside the reservation, never supplied by the caller,
+   * so a request holding an old Setup snapshot cannot write an old cap back). Returns null when no cap is set or
+   * the cap would be exceeded.
+   */
   reserve(tenantId: string, month: string, amountMicroUsd: number, meta?: ReservationMeta): Promise<string | null>;
   /**
    * Settle with the actual amount. Must be a non-negative safe integer (else throws, nothing changes). An amount
@@ -83,6 +85,8 @@ RETURNING tenant_id`;
 
 /** In-memory store with the same semantics, used in unit tests and local dev. */
 export class InMemoryBudgetStore implements BudgetStore {
+  /** capOf: the current cap source (Setup). Without it, caps come from setCap (unit tests). */
+  constructor(private opts: { capOf?: (tenantId: string) => Promise<number | null> | number | null } = {}) {}
   private budgets = new Map<string, { cap: number; reserved: number; spent: number }>();
   private reservations = new Map<string, { key: string; amount: number; status: ReservationStatus }>();
   private seq = 0;
@@ -96,12 +100,14 @@ export class InMemoryBudgetStore implements BudgetStore {
   snapshot(tenantId: string, month: string) {
     return { ...(this.budgets.get(`${tenantId}/${month}`) ?? { cap: 0, reserved: 0, spent: 0 }) };
   }
-  async openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void> {
-    this.setCap(tenantId, month, capMicroUsd);
-  }
   async reserve(tenantId: string, month: string, amount: number): Promise<string | null> {
     assertReservable(amount);
     const key = `${tenantId}/${month}`;
+    if (this.opts.capOf) {
+      const cap = await this.opts.capOf(tenantId); // read now; the check below runs without yielding
+      if (cap == null) return null;
+      this.setCap(tenantId, month, cap);
+    }
     const b = this.budgets.get(key);
     if (!b || b.spent + b.reserved + amount > b.cap) return null;
     b.reserved += amount;

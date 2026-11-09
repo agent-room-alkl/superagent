@@ -27,18 +27,19 @@ async function tx<T>(pool: pg.Pool, fn: (c: pg.PoolClient) => Promise<T>): Promi
 export class PgBudgetStore implements BudgetStore {
   constructor(private pool: pg.Pool) {}
 
-  /** Opens the month, or re-caps it when Setup's cap changed (lowering below spent+reserved blocks new calls). */
-  async openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void> {
-    await this.pool.query(
-      `INSERT INTO llm_budget (tenant_id, month, cap_micro_usd) VALUES ($1, $2, $3)
-       ON CONFLICT (tenant_id, month) DO UPDATE SET cap_micro_usd = EXCLUDED.cap_micro_usd`,
-      [tenantId, month, capMicroUsd],
-    );
-  }
-
   async reserve(tenantId: string, month: string, amount: number, meta?: ReservationMeta): Promise<string | null> {
     assertReservable(amount);
     return tx(this.pool, async (c) => {
+      // The cap comes from Setup inside this transaction, share-locked: a concurrent cap change waits for this
+      // reservation (or this reservation sees the new cap). No caller-supplied, possibly stale cap is ever written.
+      const cfg = await c.query('SELECT monthly_cap_micro_usd FROM llm_config WHERE tenant_id = $1 FOR SHARE', [tenantId]);
+      const cap = cfg.rows[0]?.monthly_cap_micro_usd;
+      if (cap == null) return null;
+      await c.query(
+        `INSERT INTO llm_budget (tenant_id, month, cap_micro_usd) VALUES ($1, $2, $3)
+         ON CONFLICT (tenant_id, month) DO UPDATE SET cap_micro_usd = EXCLUDED.cap_micro_usd`,
+        [tenantId, month, cap],
+      );
       const ok = await c.query(RESERVE_SQL, [tenantId, month, amount]);
       if (!ok.rowCount) return null;
       const row = await c.query(
