@@ -15,6 +15,7 @@ if (role === 'web') {
 } else if (role === 'worker') {
   await runWorker();
 } else {
-  console.error('APP_ROLE=browser is provided by the browser image variant (follow-up task).');
-  process.exit(1);
+  // APP_ROLE=browser: one sandbox run per Job execution (browser image variant, Dockerfile.browser).
+  const { runFromEnv } = await import('./browser/runner.js');
+  await runFromEnv();
 }

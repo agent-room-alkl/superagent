@@ -51,6 +51,10 @@ jobs:
           IMAGE="${{ steps.infra.outputs.acr }}/superagent:${{ github.sha }}"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
+          # Sandbox / browser variant used by the on-demand Job (main.bicep derives the tag).
+          BROWSER_IMAGE="${{ steps.infra.outputs.acr }}/superagent-browser:${{ github.sha }}"
+          docker build -f Dockerfile.browser -t "$BROWSER_IMAGE" .
+          docker push "$BROWSER_IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
       - name: Deploy new revision
