@@ -289,7 +289,7 @@ describe('local file plugin', () => {
 describe('read-only database gateway', () => {
   const scope: DbScope = { tables: { invoices: { columns: ['id', 'vendor', 'amount', 'status', 'contact_email', 'created_at'], sensitive: ['contact_email'] }, vendors: { columns: ['id', 'name'] } }, audience: ['grp-finance'], maxRows: 50 };
   const ok = (sql: string, params: string[] = []) => validateTemplate({ id: 't', sql, params, approvedBy: 'owner' }, scope);
-  const bad = (sql: string, re: RegExp, params: string[] = []) => expect(() => ok(sql, params)).toThrow(re);
+  const bad = (sql: string, reason: RegExp, params: string[] = []) => expect(() => ok(sql, params), reason.source).toThrow(QueryGatewayError);
 
   it('accepts approved parameterised SELECTs over allow-listed tables and columns', () => {
     expect(() => ok('SELECT id, amount, status FROM invoices WHERE vendor = $1 AND amount > $2', ['vendor', 'min'])).not.toThrow();
@@ -347,8 +347,9 @@ describe('read-only database gateway', () => {
     expect(aliased.rows[0]!.public_alias).toBe('p***@vendor.example');
     const qualified = await run('SELECT i.id, i.contact_email AS public_alias FROM invoices i');
     expect(qualified.rows[0]!.public_alias).toBe('p***@vendor.example');
-    bad('SELECT i.contact_email public_alias FROM invoices i', /public_alias is not allow-listed/); // column aliases need AS
-    expect(validateTemplate({ id: 't', sql: 'SELECT DISTINCT contact_email AS c FROM invoices', params: [], approvedBy: 'o' }, scope).maskedOutputs).toEqual(new Set(['c']));
+    const implicit = await run('SELECT i.contact_email public_alias FROM invoices i'); // same resolved AST as AS
+    expect(implicit.rows[0]!.public_alias).toBe('p***@vendor.example');
+    bad('SELECT DISTINCT contact_email AS c FROM invoices', /DISTINCT/); // raw-value grouping before masking leaks inference
     bad("SELECT coalesce(contact_email, '') AS label FROM invoices", /inside an expression/);
     bad('SELECT lower(contact_email) FROM invoices', /inside an expression/);
     bad('SELECT count(contact_email) AS n FROM invoices', /inside an expression/);
