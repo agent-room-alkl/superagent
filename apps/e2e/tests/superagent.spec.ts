@@ -45,7 +45,8 @@ test('the graph shows every node; an unimplemented tool and an unreviewed write 
   const issues = page.getByRole('list', { name: '结构问题' });
   await expect(issues).toContainText('未实现的工具节点不能发布');
   await expect(issues).toContainText('之前必须经过人工审核');
-  await expect(page.getByRole('button', { name: '校验并发布' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '校验（运行回归用例）' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '发布', exact: true })).toBeDisabled();
 
   // node detail links to the real record
   await graph.locator('[data-node="x"]').click();
@@ -74,10 +75,12 @@ test('fix the draft (remove the tool, add a review), save, publish with an effec
 
   await page.getByRole('button', { name: '保存草稿' }).click();
   await expect(page.getByRole('status')).toContainText('已保存为草稿 v1');
+  await page.getByRole('button', { name: '校验（运行回归用例）' }).click();
+  await expect(page.getByRole('status')).toContainText('校验通过，可以发布');
+  await expect(page.getByRole('list', { name: '回归用例' }).locator('li.ok')).toHaveCount(10);
   await page.getByLabel('生效时间（可选）').fill('2026-12-01T09:00');
-  await page.getByRole('button', { name: '校验并发布' }).click();
+  await page.getByRole('button', { name: '发布', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('v1 已发布；在途实例继续按原版本运行');
-  await expect(page.getByRole('list', { name: '门禁结果' }).locator('li.ok')).toHaveCount(10);
   await expect(page.locator('tr[data-version="1"]')).toContainText('已发布');
   await info.attach('t48-sop-published', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 });
@@ -98,7 +101,7 @@ test('editing after publish opens a new draft; the published version and its run
   await expect(page.locator('tr[data-version="2"]')).toContainText('草稿');
   // the new node is unreachable, so this draft cannot be published as is
   await expect(page.getByRole('list', { name: '结构问题' })).toContainText('无法从触发点到达');
-  await expect(page.getByRole('button', { name: '校验并发布' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '发布', exact: true })).toBeDisabled();
 });
 
 test('ontology with configured knowledge but no readable objects stays empty', async ({ page }) => {

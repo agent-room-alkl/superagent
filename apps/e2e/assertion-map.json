@@ -1429,9 +1429,8 @@
    "id": "qa-outcomes#47",
    "suite": "qa-outcomes",
    "assertion": "Baseline validation missing regression cases",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#48",
@@ -1458,17 +1457,15 @@
    "id": "qa-outcomes#51",
    "suite": "qa-outcomes",
    "assertion": "Stale validation not explained",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#52",
    "suite": "qa-outcomes",
    "assertion": "Revalidated revision not published",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#53",
@@ -1481,49 +1478,43 @@
    "id": "qa-outcomes#54",
    "suite": "qa-outcomes",
    "assertion": "Pack replaced draft without explicit confirmation",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#55",
    "suite": "qa-outcomes",
    "assertion": "Pack auto-confirmed rule/trigger",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#56",
    "suite": "qa-outcomes",
    "assertion": "Pack modified published workflow",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#57",
    "suite": "qa-outcomes",
    "assertion": "Unconfirmed package can publish",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#58",
    "suite": "qa-outcomes",
    "assertion": "Confirmed package cannot validate",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#59",
    "suite": "qa-outcomes",
    "assertion": "Knowledge change has no impact/context",
-   "status": "pending",
-   "owner": "T-48",
-   "note": "runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges)"
   },
   {
    "id": "qa-outcomes#60",

@@ -16,6 +16,8 @@ interface Version {
   report: { ok: boolean; gates: Record<string, { ok: boolean; detail: string }> } | null;
   runningInstances: number;
   effectiveAt: string | null;
+  revision: number;
+  validatedRevision: number | null;
   definition: { graph?: SopGraph; [k: string]: unknown };
 }
 
@@ -34,7 +36,7 @@ export function fakeSopRuntime(): FastifyPluginAsync {
     r.get<{ Params: { sopId: string } }>('/:sopId/versions', async (req) => ({ versions: ofSop(req.params.sopId) }));
     r.get<{ Params: { id: string } }>('/versions/:id', async (req, reply) => versions.find((v) => v.id === req.params.id) ?? reply.code(404).send({ error: 'not_found' }));
     r.post<{ Body: { sopId: string; definition: Version['definition'] } }>('/drafts', async (req) => {
-      const v: Version = { id: `v${++seq}`, sopId: req.body.sopId, number: ofSop(req.body.sopId).length + 1, status: 'draft', report: null, runningInstances: 0, effectiveAt: null, definition: req.body.definition };
+      const v: Version = { id: `v${++seq}`, sopId: req.body.sopId, number: ofSop(req.body.sopId).length + 1, status: 'draft', report: null, runningInstances: 0, effectiveAt: null, revision: 1, validatedRevision: null, definition: req.body.definition };
       versions.push(v);
       return v;
     });
@@ -43,27 +45,41 @@ export function fakeSopRuntime(): FastifyPluginAsync {
       if (!base) return reply.code(404).send({ error: 'not_found' });
       if (base.status !== 'published') {
         base.definition = req.body.definition;
-        base.status = 'draft';
-        base.report = null;
+        base.status = 'draft'; // any saved edit invalidates a previous validation
+        base.revision += 1;
         return base;
       }
       // a published version is never edited: revise opens a new draft
-      const v: Version = { ...base, id: `v${++seq}`, number: ofSop(base.sopId).length + 1, status: 'draft', report: null, runningInstances: 0, effectiveAt: null, definition: req.body.definition };
+      const v: Version = { ...base, id: `v${++seq}`, number: ofSop(base.sopId).length + 1, status: 'draft', report: null, runningInstances: 0, effectiveAt: null, revision: 1, validatedRevision: null, definition: req.body.definition };
       versions.push(v);
       return v;
     });
-    r.post<{ Params: { id: string }; Body: { effectiveAt?: string; employees?: SopGraphContext['employees']; tools?: SopGraphContext['tools'] } }>('/:id/publish', async (req, reply) => {
+    type Ctx = { employees?: SopGraphContext['employees']; tools?: SopGraphContext['tools'] };
+    const graphIssues = (v: Version, body: Ctx | undefined) => validateSopGraph(v.definition.graph ?? { nodes: [], edges: [] }, { employees: body?.employees ?? {}, tools: body?.tools ?? {} });
+    const unconfirmedPack = (v: Version) => ((v.definition.pack as { items?: { confirmed: boolean }[] } | null | undefined)?.items ?? []).some((i) => !i.confirmed);
+
+    // Validate = structure check, then the ten gates as regression cases, without publishing.
+    r.post<{ Params: { id: string }; Body: Ctx }>('/:id/validate', async (req, reply) => {
       const v = versions.find((x) => x.id === req.params.id);
       if (!v) return reply.code(404).send({ error: 'version_not_found' });
-      // Like the runtime on feat/runtime: validate against the graph context the publish request carries.
-      const issues = validateSopGraph(v.definition.graph ?? { nodes: [], edges: [] }, { employees: req.body?.employees ?? {}, tools: req.body?.tools ?? {} });
-      // graph_invalid: 409 with the issues, before the gates run; the version stays a draft (runtime contract).
+      const issues = graphIssues(v, req.body);
       if (issues.length) return reply.code(409).send({ error: 'graph_invalid', issues });
-      const report = { ok: true, gates: Object.fromEntries(GATES.map((g) => [g, { ok: true, detail: '' }])) };
-      v.report = report;
+      if (unconfirmedPack(v)) return reply.code(409).send({ error: 'pack_unconfirmed' });
+      v.report = { ok: true, gates: Object.fromEntries(GATES.map((g) => [g, { ok: true, detail: '' }])) };
+      v.status = 'passed';
+      v.validatedRevision = v.revision;
+      return { status: v.status, report: v.report, validatedRevision: v.validatedRevision };
+    });
+
+    r.post<{ Params: { id: string }; Body: Ctx & { effectiveAt?: string } }>('/:id/publish', async (req, reply) => {
+      const v = versions.find((x) => x.id === req.params.id);
+      if (!v) return reply.code(404).send({ error: 'version_not_found' });
+      const issues = graphIssues(v, req.body);
+      if (issues.length) return reply.code(409).send({ error: 'graph_invalid', issues });
+      if (v.status !== 'passed' || v.validatedRevision !== v.revision) return reply.code(409).send({ error: 'validation_stale' });
       v.status = 'published';
       v.effectiveAt = req.body?.effectiveAt ?? null;
-      return { ...v, report };
+      return v;
     });
     // test-only: start an instance pinned to a version
     r.post<{ Params: { id: string } }>('/versions/:id/instances', async (req) => {
