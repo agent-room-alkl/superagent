@@ -29,6 +29,19 @@ export interface ObservedUsage {
   outputTokens: number;
 }
 
+/** Settlement above the reservation: the bound did not hold. The reservation is frozen with the real figures. */
+export class SettlementRefused extends Error {
+  constructor(public reservedMicroUsd: number, public actualMicroUsd: number) {
+    super(`actual ${actualMicroUsd} exceeds the reservation ${reservedMicroUsd}; reservation frozen for reconciliation`);
+    this.name = 'SettlementRefused';
+  }
+}
+
+/** Settlement amounts must be non-negative safe integers. */
+export function assertSettleable(actualMicroUsd: number): void {
+  if (!Number.isSafeInteger(actualMicroUsd) || actualMicroUsd < 0) throw new Error(`invalid settlement amount ${actualMicroUsd}`);
+}
+
 /** Reservations must be positive safe integers: a zero/negative/fractional amount could release budget. */
 export function assertReservable(amountMicroUsd: number): void {
   if (!Number.isSafeInteger(amountMicroUsd) || amountMicroUsd <= 0) throw new Error(`invalid reservation amount ${amountMicroUsd}`);
@@ -45,7 +58,11 @@ export interface BudgetStore {
   capFor(tenantId: string, month: string): Promise<number | null>;
   /** Atomically reserve; returns a reservation id or null when the cap would be exceeded. */
   reserve(tenantId: string, month: string, amountMicroUsd: number, meta?: ReservationMeta): Promise<string | null>;
-  /** Settle a reservation with the actual amount (≤ reserved). Returns the refunded difference. */
+  /**
+   * Settle with the actual amount. Must be a non-negative safe integer (else throws, nothing changes). An amount
+   * above the reservation is never clamped: the reservation is frozen with the real figures and SettlementRefused
+   * is thrown. Returns the refunded difference.
+   */
   settle(reservationId: string, actualMicroUsd: number, usage?: { inputTokens: number; outputTokens: number }): Promise<number>;
   /** Release a reservation when the provider confirmed nothing was billed. */
   release(reservationId: string): Promise<void>;
@@ -92,14 +109,19 @@ export class InMemoryBudgetStore implements BudgetStore {
     this.reservations.set(id, { key, amount, status: 'reserved' });
     return id;
   }
-  async settle(id: string, actual: number): Promise<number> {
+  async settle(id: string, actual: number, usage?: { inputTokens: number; outputTokens: number }): Promise<number> {
+    assertSettleable(actual);
     const r = this.mustBe(id, ['reserved', 'frozen_unknown']);
+    if (actual > r.amount) {
+      r.status = 'frozen_unknown';
+      this.observed.set(id, { costMicroUsd: actual, inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 });
+      throw new SettlementRefused(r.amount, actual);
+    }
     const b = this.budgets.get(r.key)!;
-    const charged = Math.min(actual, r.amount); // provider cannot bill above the bounded reservation
     b.reserved -= r.amount;
-    b.spent += charged;
+    b.spent += actual;
     r.status = 'settled';
-    return r.amount - charged;
+    return r.amount - actual;
   }
   async release(id: string): Promise<void> {
     const r = this.mustBe(id, ['reserved', 'frozen_unknown']);
