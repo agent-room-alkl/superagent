@@ -42,13 +42,17 @@ const KEYWORDS = new Set(['select', 'from', 'where', 'and', 'or', 'not', 'in', '
 
 export class QueryGatewayError extends Error {}
 
+const MAX_ROWS = 1000;
+const MAX_TIMEOUT_MS = 60_000;
+
 /**
  * Validates a template at approval time and again before every run. Every identifier in the statement must be a
  * keyword from a small list, an allow-listed function, an allow-listed table (or its alias / AS alias) or an
  * allow-listed column of the referenced tables, so non-listed columns cannot be read, filtered on or joined on.
  * Row scope is enforced by pointing the allowlist at row-filtered views owned by the customer DBA.
  */
-export function validateTemplate(t: QueryTemplate, scope: DbScope): void {
+export function validateTemplate(t: QueryTemplate, scope: DbScope): { maskedOutputs: Set<string> } {
+  if (!Number.isSafeInteger(scope.maxRows) || scope.maxRows < 1 || scope.maxRows > MAX_ROWS) throw new QueryGatewayError(`maxRows must be an integer between 1 and ${MAX_ROWS}`);
   const sql = t.sql.trim();
   if (!/^select\b/i.test(sql)) throw new QueryGatewayError('only SELECT templates are allowed');
   if (sql.includes(';')) throw new QueryGatewayError('multiple statements are not allowed');
@@ -79,18 +83,65 @@ export function validateTemplate(t: QueryTemplate, scope: DbScope): void {
   }
   if (/\*/.test(body.replace(/count\s*\(\s*\*\s*\)/gi, ''))) throw new QueryGatewayError('SELECT * is not allowed; list allow-listed columns');
   if ((body.match(/\$\d+/g) ?? []).some((p) => Number(p.slice(1)) > t.params.length)) throw new QueryGatewayError('undeclared parameter');
+  return { maskedOutputs: sensitiveLineage(body, tables.map((m) => m[1]!.toLowerCase()), scope) };
+}
+
+/**
+ * Output-column lineage for sensitive columns. A sensitive column may appear only as a plain select item
+ * ("email", "i.email", optionally "AS alias"); its output name (the alias if any) is masked. Any other use —
+ * inside an expression or function, or in WHERE / JOIN / GROUP BY / ORDER BY / HAVING — is refused, because
+ * the value could leak unmasked through the expression or be probed through filtering.
+ */
+function sensitiveLineage(body: string, tables: string[], scope: DbScope): Set<string> {
+  const sensitive = new Set(tables.flatMap((tb) => scope.tables[tb]!.sensitive ?? []).map((c) => c.toLowerCase()));
+  const masked = new Set<string>();
+  if (!sensitive.size) return masked;
+  const { items, rest } = splitSelect(body);
+  const idents = (s: string) => [...s.matchAll(/(?<![a-z0-9_$])[a-z_][a-z0-9_]*/gi)].map((m) => m[0].toLowerCase());
+  for (const raw of items) {
+    const item = raw.trim().replace(/^distinct\s+/i, '');
+    if (!idents(item).some((w) => sensitive.has(w))) continue;
+    const plain = item.match(/^(?:[a-z_][a-z0-9_]*\.)?([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?([a-z_][a-z0-9_]*))?$/i);
+    if (!plain || !sensitive.has(plain[1]!.toLowerCase())) throw new QueryGatewayError('a sensitive column may only be selected directly, not inside an expression');
+    masked.add((plain[2] ?? plain[1]!).toLowerCase());
+  }
+  if (idents(rest).some((w) => sensitive.has(w))) throw new QueryGatewayError('sensitive columns cannot be filtered, joined, grouped or ordered on');
+  return masked;
+}
+
+/** Splits "SELECT a, f(b, c) AS x FROM …" into its top-level select items and the remainder from FROM on. */
+function splitSelect(body: string): { items: string[]; rest: string } {
+  const s = body.replace(/^\s*select\s+/i, '');
+  const items: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (depth === 0 && ch === ',') {
+      items.push(s.slice(start, i));
+      start = i + 1;
+    } else if (depth === 0 && /^from\b/i.test(s.slice(i)) && /\W/.test(s[i - 1] ?? ' ')) {
+      items.push(s.slice(start, i));
+      return { items, rest: s.slice(i) };
+    }
+  }
+  throw new QueryGatewayError('no top-level FROM clause');
 }
 
 export async function runTemplate(db: DbClient, t: QueryTemplate, args: unknown[], scope: DbScope, schemaVersion: string, timeoutMs = 5000): Promise<LiveFact> {
-  validateTemplate(t, scope);
+  const { maskedOutputs } = validateTemplate(t, scope);
   if (args.length !== t.params.length) throw new QueryGatewayError('parameter count mismatch');
-  const limited = `SELECT * FROM (${t.sql}) AS q LIMIT ${Math.max(1, Math.min(scope.maxRows, 1000))}`;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) throw new QueryGatewayError(`timeoutMs must be an integer between 1 and ${MAX_TIMEOUT_MS}`);
+  const limited = `SELECT * FROM (${t.sql}) AS q LIMIT ${scope.maxRows}`; // integer-validated above
   await db.query('BEGIN READ ONLY');
   try {
-    await db.query(`SET LOCAL statement_timeout = ${Math.trunc(timeoutMs)}`);
+    await db.query(`SET LOCAL statement_timeout = ${timeoutMs}`);
     const r = await db.query(limited, args);
     await db.query('COMMIT');
-    const sensitive = new Set(Object.values(scope.tables).flatMap((x) => x.sensitive ?? []).map((s) => s.toLowerCase()));
+    // Mask by lineage (aliases of sensitive columns) and, defensively, by sensitive column name.
+    const sensitive = new Set([...maskedOutputs, ...Object.values(scope.tables).flatMap((x) => x.sensitive ?? []).map((s) => s.toLowerCase())]);
     const rows = r.rows.map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, sensitive.has(k.toLowerCase()) ? mask(v) : v])));
     return { templateId: t.id, rows, rowCount: rows.length, queriedAt: new Date().toISOString(), scope: Object.keys(scope.tables).join(','), schemaVersion, kind: 'current_fact' };
   } catch (e) {

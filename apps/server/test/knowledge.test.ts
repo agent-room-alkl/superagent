@@ -338,6 +338,35 @@ describe('read-only database gateway', () => {
     expect(log.at(-1)).toBe('ROLLBACK');
   });
 
+  it('sensitive columns: aliases are masked by lineage; expressions and filters on them are refused', async () => {
+    const run = (sql: string, params: string[] = []) => {
+      const db: DbClient = { async query(q) { return q.startsWith('SELECT *') ? { rows: [{ id: 1, public_alias: 'pat@vendor.example', contact_email: 'pat@vendor.example' }] } : { rows: [] }; } };
+      return runTemplate(db, { id: 't', sql, params, approvedBy: 'o' }, params.map(() => 'x'), scope, 's');
+    };
+    const aliased = await run('SELECT id, contact_email AS public_alias FROM invoices');
+    expect(aliased.rows[0]!.public_alias).toBe('p***@vendor.example');
+    const qualified = await run('SELECT i.id, i.contact_email AS public_alias FROM invoices i');
+    expect(qualified.rows[0]!.public_alias).toBe('p***@vendor.example');
+    bad('SELECT i.contact_email public_alias FROM invoices i', /public_alias is not allow-listed/); // column aliases need AS
+    expect(validateTemplate({ id: 't', sql: 'SELECT DISTINCT contact_email AS c FROM invoices', params: [], approvedBy: 'o' }, scope).maskedOutputs).toEqual(new Set(['c']));
+    bad("SELECT coalesce(contact_email, '') AS label FROM invoices", /inside an expression/);
+    bad('SELECT lower(contact_email) FROM invoices', /inside an expression/);
+    bad('SELECT count(contact_email) AS n FROM invoices', /inside an expression/);
+    bad("SELECT CASE WHEN contact_email = 'a' THEN 1 ELSE 0 END AS hit FROM invoices", /inside an expression/);
+    bad('SELECT id FROM invoices WHERE contact_email = $1', /cannot be filtered/, ['e']);
+    bad('SELECT id FROM invoices ORDER BY contact_email', /cannot be filtered/);
+    bad('SELECT id FROM invoices WHERE id = (SELECT max(id) FROM invoices WHERE contact_email = $1)', /cannot be filtered/, ['e']);
+  });
+
+  it('refuses a disabled or unbounded timeout and a non-integer row cap instead of building SQL from them', async () => {
+    const log: string[] = [];
+    const db: DbClient = { async query(q) { log.push(q); return { rows: [] }; } };
+    const t = { id: 't', sql: 'SELECT id FROM invoices', params: [], approvedBy: 'o' };
+    for (const ms of [0, -1, 1.5, 600_000, Number.NaN]) await expect(runTemplate(db, t, [], scope, 's', ms)).rejects.toThrow(/timeoutMs/);
+    for (const maxRows of [0, 1.5, 5000, Number.NaN]) await expect(runTemplate(db, t, [], { ...scope, maxRows }, 's')).rejects.toThrow(/maxRows/);
+    expect(log).toEqual([]); // nothing reached the database
+  });
+
   it('masks short and email values', () => {
     expect(mask('ab')).toBe('**');
     expect(mask('secret')).toBe('s****t');
