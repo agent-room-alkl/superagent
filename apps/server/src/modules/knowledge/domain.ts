@@ -6,9 +6,10 @@ export class KnowledgeError extends Error { constructor(public code: string, mes
 export interface Snapshot { connections: Connection[]; items: Item[]; chunks: Chunk[]; citations: [string, string[]][]; flagged: [string, string][] }
 export interface Evidence { sourceId: string; version: string; start: number; end: number; locator: string; quote: string }
 export interface Recommendation {
-  id: string; key: string; kind: 'employee' | 'tool' | 'sop' | 'object'; name: string; description: string;
+  id: string; key: string; kind: 'employee' | 'tool' | 'sop' | 'object' | 'relation'; name: string; description: string;
+  relation?: { from: string; to: string; label: string };
   evidence: Evidence[]; humanLocked: boolean; deleted: boolean;
-  proposedChange?: { name: string; description: string; evidence: Evidence[] };
+  proposedChange?: { name: string; description: string; evidence: Evidence[]; relation?: { from:string;to:string;label:string } };
 }
 export interface AnalysisRun { id: string; actor: UserContext; status: 'queued' | 'running' | 'completed' | 'failed' | 'stale' | 'outcome_unknown'; stage: 'parse' | 'extract' | 'recommend' | 'complete'; signature: string; createdAt: string; error: string | null }
 export interface ConnectionMeta { name: string; audience: string[]; projectIds: string[] }
@@ -67,11 +68,14 @@ export function evidenceValid(state: KnowledgeState, ctx: UserContext, e: Eviden
   return positionedChunks(state, item).some(c => e.start >= c.start && e.end <= c.end && c.text.slice(e.start - c.start, e.end - c.start) === e.quote && c.locator === e.locator);
 }
 export function mergeRecommendations(state: KnowledgeState, ctx: UserContext, proposals: Omit<Recommendation, 'id' | 'humanLocked' | 'deleted'>[]): void {
+  const objects = new Set(state.recommendations.filter(r=>r.kind==='object'&&!r.deleted&&r.evidence.every(e=>evidenceValid(state,ctx,e))).map(r=>r.key));
+  for(const p of proposals) if(p.kind==='object'&&p.evidence.every(e=>evidenceValid(state,ctx,e))&&!state.recommendations.some(r=>r.kind==='object'&&r.key===p.key&&r.deleted)) objects.add(p.key);
   for (const p of proposals) {
     if (!p.key || !p.name || !p.evidence.length || !p.evidence.every(e => evidenceValid(state, ctx, e))) throw new KnowledgeError('unsupported_recommendation', '模型建议缺少当前可定位依据，不能生成草案。', 422);
+    if(p.kind==='relation'&&(!p.relation||!objects.has(p.relation.from)||!objects.has(p.relation.to))) throw new KnowledgeError('unsupported_relation','关系必须引用当前有依据且未删除的业务对象草案。',422);
     const existing = state.recommendations.find(r => r.key === p.key && r.kind === p.kind);
     if (existing?.deleted) continue;
-    if (existing?.humanLocked) { existing.proposedChange = { name: p.name, description: p.description, evidence: p.evidence }; continue; }
+    if (existing?.humanLocked) { existing.proposedChange = { name: p.name, description: p.description, evidence: p.evidence, ...(p.relation?{relation:p.relation}:{}) }; continue; }
     if (existing) Object.assign(existing, p); else state.recommendations.push({ ...p, id: id(), humanLocked: false, deleted: false });
   }
 }

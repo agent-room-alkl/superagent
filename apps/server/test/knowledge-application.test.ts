@@ -152,6 +152,19 @@ describe('analysis stage worker', () => {
     const model = { recommend: async () => { calls++; return []; } }; const service = new KnowledgeService({ repo: f.repo, model, enqueue: async (_ctx, run) => { queued = run; } });
     await service.startAnalysis(owner); await Promise.all([runAnalysis(f.repo, model, owner, queued), runAnalysis(f.repo, model, owner, queued)]); expect(calls).toBe(1);
   });
+  it('ontology relations require evidence and visible object endpoints, and withdraw after endpoint deletion', async () => {
+    const f=await confirmed();let queued='';const e=evidence(await f.repo.read(owner));
+    const p=(key:string,kind:string)=>({key,kind,name:key,description:'有依据的业务草案',evidence:[e]});
+    const relation={...p('pays','relation'),relation:{from:'invoice',to:'customer',label:'开给'}};
+    const model={recommend:async()=>[relation,p('invoice','object'),p('customer','object')]};
+    const service=new KnowledgeService({repo:f.repo,model,enqueue:async(_ctx,run)=>{queued=run;}});
+    await service.startAnalysis(owner);await runAnalysis(f.repo,model,owner,queued);
+    expect((await service.overview(owner)).recommendations.find(r=>r.kind==='relation')).toMatchObject({relation:{from:'invoice',to:'customer',label:'开给'}});
+    const object=(await f.repo.read(owner)).recommendations.find(r=>r.key==='customer')!;await service.editRecommendation(owner,object.id,{},true);
+    expect((await service.overview(owner)).recommendations.some(r=>r.kind==='relation')).toBe(false);
+    await service.startAnalysis(owner);await runAnalysis(f.repo,model,owner,queued);
+    expect((await f.repo.read(owner)).analyses.at(-1)).toMatchObject({status:'failed',error:'unsupported_relation'});
+  });
   it('an expired lease during a model call becomes unknown without a second billable request', async () => {
     const f = await confirmed(); let queued = '', calls = 0;
     const model = { recommend: async () => { calls++; return []; } }, service = new KnowledgeService({ repo: f.repo, model, enqueue: async (_ctx, run) => { queued = run; } });

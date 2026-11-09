@@ -10,6 +10,7 @@ interface Item { id: string; title: string; version: string; status: string; con
 interface Recommendation {
   id: string; kind: string; name: string; description: string; humanLocked: boolean; deleted: boolean; stale?: boolean;
   proposedChange?: { name: string; description: string; evidence?: Evidence[] }; evidence: Evidence[];
+  relation?: { from:string;to:string;label:string };
 }
 interface Overview {
   plugins: Plugin[]; connections: Connection[]; items: Item[];
@@ -25,7 +26,7 @@ const labels: Record<string, string> = {
   paused: '已暂停', revoked: '权限已撤销', deleted: '已删除', parse_failed: '解析失败', parsed: '已解析 · 待确认',
   queued: '排队中', running: '进行中', completed: '已完成', failed: '失败', stale: '依据已变化',
   parse: '解析', extract: '提取', recommend: '生成建议', complete: '完成',
-  employee: '员工', tool: '工具', sop: 'SOP', object: '业务对象',
+  employee: '员工', tool: '工具', sop: 'SOP', object: '业务对象', relation:'对象关系',
   outcome_unknown: '结果未知 · 需人工核对',
 };
 const label = (value: string) => labels[value] ?? value;
@@ -81,6 +82,7 @@ function RecommendationCard({ recommendation: r, disabled, onAction }: {
       <span className={`knowledge-badge ${r.humanLocked ? 'is-gold' : ''}`}>{r.humanLocked ? '人工锁定' : '建议 · 待核对'}</span>
     </div>
     {r.stale ? <p className="knowledge-alert">依据版本已变化，旧引用已撤回。人工内容保留，请核对新建议后决定是否采纳。</p> : null}
+    {r.relation?<p className="helper">{r.relation.from} → {r.relation.to} · {r.relation.label}</p>:null}
     <form onSubmit={save} className="knowledge-form">
       <label className="field"><span>名称</span><input required maxLength={160} value={name} onChange={event => setName(event.target.value)} /></label>
       <label className="field"><span>说明</span><textarea required maxLength={4000} rows={3} value={description} onChange={event => setDescription(event.target.value)} /></label>
