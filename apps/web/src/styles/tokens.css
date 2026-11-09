@@ -1,0 +1,38 @@
+/* Design tokens reused from the accepted v12 prototype (innopro-proposal/ui-system.css). */
+:root {
+  --color-paper: #101214;
+  --color-paper-2: #171a1e;
+  --color-paper-3: #1f2329;
+  --color-well: #252a31;
+  --color-ink: #edf0f3;
+  --color-muted: #adb5c0;
+  --color-subtle: #9aa4b1;
+  --color-rule: #343a43;
+  --color-soft-rule: #2a3038;
+  --color-accent: #d6b574;
+  --color-accent-ink: #151310;
+  --color-focus: #e9cb92;
+  --color-success: #8bc5a0;
+  --color-warning: #e2bd78;
+  --color-error: #e5a09b;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --control: 44px;
+  --sidebar: 224px;
+  --header: 64px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font: 15px/1.7 "DM Sans", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+a { color: var(--color-accent); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }

@@ -1,0 +1,21 @@
+.topbar { height: var(--header); display: flex; align-items: center; gap: var(--space-lg); padding: 0 var(--space-lg); border-bottom: 1px solid var(--color-soft-rule); }
+.brand { color: var(--color-accent); font-weight: 700; letter-spacing: .03em; font-size: 18px; }
+.product { color: var(--color-muted); font-size: 14px; padding-left: var(--space-lg); border-left: 1px solid var(--color-rule); }
+.app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); min-height: calc(100dvh - var(--header)); }
+.sidebar { padding: var(--space-lg) var(--space-md); border-right: 1px solid var(--color-soft-rule); background: var(--color-paper-2); }
+.nav-group { font-size: 12px; color: var(--color-subtle); margin: var(--space-md) var(--space-xs) var(--space-xs); }
+.nav-item { display: flex; align-items: center; min-height: 44px; padding: 0 var(--space-sm); border-radius: var(--radius-sm); color: var(--color-muted); text-decoration: none; }
+.nav-item[aria-current="page"] { color: var(--color-accent); background: var(--color-well); }
+.content { padding: var(--space-lg); min-width: 0; }
+/* One-line page head (accepted in T-35). */
+.page-head { display: flex; align-items: baseline; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.page-head h1 { margin: 0; font-size: 28px; }
+.page-head p { margin: 0; color: var(--color-muted); font-size: 14px; }
+.panel { background: var(--color-paper-2); border: 1px solid var(--color-soft-rule); border-radius: var(--radius); padding: var(--space-lg); }
+@media (max-width: 800px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--color-soft-rule); display: flex; overflow-x: auto; gap: var(--space-2xs); padding: var(--space-xs) var(--space-md); }
+  .nav-group { display: none; }
+  .nav-item { white-space: nowrap; }
+  .page-head p { display: none; }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "superagent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "INNOPRO Super Agent — knowledge-first digital workforce platform (Azure, single image)",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "npm run build -w @superagent/shared && npm run build -w @superagent/web && npm run build -w @superagent/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev -w @superagent/server",
+    "dev:web": "npm run dev -w @superagent/web",
+    "db:generate": "npm run db:generate -w @superagent/server"
+  }
+}
