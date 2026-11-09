@@ -26,6 +26,8 @@ export interface RuntimeConfig {
 
 export interface Runtime {
   config: RuntimeConfig;
+  /** The one PostgreSQL pool for this process (null in AUTH_MODE=dev). Modules receive it from here, never create their own. */
+  pool: pg.Pool | null;
   app: AppOptions & { auth: AuthConfig; setupDeps: SetupDeps; readiness: ReadinessCheck[] };
   close(): Promise<void>;
 }
@@ -59,6 +61,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factor
     : await (await import('./modules/setup/secrets.js')).createKeyVaultStore(env.KEY_VAULT_URL!);
   const { PgAllowlist, PgConfigRepo } = await import('./modules/setup/pg-repo.js');
   return {
+    pool,
     config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT! },
     app: {
       auth: { ...auth, platformTenantId: env.PLATFORM_TENANT_ID! },
@@ -74,6 +77,7 @@ async function devRuntime(auth: AuthConfig): Promise<Runtime> {
   const { InMemorySecretStore } = await import('./modules/setup/secrets.js');
   console.warn(JSON.stringify({ msg: 'AUTH_MODE=dev: in-memory stores, x-dev-user header accepted. Never use outside local development.' }));
   return {
+    pool: null,
     config: { mode: 'dev', platformTenantId: auth.platformTenantId, blobUrl: null, docIntelEndpoint: null },
     app: { auth, setupDeps: { repo: new InMemoryConfigRepo(), secrets: new InMemorySecretStore(), allowlist: new StaticAllowlist({}) }, readiness: [] },
     close: async () => undefined,

@@ -46,7 +46,9 @@ describe('production bootstrap fails closed', () => {
 
   it('wires PostgreSQL + Key Vault adapters, the platform tenant and a postgres readiness check', async () => {
     const vaults: string[] = [];
-    const rt = await createRuntime(prodEnv, { pool: () => fakePool(), keyVault: async (u) => (vaults.push(u), new InMemorySecretStore()) });
+    const pool = fakePool();
+    const rt = await createRuntime(prodEnv, { pool: () => pool, keyVault: async (u) => (vaults.push(u), new InMemorySecretStore()) });
+    expect(rt.pool).toBe(pool); // shared with modules (knowledge, runtime) instead of each creating its own
     expect(rt.config).toEqual({ mode: 'production', platformTenantId: prodEnv.PLATFORM_TENANT_ID, blobUrl: prodEnv.BLOB_URL, docIntelEndpoint: prodEnv.DOC_INTEL_ENDPOINT });
     expect(rt.app.auth).toMatchObject({ mode: 'entra', tenantId: prodEnv.ENTRA_TENANT_ID, clientId: prodEnv.ENTRA_CLIENT_ID, platformTenantId: prodEnv.PLATFORM_TENANT_ID });
     expect(rt.app.setupDeps.repo).toBeInstanceOf(PgConfigRepo);
@@ -73,6 +75,7 @@ describe('production bootstrap fails closed', () => {
   it('dev mode keeps in-memory stores for local development only', async () => {
     const rt = await createRuntime({ AUTH_MODE: 'dev' });
     expect(rt.config.mode).toBe('dev');
+    expect(rt.pool).toBeNull();
   });
 });
 
