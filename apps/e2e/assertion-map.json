@@ -7,7 +7,7 @@
    "assertion": "Queue title expanded",
    "status": "pending",
    "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
   },
   {
    "id": "qa-human-work#2",
@@ -27,41 +27,36 @@
    "id": "qa-human-work#4",
    "suite": "qa-human-work",
    "assertion": "staff member A sees only five assigned work items",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#5",
    "suite": "qa-human-work",
    "assertion": "staff member A does not see manager-only exception",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#6",
    "suite": "qa-human-work",
    "assertion": "Write approval waits for data confirmation",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#7",
    "suite": "qa-human-work",
    "assertion": "Invalid monetary input cannot be confirmed",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#8",
    "suite": "qa-human-work",
    "assertion": "Data confirmation does not execute write",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#9",
@@ -81,17 +76,15 @@
    "id": "qa-human-work#11",
    "suite": "qa-human-work",
    "assertion": "Unsaved changes cannot execute old approval",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#12",
    "suite": "qa-human-work",
    "assertion": "Saved revision invalidates approval",
-   "status": "unit",
-   "ref": "apps/server/test/execution.test.ts",
-   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#13",
@@ -126,161 +119,141 @@
    "id": "qa-human-work#17",
    "suite": "qa-human-work",
    "assertion": "Manual report requires evidence",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#18",
    "suite": "qa-human-work",
    "assertion": "Manual evidence is not system verified",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#19",
    "suite": "qa-human-work",
    "assertion": "Quality review grants no action authority",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#20",
    "suite": "qa-human-work",
    "assertion": "Batch conflict cannot be selected",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#21",
    "suite": "qa-human-work",
    "assertion": "Batch confirmation includes only selected clean row",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#22",
    "suite": "qa-human-work",
    "assertion": "Batch exception is retained",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#23",
    "suite": "qa-human-work",
    "assertion": "Batch can continue without repeating confirmed row",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#24",
    "suite": "qa-human-work",
    "assertion": "Manager default includes action and waiting groups",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#25",
    "suite": "qa-human-work",
    "assertion": "Queue shows grouped work and due dates",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#26",
    "suite": "qa-human-work",
    "assertion": "Manager does not see staff member A finance data",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#27",
    "suite": "qa-human-work",
    "assertion": "External wait stays attached to original case",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#28",
    "suite": "qa-human-work",
    "assertion": "Receiving documents is not automatic case completion",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#29",
    "suite": "qa-human-work",
    "assertion": "Branch recorder cannot fabricate insurance approval",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#30",
    "suite": "qa-human-work",
    "assertion": "Recorded branch choice survives reopening",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#31",
    "suite": "qa-human-work",
    "assertion": "Mail renderer shows recipient and attachment identity",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#32",
    "suite": "qa-human-work",
    "assertion": "Mail shows original context and AI field changes",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#33",
    "suite": "qa-human-work",
    "assertion": "proof-of-concept user cannot send",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#34",
    "suite": "qa-human-work",
    "assertion": "manager B sees exceptions without taking all normal work",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#35",
    "suite": "qa-human-work",
    "assertion": "Exception decision preserves evidence and verification boundary",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#36",
    "suite": "qa-human-work",
    "assertion": "Project filter selects only relevant work",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#37",
@@ -288,15 +261,14 @@
    "assertion": "Project filter also scopes batch contents",
    "status": "pending",
    "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
   },
   {
    "id": "qa-human-work#38",
    "suite": "qa-human-work",
    "assertion": "Upstream revision revokes downstream permission",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#39",
@@ -309,9 +281,8 @@
    "id": "qa-human-work#40",
    "suite": "qa-human-work",
    "assertion": "Manual note cannot erase mismatched system outcome",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#41",

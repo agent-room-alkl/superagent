@@ -132,7 +132,7 @@ export class SopExecutor {
 
     const missing = (version.definition.requiredFields ?? []).filter((f) => run.input[f] === undefined || run.input[f] === '');
     if (missing.length) {
-      const item = this.deps.inbox().create({ tenantId: run.tenantId, kind: 'supply_info', assigneeUserId: this.deps.reviewerOf(run), payload: { executionId: run.id, missingFields: missing } });
+      const item = this.deps.inbox().create({ tenantId: run.tenantId, kind: 'supply_info', assigneeUserId: this.deps.reviewerOf(run), payload: { executionId: run.id, title: `补资料：缺少 ${missing.join('、')}（事件 ${run.eventId}）`, missingFields: missing } });
       run.status = 'blocked';
       run.steps[0]!.status = 'blocked';
       run.steps[0]!.detail = `缺少必填字段：${missing.join('，')}`;

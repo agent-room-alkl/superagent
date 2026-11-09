@@ -150,10 +150,21 @@ it('the first approval wins, and an unknown result cannot be submitted again', a
     headers: alice,
     payload: { expectedVersion: 1 },
   });
-  const second = await server.inject({
+  // someone who is not the assignee cannot decide (and cannot learn the item exists)
+  const stranger = await server.inject({
     method: 'POST',
     url: `/api/v1/work-items/${id}/decide`,
     headers: bob,
+    payload: { expectedVersion: 1 },
+  });
+  expect(stranger.statusCode).toBe(404);
+  // the owner sees it but does not act on someone else's item
+  const byOwner = await server.inject({ method: 'POST', url: `/api/v1/work-items/${id}/decide`, headers: owner, payload: { expectedVersion: 1 } });
+  expect(byOwner.statusCode).toBe(403);
+  const second = await server.inject({
+    method: 'POST',
+    url: `/api/v1/work-items/${id}/decide`,
+    headers: alice,
     payload: { expectedVersion: 1 },
   });
   expect(first.json().ok).toBe(true);
@@ -359,4 +370,34 @@ it('a reviewer sees exceptions and not another employee ordinary work', async ()
   expect(seen.json().items[0].projectId).toBe('p1');
   expect(canExecute(seen.json().items[0])).toBe(false);
   await server.close();
+});
+
+it('T-57: another tenant never sees or acts on an item; owners see but do not act; reviewers rule exceptions', () => {
+  const inbox = inboxState.current;
+  const a = inbox.create({ tenantId: 'tenant-a', kind: 'action_approval', assigneeUserId: 'alice', payload: { amount: 1 } });
+  const exc = inbox.create({ tenantId: 'tenant-a', kind: 'exception_ruling', assigneeUserId: 'mgr', payload: {} });
+  const alice = { userId: 'alice', roles: ['employee' as const], projectScopes: [] };
+  const owner = { userId: 'boss', roles: ['owner' as const], projectScopes: [] };
+  const reviewer = { userId: 'rev', roles: ['reviewer' as const], projectScopes: [] };
+  expect(inbox.list(alice, { tenantId: 'tenant-b' })).toEqual([]);
+  expect(inbox.actor(a.id, alice, 'tenant-b')).toEqual({ ok: false, reason: 'work_item_not_found' });
+  expect(inbox.actor(a.id, alice, 'tenant-a')).toEqual({ ok: true });
+  expect(inbox.actor(a.id, owner, 'tenant-a')).toEqual({ ok: false, reason: 'not_assignee' });
+  expect(inbox.actor(exc.id, reviewer, 'tenant-a')).toEqual({ ok: true });
+  expect(inbox.actor(a.id, reviewer, 'tenant-a')).toEqual({ ok: false, reason: 'work_item_not_found' });
+});
+
+it('T-57: saving a revision consumes the staged draft; revising data only retires approvals that were given', () => {
+  const inbox = inboxState.current;
+  const check = inbox.create({ tenantId: 't', kind: 'data_check', assigneeUserId: 'alice', payload: { amount: 5 } });
+  const pending = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'alice', payload: { dataCheckId: check.id } });
+  inbox.stage(check.id, { amount: 6 });
+  const saved = inbox.revise(check.id, { amount: 6 });
+  expect(saved.draft).toBeNull();
+  expect(saved.payloadVersion).toBe(2);
+  expect(inbox.all().find((i) => i.id === pending.id)!.status).toBe('open'); // nothing was approved, nothing retired
+  inbox.decide(check.id, 'alice', 2);
+  expect(inbox.decide(pending.id, 'alice', 1).ok).toBe(true);
+  inbox.revise(check.id, { amount: 7 });
+  expect(inbox.all().find((i) => i.id === pending.id)).toMatchObject({ status: 'withdrawn', decision: null });
 });

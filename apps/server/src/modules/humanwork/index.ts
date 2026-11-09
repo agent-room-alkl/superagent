@@ -1,27 +1,52 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkItemKind, WorkItemRenderer } from '@superagent/shared';
 import { viewerFrom } from '../room/index.js';
-import { WorkInbox } from './work-items.js';
+import { WorkInbox, type WorkItem } from './work-items.js';
 
 export const inboxState = { current: new WorkInbox() };
 
 /** Listeners for decided items (the SOP executor resumes the run an approval belongs to). */
-export const workItemEvents: { decided: Array<(item: import('./work-items.js').WorkItem) => void> } = { decided: [] };
+export const workItemEvents: { decided: Array<(item: WorkItem) => void> } = { decided: [] };
 
 const KINDS = new Set<WorkItemKind>([
   'data_check', 'action_approval', 'manual_execution', 'branch_choice', 'exception_ruling', 'supply_info', 'deliverable_review',
 ]);
 const RENDERERS = new Set<WorkItemRenderer>(['field_diff', 'batch_table', 'document_preview', 'issue_list']);
 
+/**
+ * The caller's tenant. Undefined only when routes are mounted without auth (dev/tests, single tenant); in production
+ * viewerFrom refuses a request without an authenticated user.
+ */
+function tenantOf(req: FastifyRequest): string | undefined {
+  return req.user?.tenantId;
+}
+
+/** Resolve the item the caller may act on, or reply 404/403 and return null. */
+function acting(req: FastifyRequest, reply: FastifyReply): { id: string; userId: string } | null {
+  const { id } = req.params as { id: string };
+  const viewer = viewerFrom(req.headers, req.user);
+  const result = inboxState.current.actor(id, viewer, tenantOf(req));
+  if (result.ok) return { id, userId: viewer.userId };
+  void reply.code(result.reason === 'not_assignee' ? 403 : 404).send({ error: result.reason });
+  return null;
+}
+
+function attempt<T>(reply: FastifyReply, run: () => T): T | FastifyReply {
+  try {
+    return run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'rejected';
+    return reply.code(message === 'work_item_not_found' ? 404 : 409).send({ error: message });
+  }
+}
+
 export const humanworkModule: FastifyPluginAsync = async (app) => {
   app.get('/', async (req) => {
     const query = req.query as { exceptions?: string; project?: string };
-    return {
-      items: inboxState.current.list(viewerFrom(req.headers, req.user), {
-        exceptionsOnly: query.exceptions === '1',
-        projectId: query.project,
-      }),
-    };
+    const viewer = viewerFrom(req.headers, req.user);
+    const items = inboxState.current.list(viewer, { exceptionsOnly: query.exceptions === '1', projectId: query.project, tenantId: tenantOf(req) });
+    // canAct comes from the same guard the mutations use, so the page never offers a control the server would refuse
+    return { items: items.map((item) => ({ ...item, canAct: inboxState.current.actor(item.id, viewer, tenantOf(req)).ok })) };
   });
 
   app.post('/', async (req, reply) => {
@@ -39,7 +64,7 @@ export const humanworkModule: FastifyPluginAsync = async (app) => {
     const viewer = viewerFrom(req.headers, req.user);
     const owner = viewer.roles.includes('owner') || viewer.roles.includes('admin');
     return inboxState.current.create({
-      tenantId: 't',
+      tenantId: tenantOf(req) ?? 't',
       kind: body.kind,
       renderer: body.renderer,
       projectId: body.projectId ?? null,
@@ -51,40 +76,72 @@ export const humanworkModule: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/:id/decide', async (req, reply) => {
-    const params = req.params as { id: string };
+    const who = acting(req, reply);
+    if (!who) return reply;
     const body = (req.body ?? {}) as { expectedVersion?: number };
     if (typeof body.expectedVersion !== 'number') return reply.code(400).send({ error: 'missing_version' });
-    const result = inboxState.current.decide(params.id, viewerFrom(req.headers, req.user).userId, body.expectedVersion);
+    const result = inboxState.current.decide(who.id, who.userId, body.expectedVersion);
     if (result.ok) for (const listener of workItemEvents.decided) listener(result.item);
     return result;
   });
 
-  app.post('/:id/revise', async (req) => {
-    const params = req.params as { id: string };
+  /** Unsaved edits: they block execution of the old approval but do not change what was approved. */
+  app.post('/:id/stage', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
     const body = (req.body ?? {}) as { patch?: Record<string, unknown> };
-    return inboxState.current.revise(params.id, body.patch ?? {});
+    return attempt(reply, () => inboxState.current.stage(who.id, body.patch ?? {}));
+  });
+
+  /** Saved revision: a new payload version; the previous approval no longer applies. */
+  app.post('/:id/revise', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
+    const body = (req.body ?? {}) as { patch?: Record<string, unknown> };
+    return attempt(reply, () => inboxState.current.revise(who.id, body.patch ?? {}));
   });
 
   app.post('/:id/evidence', async (req, reply) => {
-    const params = req.params as { id: string };
+    const who = acting(req, reply);
+    if (!who) return reply;
     const body = (req.body ?? {}) as { reference?: string };
-    try {
-      return inboxState.current.recordHumanEvidence(params.id, body.reference ?? '');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'rejected';
-      return reply.code(message === 'work_item_not_found' ? 404 : 409).send({ error: message });
-    }
+    return attempt(reply, () => inboxState.current.recordHumanEvidence(who.id, body.reference ?? ''));
   });
 
-  app.post('/:id/note', async (req) => {
-    const params = req.params as { id: string };
+  app.post('/:id/note', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
     const body = (req.body ?? {}) as { note?: string };
-    return inboxState.current.annotate(params.id, body.note ?? '');
+    return attempt(reply, () => inboxState.current.annotate(who.id, body.note ?? ''));
   });
 
-  app.post('/:id/rows/:rowId', async (req) => {
-    const params = req.params as { id: string; rowId: string };
+  app.post('/:id/branch', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
+    const body = (req.body ?? {}) as { choice?: string };
+    if (!body.choice) return reply.code(400).send({ error: 'missing_choice' });
+    const choice = body.choice;
+    return attempt(reply, () => inboxState.current.chooseBranch(who.id, who.userId, choice));
+  });
+
+  app.post('/:id/reopen', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
+    return attempt(reply, () => inboxState.current.reopen(who.id));
+  });
+
+  app.post('/:id/rows/:rowId', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
+    const params = req.params as { rowId: string };
     const body = (req.body ?? {}) as { selected?: boolean };
-    return inboxState.current.selectRow(params.id, params.rowId, body.selected === true);
+    return inboxState.current.selectRow(who.id, params.rowId, body.selected === true);
+  });
+
+  /** Executes only the selected clean rows of an approved batch; rows already executed are not repeated. */
+  app.post('/:id/execute-batch', async (req, reply) => {
+    const who = acting(req, reply);
+    if (!who) return reply;
+    return attempt(reply, () => inboxState.current.executeBatch(who.id));
   });
 };
