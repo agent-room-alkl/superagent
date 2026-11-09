@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { SOP_NODE_KINDS, validateSopGraph, type SopGraph, type SopGraphContext, type SopNodeKind } from '@superagent/shared';
 import { api } from '../api';
 import { KIND_LABEL, SopGraphView } from '../components/SopGraphView';
+import { graphFromPack, knowledgeImpact, packFromRecommendation, unconfirmedItems, validationState, type KnowledgeEvidence, type SopPack } from './sop-workflow';
 import './SuperAgentPage.css';
 
 /** Contract agreed with the SOP runtime (T-41): /api/v1/sop. */
@@ -17,7 +18,17 @@ export interface SopVersionView {
   report: GateReport | null;
   runningInstances: number;
   effectiveAt?: string | null;
-  definition: { graph?: SopGraph; [k: string]: unknown };
+  /** Bumped by every saved revision; validation is valid only for the revision it ran on. */
+  revision?: number;
+  validatedRevision?: number | null;
+  definition: { graph?: SopGraph; pack?: SopPack | null; [k: string]: unknown };
+}
+interface KnowledgeRecommendation {
+  key: string;
+  kind: string;
+  name: string;
+  description: string;
+  evidence: KnowledgeEvidence[];
 }
 interface SopSummary {
   sopId: string;
@@ -87,14 +98,17 @@ function SopWorkspace() {
   const [sops, setSops] = useState<SopSummary[] | null>(null);
   const [unavailable, setUnavailable] = useState('');
   const [sopId, setSopId] = useState('');
+  const [newSopId, setNewSopId] = useState('');
   const [versions, setVersions] = useState<SopVersionView[]>([]);
   const [tools, setTools] = useState<ToolRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [knowledge, setKnowledge] = useState<{ recs: KnowledgeRecommendation[] } | { error: string } | null>(null);
   const [draft, setDraft] = useState<SopGraph>({ nodes: [], edges: [] });
+  const [pack, setPack] = useState<SopPack | undefined>();
+  const [pendingPack, setPendingPack] = useState<SopPack | undefined>();
   const [selected, setSelected] = useState<string>();
   const [effectiveAt, setEffectiveAt] = useState('');
   const [msg, setMsg] = useState('');
-  const [report, setReport] = useState<GateReport | null>(null);
 
   const loadList = useCallback(async () => {
     const r = await api<{ sops: SopSummary[] }>('/api/v1/sop');
@@ -111,6 +125,9 @@ function SopWorkspace() {
     void loadList();
     void api<ToolRow[]>('/api/v1/tools/').then((r) => r.status === 200 && setTools(r.body));
     void api<EmployeeRow[]>('/api/v1/employees/').then((r) => r.status === 200 && setEmployees(r.body));
+    void api<{ recommendations?: KnowledgeRecommendation[]; message?: string }>('/api/v1/knowledge/overview').then((r) =>
+      setKnowledge(r.status === 200 ? { recs: r.body.recommendations ?? [] } : { error: r.status === 503 ? '企业知识存储尚未配置，暂无流程包。' : r.body.message ?? `无法读取知识（${r.status}）` }),
+    );
   }, [loadList]);
 
   const loadVersions = useCallback(async (id: string) => {
@@ -119,7 +136,8 @@ function SopWorkspace() {
     setVersions(list);
     const editable = list.find((v) => v.status !== 'published') ?? list.find((v) => v.status === 'published');
     setDraft(structuredClone(editable?.definition.graph ?? { nodes: [], edges: [] }));
-    setReport(null);
+    setPack(editable?.definition.pack ? structuredClone(editable.definition.pack) : undefined);
+    setPendingPack(undefined);
     setSelected(undefined);
   }, []);
 
@@ -134,31 +152,62 @@ function SopWorkspace() {
   const issues = useMemo(() => validateSopGraph(draft, ctx), [draft, ctx]);
   const published = versions.find((v) => v.status === 'published');
   const openDraft = versions.find((v) => v.status !== 'published');
+  const saved = openDraft ?? published;
+  const dirty = !!saved && (JSON.stringify(saved.definition.graph ?? { nodes: [], edges: [] }) !== JSON.stringify(draft) || JSON.stringify(saved.definition.pack ?? null) !== JSON.stringify(pack ?? null));
+  const vstate = validationState(openDraft, dirty);
+  const unconfirmed = unconfirmedItems(pack);
+  const packs = 'recs' in (knowledge ?? {}) ? (knowledge as { recs: KnowledgeRecommendation[] }).recs.filter((r) => r.kind === 'sop').map(packFromRecommendation) : [];
+  const impact = 'recs' in (knowledge ?? {}) ? knowledgeImpact(pack, (knowledge as { recs: KnowledgeRecommendation[] }).recs) : [];
   const node = draft.nodes.find((n) => n.id === selected);
+  const canValidate = !!openDraft && !dirty && !issues.length && !unconfirmed.length;
+  const canPublish = canValidate && vstate.kind === 'valid';
 
-  async function saveDraft() {
-    const base = openDraft ?? published;
-    const definition = { ...(base?.definition ?? { requiredFields: [], employeeStatus: 'active' }), graph: draft };
+  async function save(graph = draft, nextPack = pack, forSop = sopId) {
+    const base = forSop === sopId ? (openDraft ?? published) : undefined;
+    const definition = { ...(base?.definition ?? { requiredFields: [], employeeStatus: 'active' }), graph, pack: nextPack ?? null };
     const r = base
       ? await api<SopVersionView>(`/api/v1/sop/drafts/${encodeURIComponent(base.id)}`, { method: 'PUT', body: JSON.stringify({ definition }) })
-      : await api<SopVersionView>('/api/v1/sop/drafts', { method: 'POST', body: JSON.stringify({ sopId, definition }) });
+      : await api<SopVersionView>('/api/v1/sop/drafts', { method: 'POST', body: JSON.stringify({ sopId: forSop, definition }) });
     setMsg(r.status === 200 ? `已保存为草稿 v${r.body.number}；已发布版本不受影响` : `未保存（${r.status}）`);
     if (r.status === 200) {
       await loadList();
-      await loadVersions(sopId);
+      if (forSop !== sopId) setSopId(forSop);
+      else await loadVersions(forSop);
     }
+  }
+
+  async function validate() {
+    if (!openDraft) return;
+    const r = await api<{ status?: string; error?: string; issues?: { message: string }[] }>(`/api/v1/sop/${encodeURIComponent(openDraft.id)}/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ employees: ctx.employees, tools: ctx.tools }),
+    });
+    await loadVersions(sopId);
+    setMsg(r.status === 200 ? (r.body.status === 'passed' ? '校验通过，可以发布' : '校验未通过，见回归用例') : `未校验：${r.body.issues?.map((i) => i.message).join('；') || r.body.error || r.status}`);
   }
 
   async function publish() {
     if (!openDraft) return;
-    // The runtime re-runs validateSopGraph on publish with this context, then its ten gates.
-    const r = await api<SopVersionView & { error?: string; report?: GateReport; issues?: { message: string }[] }>(`/api/v1/sop/${encodeURIComponent(openDraft.id)}/publish`, {
+    const r = await api<SopVersionView & { error?: string; issues?: { message: string }[] }>(`/api/v1/sop/${encodeURIComponent(openDraft.id)}/publish`, {
       method: 'POST',
       body: JSON.stringify({ ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}), employees: ctx.employees, tools: ctx.tools }),
     });
     await loadVersions(sopId); // reload first: it resets the editor state
-    setReport(r.body.report ?? null);
-    setMsg(r.status === 200 ? `v${r.body.number} 已发布；在途实例继续按原版本运行` : `未发布：${r.body.issues?.map((i) => i.message).join('；') || r.body.error || r.status}`);
+    setMsg(r.status === 200 ? `v${r.body.number} 已发布；在途实例继续按原版本运行` : `未发布：${r.body.issues?.map((i) => i.message).join('；') || (r.body.error === 'validation_stale' ? '校验已失效，请重新校验' : r.body.error) || r.status}`);
+  }
+
+  /** Applying a pack never touches a published version and never replaces a non-empty draft without confirmation. */
+  function requestPack(p: SopPack) {
+    if (sopId && draft.nodes.length && openDraft) setPendingPack(p);
+    else void applyPack(p);
+  }
+  async function applyPack(p: SopPack) {
+    setPendingPack(undefined);
+    const target = sopId || newSopId.trim() || `sop.${p.key}`;
+    const fresh = structuredClone(p);
+    setDraft(graphFromPack(fresh));
+    setPack(fresh);
+    await save(graphFromPack(fresh), fresh, target);
   }
 
   if (sops === null) return <p className="helper">读取中…</p>;
@@ -175,6 +224,33 @@ function SopWorkspace() {
             ))}
           </select>
         </label>
+        {!sopId ? (
+          <label className="field">
+            <span>新流程编号（从流程包新建时使用）</span>
+            <input aria-label="新流程编号" value={newSopId} onChange={(e) => setNewSopId(e.target.value)} placeholder="例如 sop.invoice-intake" />
+          </label>
+        ) : null}
+      </section>
+
+      <section className="panel stack" aria-label="流程包">
+        <h2 className="h2">流程包（来自企业知识分析）</h2>
+        {knowledge && 'error' in knowledge ? <p className="helper">{knowledge.error}</p> : null}
+        {knowledge && 'recs' in knowledge && !packs.length ? <p className="helper">分析还没有给出有依据的流程建议。</p> : null}
+        <ul className="onto-list">
+          {packs.map((p) => (
+            <li key={p.key} data-pack={p.key}>
+              <strong>{p.name}</strong> <span className="helper">{p.items.length} 项（触发 1，规则 {p.items.length - 1}），套用后逐项确认</span>
+              <button className="btn" type="button" onClick={() => requestPack(p)}>套用到草稿</button>
+            </li>
+          ))}
+        </ul>
+        {pendingPack ? (
+          <div className="warn" role="alertdialog" aria-label="确认替换草稿">
+            <p>将用流程包「{pendingPack.name}」替换当前草稿 v{openDraft?.number} 的内容。已发布版本不受影响。</p>
+            <button className="btn primary" type="button" onClick={() => void applyPack(pendingPack)}>确认替换</button>
+            <button className="btn" type="button" onClick={() => setPendingPack(undefined)}>取消</button>
+          </div>
+        ) : null}
       </section>
 
       {sopId ? (
@@ -207,29 +283,62 @@ function SopWorkspace() {
               setSelected(undefined);
             }} /> : null}
             <GraphEditor graph={draft} tools={tools} employees={employees} onChange={setDraft} />
-            <button className="btn" type="button" onClick={() => void saveDraft()}>保存草稿</button>
+            {pack ? (
+              <fieldset className="pack-items" aria-label="流程包确认">
+                <legend>流程包「{pack.name}」：规则与触发需逐项确认</legend>
+                {pack.items.map((it) => (
+                  <label key={it.id} className="pack-item" data-item={it.id}>
+                    <input
+                      type="checkbox"
+                      checked={it.confirmed}
+                      onChange={(e) => setPack((p) => p && { ...p, items: p.items.map((x) => (x.id === it.id ? { ...x, confirmed: e.target.checked } : x)) })}
+                    />
+                    <span>{it.kind === 'trigger' ? '触发' : '规则'}：{it.text}</span>
+                    <small>{it.evidence.map((e) => e.locator).join('，')}</small>
+                  </label>
+                ))}
+              </fieldset>
+            ) : null}
+            {impact.length ? (
+              <div className="warn" role="region" aria-label="知识变化影响">
+                <strong>企业知识已变化，以下内容的依据受影响：</strong>
+                <ul>
+                  {impact.map((i, k) => (
+                    <li key={k} data-impact={i.itemId}>{i.text}（{i.locator}）：依据 {i.from} → {i.to ?? '已不可用'}</li>
+                  ))}
+                </ul>
+                <p>请核对后修改草稿并重新校验。</p>
+              </div>
+            ) : null}
+            <button className="btn" type="button" onClick={() => void save()}>保存草稿</button>
           </section>
 
-          <section className="panel stack" aria-label="发布">
-            <h2 className="h2">发布</h2>
+          <section className="panel stack" aria-label="校验与发布">
+            <h2 className="h2">校验与发布</h2>
             {issues.length ? (
               <ul className="issues" aria-label="结构问题">
                 {issues.map((i, k) => <li key={k} data-issue={i.code}>{i.message}</li>)}
               </ul>
-            ) : <p className="helper">结构检查通过。发布时还会运行 10 项运行时门禁。</p>}
-            <label className="field">
-              <span>生效时间（可选）</span>
-              <input type="datetime-local" value={effectiveAt} onChange={(e) => setEffectiveAt(e.target.value)} />
-            </label>
-            <button className="btn primary" type="button" disabled={!openDraft || issues.length > 0} onClick={() => void publish()}>校验并发布</button>
-            {!openDraft ? <p className="helper">先保存草稿再发布。</p> : null}
-            {report ? (
-              <ul className="gates" aria-label="门禁结果">
-                {Object.entries(report.gates).map(([k, g]) => (
+            ) : <p className="helper">结构检查通过。</p>}
+            {unconfirmed.length ? <p className="warn" data-block="pack">流程包还有 {unconfirmed.length} 项规则或触发未确认，确认并保存后才能校验和发布。</p> : null}
+            {vstate.kind === 'dirty' ? <p className="warn" data-block="dirty">有未保存的修改：保存后需要重新校验。</p> : null}
+            {vstate.kind === 'stale' ? <p className="warn" data-block="stale">草稿已修改，之前的校验已失效（校验于第 {vstate.validatedRevision} 次修订，当前第 {vstate.revision} 次）。请重新校验。</p> : null}
+            {vstate.kind === 'incomplete' ? <p className="warn" data-block="incomplete">校验缺少回归用例：{vstate.missing.map((m) => GATE_LABEL[m] ?? m).join('，')}。不能发布。</p> : null}
+            {vstate.kind === 'failed' ? <p className="warn" data-block="failed">校验未通过，修改后重新校验。</p> : null}
+            <button className="btn" type="button" disabled={!canValidate} onClick={() => void validate()}>校验（运行回归用例）</button>
+            {openDraft?.report ? (
+              <ul className="gates" aria-label="回归用例">
+                {Object.entries(openDraft.report.gates).map(([k, g]) => (
                   <li key={k} className={g.ok ? 'ok' : 'fail'} data-gate={k}>{g.ok ? '✓' : '✗'} {GATE_LABEL[k] ?? k}{g.detail ? `：${g.detail}` : ''}</li>
                 ))}
               </ul>
             ) : null}
+            <label className="field">
+              <span>生效时间（可选）</span>
+              <input type="datetime-local" value={effectiveAt} onChange={(e) => setEffectiveAt(e.target.value)} />
+            </label>
+            <button className="btn primary" type="button" disabled={!canPublish} onClick={() => void publish()}>发布</button>
+            {!openDraft ? <p className="helper">先保存草稿，再校验和发布。</p> : null}
           </section>
         </>
       ) : null}
