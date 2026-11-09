@@ -28,8 +28,29 @@ export class LlmCallFailed extends Error {
   }
 }
 
+/**
+ * A verified model record: prices plus the protocol overhead (system/message/tool wrapper tokens) measured by the
+ * platform's capability test. Both are needed to state a hard upper bound; a record missing either is unusable.
+ */
+export interface PricedModel extends Price {
+  overheadTokens: { perRequest: number; perMessage: number; perTool: number };
+}
+
 export interface PriceBook {
-  price(provider: string, model: string): Promise<Price | null>;
+  price(provider: string, model: string): Promise<PricedModel | null>;
+  /** Called when a call cost more than its reservation: the record stops being usable until re-verified. */
+  markUnbounded(provider: string, model: string, detail: Record<string, unknown>): Promise<void>;
+}
+
+const nonNegInt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+
+/** Accepts only finite, non-negative integer prices and overheads with fullyBoundable === true. */
+export function validPricedModel(v: unknown): PricedModel | null {
+  const p = v as Partial<PricedModel> | null | undefined;
+  if (!p || !nonNegInt(p.inputPerMTokMicroUsd) || !nonNegInt(p.outputPerMTokMicroUsd) || p.fullyBoundable !== true) return null;
+  const o = p.overheadTokens;
+  if (!o || !nonNegInt(o.perRequest) || !nonNegInt(o.perMessage) || !nonNegInt(o.perTool)) return null;
+  return { inputPerMTokMicroUsd: p.inputPerMTokMicroUsd, outputPerMTokMicroUsd: p.outputPerMTokMicroUsd, fullyBoundable: true, overheadTokens: { perRequest: o.perRequest, perMessage: o.perMessage, perTool: o.perTool } };
 }
 
 export interface LlmGatewayDeps {
@@ -39,6 +60,8 @@ export interface LlmGatewayDeps {
   prices: PriceBook;
   providerFactory?: (cfg: ProviderConfig) => LlmProvider;
   now?: () => Date;
+  /** Deadline for one provider call (default 120 s). Expiry is an unknown outcome: the reservation is frozen. */
+  timeoutMs?: number;
 }
 
 export type Tier = 'primary' | 'economy';
@@ -49,8 +72,13 @@ export interface BudgetedResponse extends ChatResponse {
   costMicroUsd: number;
 }
 
-export function inputTokenUpperBound(req: BudgetedRequest): number {
-  return Buffer.byteLength(JSON.stringify({ messages: req.messages, tools: req.tools ?? [] }), 'utf8');
+/**
+ * Input-token upper bound: every content token is at least one UTF-8 byte of the serialised request, plus the
+ * protocol overhead the platform measured for this model (per request, per message, per tool definition).
+ */
+export function inputTokenUpperBound(req: BudgetedRequest, overhead: PricedModel['overheadTokens']): number {
+  const bytes = Buffer.byteLength(JSON.stringify({ messages: req.messages, tools: req.tools ?? [] }), 'utf8');
+  return bytes + overhead.perRequest + overhead.perMessage * req.messages.length + overhead.perTool * (req.tools?.length ?? 0);
 }
 
 export interface LlmGateway {
@@ -60,7 +88,9 @@ export interface LlmGateway {
 }
 
 export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
-  const factory = deps.providerFactory ?? ((cfg) => createProvider(cfg));
+  const timeoutMs = deps.timeoutMs ?? 120_000;
+  const factory =
+    deps.providerFactory ?? ((cfg) => createProvider(cfg, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })));
 
   async function resolve(tenantId: string, tier: Tier) {
     const rec = await deps.repo.get(tenantId);
@@ -68,9 +98,8 @@ export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
     if (rec.status !== 'configured' || !rec.provider || !rec.secret) throw new LlmUnavailable('llm_not_configured', 'no active model key; an admin must complete Setup');
     const model = (tier === 'economy' ? rec.economyModel : null) ?? rec.primaryModel;
     if (!model) throw new LlmUnavailable('model_not_selected', 'no model selected in Setup');
-    const price = await deps.prices.price(rec.provider, model);
-    if (!price) throw new LlmUnavailable('price_unknown', `no verified price for ${model}; the budget cannot be enforced`);
-    if (!price.fullyBoundable) throw new LlmUnavailable('price_unknown', `${model} bills items the request cannot bound; refused under a hard cap`);
+    const price = validPricedModel(await deps.prices.price(rec.provider, model));
+    if (!price) throw new LlmUnavailable('price_unknown', `no verified, fully boundable price and overhead record for ${model}; the budget cannot be enforced`);
     return { rec, model, price };
   }
 
@@ -88,16 +117,20 @@ export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
     async chat(tenantId, tier, req) {
       if (!Number.isInteger(req.maxOutputTokens) || req.maxOutputTokens <= 0) throw new Error('maxOutputTokens must be a positive integer');
       const { rec, model, price } = await resolve(tenantId, tier);
-      const reserved = maxBillableMicroUsd(inputTokenUpperBound(req), req.maxOutputTokens, price);
+      const reserved = maxBillableMicroUsd(inputTokenUpperBound(req, price.overheadTokens), req.maxOutputTokens, price);
       const month = (deps.now?.() ?? new Date()).toISOString().slice(0, 7);
       if ((await deps.budget.capFor(tenantId, month)) === null) throw new LlmUnavailable('budget_not_set', 'no monthly model budget is set for this tenant');
       const r = await deps.budget.reserve(tenantId, month, reserved, { provider: rec.provider!, model, taskId: req.taskId });
       if (!r) throw new LlmUnavailable('budget_exhausted', 'the monthly model budget would be exceeded');
 
       let res: ChatResponse;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const apiKey = await deps.secrets.get(rec.secret!);
-        res = await factory({ provider: rec.provider!, apiKey, endpoint: rec.endpoint ?? undefined }).chat({ ...req, model });
+        const deadline = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`provider call exceeded ${timeoutMs} ms`)), timeoutMs);
+        });
+        res = await Promise.race([factory({ provider: rec.provider!, apiKey, endpoint: rec.endpoint ?? undefined }).chat({ ...req, model }), deadline]);
       } catch (e) {
         // A definite refusal by the provider bills nothing; anything else may have been billed.
         const definite = e instanceof ProviderHttpError && e.status >= 400 && e.status < 500;
@@ -106,18 +139,36 @@ export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
         const status = e instanceof ProviderHttpError ? e.status : null;
         if (e instanceof ProviderHttpError && e.kind === 'auth') throw new LlmUnavailable('llm_key_invalid', 'the provider rejected the model key');
         throw new LlmCallFailed(definite ? 'released' : 'frozen_unknown', status, e instanceof Error ? e.message : String(e));
+      } finally {
+        if (timer) clearTimeout(timer);
       }
-      const cost = actualMicroUsd(res.usage.inputTokens, res.usage.outputTokens, price);
-      await deps.budget.settle(r, cost, res.usage);
-      return { ...res, model, reservedMicroUsd: reserved, costMicroUsd: Math.min(cost, reserved) };
+      const u = res.usage;
+      if (!u || !nonNegInt(u.inputTokens) || !nonNegInt(u.outputTokens)) {
+        await deps.budget.freeze(r);
+        throw new LlmCallFailed('frozen_unknown', null, 'provider returned unusable usage figures; reservation frozen for reconciliation');
+      }
+      const cost = actualMicroUsd(u.inputTokens, u.outputTokens, price);
+      if (cost > reserved) {
+        // The stated upper bound did not hold: never truncate silently. Hold the reservation and stop using the record.
+        await deps.budget.freeze(r);
+        await deps.prices.markUnbounded(rec.provider!, model, { reserved, cost, inputTokens: u.inputTokens, outputTokens: u.outputTokens, maxOutputTokens: req.maxOutputTokens });
+        throw new LlmCallFailed('frozen_unknown', null, `cost ${cost} exceeded the reserved upper bound ${reserved}; model record suspended until re-verified`);
+      }
+      await deps.budget.settle(r, cost, u);
+      return { ...res, model, reservedMicroUsd: reserved, costMicroUsd: cost };
     },
   };
 }
 
 /** Prices live with the verified-model record (model_capabilities.capabilities.price), maintained by the platform. */
 export class StaticPriceBook implements PriceBook {
-  constructor(private prices: Record<string, Price>) {}
+  readonly violations: { key: string; detail: Record<string, unknown> }[] = [];
+  constructor(private prices: Record<string, PricedModel>) {}
   async price(provider: string, model: string) {
     return this.prices[`${provider}/${model}`] ?? null;
+  }
+  async markUnbounded(provider: string, model: string, detail: Record<string, unknown>) {
+    delete this.prices[`${provider}/${model}`];
+    this.violations.push({ key: `${provider}/${model}`, detail });
   }
 }

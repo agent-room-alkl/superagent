@@ -4,8 +4,8 @@
  * left frozen for reconciliation. Prices for the gateway come from the verified-model record.
  */
 import type pg from 'pg';
-import { RESERVE_SQL, type BudgetStore, type Price, type ReservationMeta } from './budget.js';
-import type { PriceBook } from './llm-gateway.js';
+import { RESERVE_SQL, type BudgetStore, type ReservationMeta } from './budget.js';
+import { validPricedModel, type PricedModel, type PriceBook } from './llm-gateway.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -85,13 +85,18 @@ export class PgBudgetStore implements BudgetStore {
   }
 }
 
-/** Reads model_capabilities.capabilities.price for verified models only. */
+/** Reads model_capabilities.capabilities.price for verified models only; malformed records are unusable. */
 export class PgPriceBook implements PriceBook {
   constructor(private pool: pg.Pool) {}
-  async price(provider: string, model: string): Promise<Price | null> {
+  async price(provider: string, model: string): Promise<PricedModel | null> {
     const r = await this.pool.query("SELECT capabilities->'price' AS price FROM model_capabilities WHERE provider = $1 AND model_id = $2 AND status = 'verified'", [provider, model]);
-    const p = r.rows[0]?.price as Partial<Price> | null | undefined;
-    if (!p || typeof p.inputPerMTokMicroUsd !== 'number' || typeof p.outputPerMTokMicroUsd !== 'number') return null;
-    return { inputPerMTokMicroUsd: p.inputPerMTokMicroUsd, outputPerMTokMicroUsd: p.outputPerMTokMicroUsd, fullyBoundable: p.fullyBoundable === true };
+    return validPricedModel(r.rows[0]?.price);
+  }
+  /** Suspends the record (status becomes unverified) and keeps the evidence; an admin re-verifies the model. */
+  async markUnbounded(provider: string, model: string, detail: Record<string, unknown>): Promise<void> {
+    await this.pool.query(
+      "UPDATE model_capabilities SET status = 'unverified', capabilities = capabilities || jsonb_build_object('boundViolation', $3::jsonb) WHERE provider = $1 AND model_id = $2",
+      [provider, model, JSON.stringify({ ...detail, at: new Date().toISOString() })],
+    );
   }
 }
