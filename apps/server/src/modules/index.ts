@@ -3,6 +3,8 @@ import type { Role } from '@superagent/shared';
 import { setupModule } from './setup/index.js';
 import { knowledgeModule } from './knowledge/index.js';
 import { roomModule } from './room/index.js';
+import { employeesModule } from './employees/index.js';
+import { toolsModule } from './tools/index.js';
 
 export interface ModuleDef {
   prefix: string;
@@ -17,4 +19,6 @@ export const modules: ModuleDef[] = [
   { prefix: 'setup', plugin: setupModule, roles: ['admin', 'owner'] }, // T-39 Claude
   { prefix: 'knowledge', plugin: knowledgeModule }, // T-40 Codex
   { prefix: 'room', plugin: roomModule },         // T-41 Grok
+  { prefix: 'employees', plugin: employeesModule, roles: ['admin', 'owner'] }, // T-42
+  { prefix: 'tools', plugin: toolsModule, roles: ['admin', 'owner', 'reviewer'] }, // T-42
 ];
