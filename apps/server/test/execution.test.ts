@@ -119,13 +119,23 @@ describe('SOP executor main line', () => {
   it('blocks honestly without a connector or an available tool; refuses unpublished versions and duplicate events', () => {
     connectors.delete('erp.lookup');
     expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-6', startedBy: 'o', data: input })).toMatchObject({ status: 'blocked' });
-    expect(ex.list().at(-1)!.steps.find((s) => s.nodeId === 'r')!.detail).toContain('没有已安装的连接器');
+    expect(ex.list('t').at(-1)!.steps.find((s) => s.nodeId === 'r')!.detail).toContain('没有已安装的连接器');
     connectors.set('erp.lookup', () => undefined);
     tools['erp.lookup'] = { effect: 'read', available: false };
     expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input }).steps.find((s) => s.nodeId === 'r')!.detail).toContain('不可用');
     const draft = sop.draft('other', { requiredFields: [], employeeStatus: 'active', graph } as never);
     expect(() => ex.start({ tenantId: 't', versionId: draft.id, eventId: 'x', startedBy: 'o', data: {} })).toThrow(/published/);
     expect(() => ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).toThrow(/already opened/);
+  });
+
+  it('runs are tenant-scoped: another tenant cannot list, read or resume them', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-8', startedBy: 'owner-1', data: input });
+    expect(ex.list('other')).toEqual([]);
+    expect(() => ex.get('other', run.id)).toThrow(/not found/);
+    const item = approvalOf(run.id);
+    expect(ex.onDecided({ ...inbox.decide(item.id, 'owner-1', 1).item, tenantId: 'other' })).toBeNull();
+    expect(ex.get('t', run.id).status).toBe('waiting_human');
+    expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
   });
 
   it('runs in graph order', () => {

@@ -51,6 +51,6 @@ export const executionModule: FastifyPluginAsync = async (app) => {
     return executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
   });
 
-  app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({ executions: executionState.current.list(req.query.sopId) }));
-  app.get<{ Params: { id: string } }>('/:id', async (req) => executionState.current.get(req.params.id));
+  app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({ executions: executionState.current.list(req.user!.tenantId, req.query.sopId) }));
+  app.get<{ Params: { id: string } }>('/:id', async (req) => executionState.current.get(req.user!.tenantId, req.params.id));
 };

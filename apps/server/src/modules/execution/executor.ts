@@ -88,13 +88,14 @@ export class SopExecutor {
 
   constructor(private deps: ExecutorDeps) {}
 
-  list(sopId?: string): Execution[] {
-    return [...this.runs.values()].filter((r) => !sopId || r.sopId === sopId).map((r) => structuredClone(r));
+  /** Runs of one tenant only; another tenant's run is indistinguishable from a missing one. */
+  list(tenantId: string, sopId?: string): Execution[] {
+    return [...this.runs.values()].filter((r) => r.tenantId === tenantId && (!sopId || r.sopId === sopId)).map((r) => structuredClone(r));
   }
 
-  get(id: string): Execution {
+  get(tenantId: string, id: string): Execution {
     const r = this.runs.get(id);
-    if (!r) throw new ExecutionError('not_found', 'execution not found', 404);
+    if (!r || r.tenantId !== tenantId) throw new ExecutionError('not_found', 'execution not found', 404);
     return structuredClone(r);
   }
 
@@ -142,7 +143,7 @@ export class SopExecutor {
     const executionId = typeof item.payload.executionId === 'string' ? item.payload.executionId : null;
     if (!executionId || item.kind !== 'action_approval') return null;
     const run = this.runs.get(executionId);
-    if (!run || run.status !== 'waiting_human') return null;
+    if (!run || run.tenantId !== item.tenantId || run.status !== 'waiting_human') return null;
     const graph = (this.deps.sop().get(run.versionId).definition as { graph?: SopGraph }).graph!;
     const review = run.steps.find((s) => s.workItemId === item.id && s.status === 'waiting_human');
     if (!review) return null;
