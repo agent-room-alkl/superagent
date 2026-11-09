@@ -19,3 +19,19 @@
   .nav-item { white-space: nowrap; }
   .page-head p { display: none; }
 }
+.stack { display: grid; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.h2 { margin: 0; font-size: 18px; }
+.field { display: grid; gap: var(--space-2xs); font-size: 14px; color: var(--color-muted); }
+input, select { min-height: var(--control); border-radius: var(--radius-sm); border: 1px solid var(--color-rule); background: var(--color-paper); color: var(--color-ink); padding: 0 var(--space-sm); font: inherit; }
+.btn { min-height: var(--control); border-radius: var(--radius-sm); border: 1px solid var(--color-rule); background: var(--color-well); color: var(--color-ink); padding: 0 var(--space-md); font: inherit; cursor: pointer; justify-self: start; }
+.btn.primary { background: var(--color-accent); color: var(--color-accent-ink); border-color: var(--color-accent); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.helper { margin: 0; font-size: 13px; color: var(--color-muted); }
+.warn { margin: 0; color: var(--color-warning); font-size: 14px; }
+.steps { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-xs); padding: 0; margin: 0; }
+.steps li { display: grid; gap: 2px; border-top: 3px solid var(--color-rule); padding-top: var(--space-xs); font-size: 13px; color: var(--color-subtle); }
+.steps li.done { border-color: var(--color-success); color: var(--color-ink); }
+.steps li.current { border-color: var(--color-accent); color: var(--color-accent); font-weight: 600; }
+.steps .mark { font-size: 12px; }
+.steps small { font-size: 11px; }
+@media (max-width: 600px) { .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SetupPage } from './pages/SetupPage';
 import { Placeholder } from './pages/Placeholder';
+import { ToolsPage } from './pages/ToolsPage';
 
 type NavItem = { id: string; label: string; owner: string };
 
@@ -17,8 +18,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: '团队与知识',
     items: [
       { id: 'knowledge', label: '企业知识', owner: 'T-40' },
-      { id: 'employees', label: '数字员工', owner: 'T-39 后续任务' },
-      { id: 'tools', label: '员工工具', owner: 'T-39 后续任务' },
+      { id: 'employees', label: '数字员工', owner: 'T-42' },
+      { id: 'tools', label: '员工工具', owner: 'T-42' },
     ],
   },
   {
@@ -64,7 +65,7 @@ export function App() {
           ))}
         </nav>
         <main className="content">
-          {current.id === 'settings' ? <SetupPage /> : <Placeholder title={current.label} owner={current.owner} />}
+          {current.id === 'settings' ? <SetupPage /> : current.id === 'tools' ? <ToolsPage /> : <Placeholder title={current.label} owner={current.owner} />}
         </main>
       </div>
     </>

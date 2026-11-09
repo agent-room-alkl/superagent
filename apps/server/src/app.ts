@@ -4,11 +4,21 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { modules } from './modules/index.js';
+import { createAuthenticate, requireRole, type AuthConfig } from './auth.js';
+import type { SetupDeps } from './modules/setup/service.js';
+
+export interface ReadinessCheck {
+  name: string;
+  check: () => Promise<boolean>;
+}
 
 export interface AppOptions {
   /** Serve the built web app (apps/web/dist) from the same process. */
   serveWeb?: boolean;
   logger?: boolean;
+  auth?: AuthConfig;
+  setupDeps?: SetupDeps;
+  readiness?: ReadinessCheck[];
 }
 
 export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> {
@@ -19,12 +29,27 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   });
 
   app.get('/healthz', async () => ({ ok: true }));
-  app.get('/readyz', async () => ({ ok: true, role: process.env.APP_ROLE ?? 'web' }));
+  app.get('/readyz', async (_req, reply) => {
+    const results = await Promise.all(
+      (opts.readiness ?? []).map(async (c) => ({ name: c.name, ok: await c.check().catch(() => false) })),
+    );
+    const ok = results.every((r) => r.ok);
+    return reply.code(ok ? 200 : 503).send({ ok, role: process.env.APP_ROLE ?? 'web', checks: results });
+  });
 
-  // Each module owns a prefix under /api/v1. Owners: see docs/OWNERSHIP.md.
-  for (const m of modules) {
-    await app.register(m.plugin, { prefix: `/api/v1/${m.prefix}` });
-  }
+  const auth = opts.auth ?? { mode: 'dev' as const, platformTenantId: 'default' };
+  const authenticate = createAuthenticate(auth);
+
+  await app.register(async (api) => {
+    api.addHook('preHandler', authenticate);
+    // Each module owns a prefix under /api/v1. Owners: see docs/OWNERSHIP.md.
+    for (const m of modules) {
+      await api.register(async (scoped) => {
+        if (m.roles) scoped.addHook('preHandler', requireRole(...m.roles));
+        await scoped.register(m.plugin, { ...(m.prefix === 'setup' && opts.setupDeps ? { deps: opts.setupDeps } : {}), tenantOf: (req: any) => req.user?.tenantId ?? 'default' });
+      }, { prefix: `/api/v1/${m.prefix}` });
+    }
+  });
 
   if (opts.serveWeb) {
     const here = path.dirname(fileURLToPath(import.meta.url));
