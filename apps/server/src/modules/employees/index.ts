@@ -1,9 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { EmployeeService } from './employees.js';
 
+/** One employee registry per process, shared with the executor's call-time authorisation. */
+export const employeesState = { current: new EmployeeService() };
+
 /** Digital employee routes (T-42). */
 export const employeesModule: FastifyPluginAsync<{ service?: EmployeeService }> = async (app, opts) => {
-  const svc = opts.service ?? new EmployeeService();
+  const svc = opts.service ?? employeesState.current;
   const view = (id: string) => {
     const e = svc.get(id);
     return { id: e.id, name: e.name, duty: e.duty, status: e.status, source: e.source, promptVersion: svc.currentPrompt(id).version, modelTier: e.modelTier };
