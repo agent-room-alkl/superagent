@@ -1,0 +1,56 @@
+/**
+ * SOP executions (T-56): start a run of a published SOP version, list and inspect runs. Approvals arrive through
+ * 待我处理 (work-items decide) and resume the run; this module never writes without one.
+ */
+import type { FastifyPluginAsync } from 'fastify';
+import { ToolGateway } from '../gateway/gateway.js';
+import { inboxState, workItemEvents } from '../humanwork/index.js';
+import { sopState } from '../sop/index.js';
+import { toolsState } from '../tools/index.js';
+import { ExecutionError, SopExecutor, type Connector } from './executor.js';
+
+/** Installed connectors by tool id. Production registers real ones; none registered means tool steps block. */
+export const connectors = new Map<string, Connector>();
+
+function toolInfo(toolId: string) {
+  try {
+    const t = toolsState.current.get(toolId);
+    const p = toolsState.current.stage(toolId, t.consumers[0]);
+    return { effect: t.contract.effect, available: t.state === 'active' && p.done.length === 7 };
+  } catch {
+    return null;
+  }
+}
+
+export const executionState = {
+  current: new SopExecutor({
+    sop: () => sopState.current,
+    inbox: () => inboxState.current,
+    gateway: new ToolGateway(),
+    tools: toolInfo,
+    connectors,
+    reviewerOf: (run) => run.startedBy,
+  }),
+};
+
+workItemEvents.decided.push((item) => {
+  executionState.current.onDecided(item);
+});
+
+export const executionModule: FastifyPluginAsync = async (app) => {
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof ExecutionError) return reply.code(err.statusCode).send({ error: err.code, message: err.message });
+    if (err instanceof Error && /not_found|version_not_found/.test(err.message)) return reply.code(404).send({ error: 'not_found', message: err.message });
+    return reply.send(err);
+  });
+
+  app.post<{ Body: { versionId?: string; eventId?: string; input?: Record<string, unknown> } }>('/', async (req, reply) => {
+    const b = req.body ?? {};
+    if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
+    reply.code(201);
+    return executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
+  });
+
+  app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({ executions: executionState.current.list(req.user!.tenantId, req.query.sopId) }));
+  app.get<{ Params: { id: string } }>('/:id', async (req) => executionState.current.get(req.user!.tenantId, req.params.id));
+};

@@ -1,0 +1,144 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import type { SopGraph } from '@superagent/shared';
+import { SopRuntime } from '../src/modules/sop/sop.js';
+import { WorkInbox } from '../src/modules/humanwork/work-items.js';
+import { OutcomeUnknownError, ToolGateway } from '../src/modules/gateway/gateway.js';
+import { SopExecutor, stepOrder, type Connector, type ToolInfo } from '../src/modules/execution/executor.js';
+
+const graph: SopGraph = {
+  nodes: [
+    { id: 't', kind: 'trigger', label: '收到发票', ref: 'mail:inbox' },
+    { id: 'a', kind: 'agent', label: '超级智能体分派' },
+    { id: 'e', kind: 'employee', label: '应付专员', ref: 'emp-1' },
+    { id: 'r', kind: 'tool', label: '查询采购单', ref: 'erp.lookup' },
+    { id: 'h', kind: 'human_review', label: '财务审核' },
+    { id: 'w', kind: 'tool', label: '登记付款', ref: 'erp.pay' },
+  ],
+  edges: [{ from: 't', to: 'a' }, { from: 'a', to: 'e' }, { from: 'e', to: 'r' }, { from: 'r', to: 'h' }, { from: 'h', to: 'w' }],
+};
+const ctx = { employees: { 'emp-1': { status: 'active' as const } }, tools: { 'erp.lookup': { stage: 'available' as const, effect: 'read' as const }, 'erp.pay': { stage: 'available' as const, effect: 'write' as const } } };
+const input = { invoiceNo: 'INV-480', amount: 480 };
+
+let sop: SopRuntime;
+let inbox: WorkInbox;
+let connectors: Map<string, Connector>;
+let tools: Record<string, ToolInfo>;
+let ledger: Map<string, Record<string, unknown>>;
+let calls: string[];
+let ex: SopExecutor;
+let versionId: string;
+
+function publish(def: Record<string, unknown> = {}) {
+  const v = sop.draft('invoice-intake', { requiredFields: ['invoiceNo', 'amount'], threshold: { field: 'amount', max: 5000 }, employeeStatus: 'active', graph, ...def } as never);
+  expect(sop.validate(v.id, ctx).status).toBe('passed');
+  return sop.publish(v.id, undefined, ctx).id;
+}
+
+beforeEach(() => {
+  sop = new SopRuntime();
+  inbox = new WorkInbox();
+  ledger = new Map();
+  calls = [];
+  tools = { 'erp.lookup': { effect: 'read', available: true }, 'erp.pay': { effect: 'write', available: true } };
+  connectors = new Map<string, Connector>([
+    ['erp.lookup', (p) => (calls.push(`lookup:${p.invoiceNo}`), undefined)],
+    ['erp.pay', (p) => { calls.push(`pay:${p.invoiceNo}`); ledger.set(String(p.invoiceNo), { ...p }); return { externalRef: `ERP-${p.invoiceNo}`, actual: { ...ledger.get(String(p.invoiceNo))! } }; }],
+  ]);
+  ex = new SopExecutor({ sop: () => sop, inbox: () => inbox, gateway: new ToolGateway(), tools: (id) => tools[id] ?? null, connectors, reviewerOf: () => 'owner-1' });
+  versionId = publish();
+});
+
+const approvalOf = (runId: string) => inbox.all().find((i) => i.kind === 'action_approval' && i.payload.executionId === runId)!;
+
+describe('SOP executor main line', () => {
+  it('runs to the human review, writes only after approval, reads back and completes', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-1', startedBy: 'owner-1', data: input });
+    expect(run.status).toBe('waiting_human');
+    expect(run.steps.map((s) => [s.nodeId, s.status])).toEqual([['t', 'done'], ['a', 'done'], ['e', 'done'], ['r', 'done'], ['h', 'waiting_human'], ['w', 'pending']]);
+    expect(calls).toEqual(['lookup:INV-480']); // read step ran; no write yet
+    const item = approvalOf(run.id);
+    expect(item.payload).toMatchObject({ executionId: run.id, stepId: 'w', toolId: 'erp.pay', invoiceNo: 'INV-480', amount: 480 });
+    expect(item.assigneeUserId).toBe('owner-1');
+
+    const decided = inbox.decide(item.id, 'owner-1', item.payloadVersion);
+    expect(decided.ok).toBe(true);
+    const done = ex.onDecided(decided.item)!;
+    expect(done.status).toBe('completed');
+    expect(calls).toEqual(['lookup:INV-480', 'pay:INV-480']);
+    const w = done.steps.find((s) => s.nodeId === 'w')!;
+    expect(w).toMatchObject({ status: 'done', readback: input });
+    expect(w.detail).toContain('回读一致');
+    expect(ledger.get('INV-480')).toEqual(input);
+    // the same approval cannot make it write twice
+    expect(ex.onDecided(decided.item)).toBeNull();
+    expect(calls.filter((c) => c.startsWith('pay'))).toHaveLength(1);
+  });
+
+  it('missing required input asks for it instead of running', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-2', startedBy: 'owner-1', data: { invoiceNo: 'INV-1' } });
+    expect(run.status).toBe('blocked');
+    expect(run.steps[0]!.detail).toContain('缺少必填字段：amount');
+    const supply = inbox.all().find((i) => i.kind === 'supply_info')!;
+    expect(supply.payload).toMatchObject({ executionId: run.id, missingFields: ['amount'] });
+    expect(calls).toEqual([]);
+  });
+
+  it('read-back mismatch: outcome unknown, frozen, exception opened, approval cannot be re-submitted, no second write', () => {
+    connectors.set('erp.pay', (p) => (calls.push(`pay:${p.invoiceNo}`), { externalRef: 'ERP-X', actual: { ...p, amount: 4800 } }));
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-3', startedBy: 'owner-1', data: input });
+    const item = approvalOf(run.id);
+    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item)!;
+    expect(after.status).toBe('outcome_unknown');
+    expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toContain('回读与批准的值不一致');
+    const exc = inbox.all().find((i) => i.id === after.exceptionItemId)!;
+    expect(exc).toMatchObject({ kind: 'exception_ruling', payload: { executionId: run.id, reason: 'readback_mismatch', intended: input, readback: { ...input, amount: 4800 } } });
+    expect(inbox.all().find((i) => i.id === item.id)!.actionStatus).toBe('outcome_unknown');
+    expect(inbox.decide(item.id, 'owner-1', 1)).toMatchObject({ ok: false, reason: 'no_resubmit' });
+    expect(calls.filter((c) => c.startsWith('pay'))).toHaveLength(1);
+  });
+
+  it('timeout: outcome unknown, never retried automatically', () => {
+    connectors.set('erp.pay', () => { calls.push('pay'); throw new OutcomeUnknownError('timeout'); });
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-4', startedBy: 'owner-1', data: input });
+    const after = ex.onDecided(inbox.decide(approvalOf(run.id).id, 'owner-1', 1).item)!;
+    expect(after.status).toBe('outcome_unknown');
+    expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toContain('不会自动重试');
+    expect(calls).toEqual(['lookup:INV-480', 'pay']); // one write attempt only
+  });
+
+  it('a revised approval no longer matches the run parameters: blocked, nothing written', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-5', startedBy: 'owner-1', data: input });
+    const item = approvalOf(run.id);
+    const revised = inbox.revise(item.id, { amount: 9999 });
+    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', revised.payloadVersion).item)!;
+    expect(after.status).toBe('blocked');
+    expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toBe('批准的参数与本次写入不一致');
+    expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
+  });
+
+  it('blocks honestly without a connector or an available tool; refuses unpublished versions and duplicate events', () => {
+    connectors.delete('erp.lookup');
+    expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-6', startedBy: 'o', data: input })).toMatchObject({ status: 'blocked' });
+    expect(ex.list('t').at(-1)!.steps.find((s) => s.nodeId === 'r')!.detail).toContain('没有已安装的连接器');
+    connectors.set('erp.lookup', () => undefined);
+    tools['erp.lookup'] = { effect: 'read', available: false };
+    expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input }).steps.find((s) => s.nodeId === 'r')!.detail).toContain('不可用');
+    const draft = sop.draft('other', { requiredFields: [], employeeStatus: 'active', graph } as never);
+    expect(() => ex.start({ tenantId: 't', versionId: draft.id, eventId: 'x', startedBy: 'o', data: {} })).toThrow(/published/);
+    expect(() => ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).toThrow(/already opened/);
+  });
+
+  it('runs are tenant-scoped: another tenant cannot list, read or resume them', () => {
+    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-8', startedBy: 'owner-1', data: input });
+    expect(ex.list('other')).toEqual([]);
+    expect(() => ex.get('other', run.id)).toThrow(/not found/);
+    const item = approvalOf(run.id);
+    expect(ex.onDecided({ ...inbox.decide(item.id, 'owner-1', 1).item, tenantId: 'other' })).toBeNull();
+    expect(ex.get('t', run.id).status).toBe('waiting_human');
+    expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
+  });
+
+  it('runs in graph order', () => {
+    expect(stepOrder(graph)).toEqual(['t', 'a', 'e', 'r', 'h', 'w']);
+  });
+});

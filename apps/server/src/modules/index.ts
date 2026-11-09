@@ -9,6 +9,7 @@ import { runtimeModule } from './runtime/index.js';
 import { gatewayModule } from './gateway/index.js';
 import { humanworkModule } from './humanwork/index.js';
 import { sopModule } from './sop/index.js';
+import { executionModule } from './execution/index.js';
 
 export interface ModuleDef {
   prefix: string;
@@ -29,4 +30,5 @@ export const modules: ModuleDef[] = [
   { prefix: 'gateway', plugin: gatewayModule },   // T-41 Grok
   { prefix: 'work-items', plugin: humanworkModule }, // T-41 Grok
   { prefix: 'sop', plugin: sopModule, roles: ['admin', 'owner'] }, // T-41 Grok (runtime) / T-48 page
+  { prefix: 'executions', plugin: executionModule, roles: ['admin', 'owner'] }, // T-56 executor
 ];

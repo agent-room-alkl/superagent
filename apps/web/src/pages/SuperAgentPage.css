@@ -34,3 +34,7 @@
 .pack-item { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-xs); align-items: start; }
 .pack-item small { grid-column: 2; color: var(--color-muted); }
 .onto-list li .btn { margin-left: var(--space-xs); }
+.run-steps { margin: var(--space-2xs) 0 0; padding-left: var(--space-md); font-size: 14px; }
+.run-steps li[data-step-status="outcome_unknown"], .run-steps li[data-step-status="blocked"] { color: var(--color-danger, #b42318); }
+.readback { display: block; font-size: 12px; color: var(--color-muted); overflow-wrap: anywhere; }
+textarea { border-radius: var(--radius-sm); border: 1px solid var(--color-rule); background: var(--color-paper); color: var(--color-ink); padding: var(--space-xs) var(--space-sm); font: inherit; }

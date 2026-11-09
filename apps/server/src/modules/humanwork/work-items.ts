@@ -110,6 +110,11 @@ export class WorkInbox {
     return this.view(item);
   }
 
+  /** Every item (server-side callers such as the SOP executor; not exposed over HTTP). */
+  all(): WorkItem[] {
+    return [...this.items.values()].map((item) => this.view(item));
+  }
+
   list(viewer: Viewer, options?: { exceptionsOnly?: boolean; projectId?: string }): WorkItem[] {
     return [...this.items.values()]
       .filter((item) => this.visible(item, viewer))

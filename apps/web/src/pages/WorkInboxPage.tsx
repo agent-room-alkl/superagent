@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './execution.css';
+import { authHeaders } from '../api';
 
 type Group = 'action' | 'waiting' | 'internal';
 
@@ -14,6 +15,8 @@ interface InboxItem {
   payloadVersion: number;
   fromServer: boolean;
   actionStatus: string | null;
+  /** Server items: the exact content being decided (approval parameters), shown before deciding. */
+  fields?: [string, string][];
 }
 
 /** An unknown write stays submitted once. The inbox does not offer another decide. */
@@ -39,6 +42,9 @@ interface ServerWorkItem {
 }
 
 /** A successful list replaces the offline sample. An empty list stays empty. */
+/** Payload keys that are references, not content the approver decides on. */
+const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title']);
+
 export function inboxFromServer(items: ServerWorkItem[] | undefined): InboxItem[] | null {
   if (!items) return null;
   return items.map((item) => ({
@@ -52,6 +58,9 @@ export function inboxFromServer(items: ServerWorkItem[] | undefined): InboxItem[
     payloadVersion: item.payloadVersion,
     fromServer: true,
     actionStatus: item.actionStatus,
+    fields: Object.entries(item.payload ?? {})
+      .filter(([key]) => !INTERNAL_FIELDS.has(key))
+      .map(([key, value]): [string, string] => [key, typeof value === 'string' ? value : JSON.stringify(value)]),
   }));
 }
 
@@ -99,7 +108,7 @@ export function WorkInboxPage() {
     let stop = false;
     async function load() {
       try {
-        const response = await fetch('/api/v1/work-items', { headers: { 'x-user-id': 'user-sales', 'x-roles': 'employee' } });
+        const response = await fetch('/api/v1/work-items', { headers: await authHeaders() });
         if (!response.ok) return;
         const data = (await response.json()) as { items?: ServerWorkItem[] };
         const next = inboxFromServer(data.items);
@@ -123,7 +132,7 @@ export function WorkInboxPage() {
     if (!open || !canDecide(open)) return;
     const response = await fetch(`/api/v1/work-items/${open.id}/decide`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-user-id': 'user-sales', 'x-roles': 'employee' },
+      headers: { 'content-type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify({ expectedVersion: open.payloadVersion }),
     });
     if (!response.ok) return;
@@ -185,6 +194,11 @@ export function WorkInboxPage() {
               <span>{open.kind}</span>
             </div>
             <p>{open.why}</p>
+            {open.fields?.length ? (
+              <dl className="exec-fields" aria-label="决定的内容">
+                {open.fields.map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
+              </dl>
+            ) : null}
             {canDecide(open) ? <button type="button" onClick={() => void decideOpen()}>按版本 {open.payloadVersion} 决定</button> : null}
             {open.actionStatus === 'outcome_unknown' ? <p>结果未知，不能再次提交。</p> : null}
             <dl>

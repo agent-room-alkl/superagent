@@ -10,6 +10,7 @@ import { InMemoryConfigRepo, StaticAllowlist } from '../../server/src/modules/se
 import { InMemorySecretStore } from '../../server/src/modules/setup/secrets.js';
 import { createKnowledgeFixture } from './knowledge-fixture.js';
 import { sopState } from '../../server/src/modules/sop/index.js';
+import { connectors } from '../../server/src/modules/execution/index.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
 
@@ -60,6 +61,16 @@ const app = await buildApp({
 // trigger would, so specs can show that publishing a new version leaves running instances on the old one.
 let e2eEvent = 0;
 app.post<{ Params: { id: string } }>('/__e2e/sop/versions/:id/instances', async (req) => sopState.current.manualStart('e2e', req.params.id, `e2e-event-${++e2eEvent}`, true));
+// Synthetic ERP for the main-line E2E: the connector for tool e2e.erp.pay writes to this in-memory ledger and
+// returns what the ledger then holds (read-back). mode "mismatch" makes the system store a different amount.
+const erp = { mode: 'ok' as 'ok' | 'mismatch', ledger: new Map<string, Record<string, unknown>>() };
+connectors.set('e2e.erp.pay', (params) => {
+  const stored = { ...params, ...(erp.mode === 'mismatch' ? { amount: Number(params.amount) * 10 } : {}) };
+  erp.ledger.set(String(params.invoiceNo), stored);
+  return { externalRef: `ERP-${String(params.invoiceNo)}`, actual: { ...stored } };
+});
+app.post<{ Body: { mode: 'ok' | 'mismatch' } }>('/__e2e/erp/mode', async (req) => ((erp.mode = req.body.mode), { mode: erp.mode }));
+app.get('/__e2e/erp/ledger', async () => Object.fromEntries(erp.ledger));
 await knowledge.attach(app);
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT ?? 4173) });
 console.log(JSON.stringify({ msg: 'e2e server ready', stub }));
