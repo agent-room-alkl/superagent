@@ -3,7 +3,8 @@ import { KnowledgeError } from './domain.js';
 import { KnowledgeService, type KnowledgeDeps } from './service.js';
 export const knowledgeModule: FastifyPluginAsync<{ deps?: KnowledgeDeps }> = async (app, opts) => {
   const service = opts.deps ? new KnowledgeService(opts.deps) : null;
-  app.addHook('preHandler', async (_req, reply) => { if (!service) return reply.code(503).send({ error: 'knowledge_unavailable', message: '企业知识存储尚未配置。' }); });
+  app.addHook('preHandler', async (req, reply) => { if (!service && !req.routeOptions.url?.endsWith('/status')) return reply.code(503).send({ error: 'knowledge_unavailable', message: '企业知识存储尚未配置。' }); });
+  app.get('/status', async () => ({ module: 'knowledge', implemented: true, configured: !!service }));
   app.setErrorHandler((err, _req, reply) => { if (err instanceof KnowledgeError) return reply.code(err.statusCode).send({ error: err.code, message: err.message }); const code = (err as { statusCode?: number }).statusCode; return reply.code(code && code < 500 ? code : 500).send({ error: 'knowledge_request_failed', message: '请求未完成，请稍后重试。' }); });
   const body = (req: { body: unknown }) => { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new KnowledgeError('invalid_input', '请求结构无效。'); return req.body as Record<string, unknown>; };
   app.get('/overview', req => service!.overview(req.user!));
