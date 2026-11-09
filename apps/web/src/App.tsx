@@ -5,6 +5,8 @@ import { ToolsPage } from './pages/ToolsPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { signOut, type SignedIn } from './auth';
 import { SuperAgentPage } from './pages/SuperAgentPage';
+import { CommandRoomPage } from './pages/CommandRoomPage';
+import { WorkInboxPage } from './pages/WorkInboxPage';
 
 type NavItem = { id: string; label: string; owner: string };
 
@@ -74,7 +76,7 @@ export function App({ user = { mode: 'dev' } }: { user?: SignedIn }) {
           ))}
         </nav>
         <main className="content">
-          {current.id === 'settings' ? <SetupPage /> : current.id === 'tools' ? <ToolsPage /> : current.id === 'knowledge' ? <KnowledgePage /> : current.id === 'brain' ? <SuperAgentPage /> : <Placeholder title={current.label} owner={current.owner} />}
+          {current.id === 'settings' ? <SetupPage /> : current.id === 'tools' ? <ToolsPage /> : current.id === 'knowledge' ? <KnowledgePage /> : current.id === 'brain' ? <SuperAgentPage /> : current.id === 'room' ? <CommandRoomPage /> : current.id === 'work' ? <WorkInboxPage /> : <Placeholder title={current.label} owner={current.owner} />}
         </main>
       </div>
     </>

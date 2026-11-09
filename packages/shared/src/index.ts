@@ -163,3 +163,4 @@ export type ActionStatus = 'not_submitted' | 'executing' | 'confirmed' | 'failed
 export const APP_ROLES = ['web', 'worker', 'browser'] as const;
 export type AppRole = (typeof APP_ROLES)[number];
 export * from './sop-graph.js';
+export type { SopGraph as SharedSopGraph, SopGraphContext as SharedSopGraphContext, SopGraphIssue as SharedSopGraphIssue } from './sop-graph.js';

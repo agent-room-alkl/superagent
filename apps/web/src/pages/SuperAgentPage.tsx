@@ -73,6 +73,24 @@ const GATE_LABEL: Record<string, string> = {
   write_approval: '写入需审批',
 };
 
+interface RulesForm {
+  requiredFields: string;
+  thresholdField: string;
+  thresholdMax: string;
+}
+/** SOP run rules as edited on the page (the runtime's SopDefinition requiredFields / threshold). */
+function rulesFrom(def: SopVersionView['definition'] | undefined): RulesForm {
+  const req = Array.isArray(def?.requiredFields) ? (def!.requiredFields as string[]) : [];
+  const th = def?.threshold as { field?: string; max?: number } | undefined;
+  return { requiredFields: req.join(', '), thresholdField: th?.field ?? '', thresholdMax: th?.max != null ? String(th.max) : '' };
+}
+/** Always sets both keys: a cleared threshold becomes undefined (dropped on save), never the previous value. */
+function rulesTo(r: RulesForm): { requiredFields: string[]; threshold: { field: string; max: number } | undefined } {
+  const requiredFields = r.requiredFields.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+  const max = Number(r.thresholdMax);
+  return { requiredFields, threshold: r.thresholdField.trim() && r.thresholdMax.trim() && Number.isFinite(max) ? { field: r.thresholdField.trim(), max } : undefined };
+}
+
 export function employeeContext(rows: EmployeeRow[]): SopGraphContext['employees'] {
   return Object.fromEntries(rows.map((e) => [e.id, { status: e.status === 'online' || e.status === 'active' ? 'active' : e.status === 'paused' ? 'paused' : 'offline' }]));
 }
@@ -105,6 +123,7 @@ function SopWorkspace() {
   const [knowledge, setKnowledge] = useState<{ recs: KnowledgeRecommendation[] } | { error: string } | null>(null);
   const [draft, setDraft] = useState<SopGraph>({ nodes: [], edges: [] });
   const [pack, setPack] = useState<SopPack | undefined>();
+  const [rules, setRules] = useState<RulesForm>(rulesFrom(undefined));
   const [pendingPack, setPendingPack] = useState<SopPack | undefined>();
   const [selected, setSelected] = useState<string>();
   const [effectiveAt, setEffectiveAt] = useState('');
@@ -137,6 +156,7 @@ function SopWorkspace() {
     const editable = list.find((v) => v.status !== 'published') ?? list.find((v) => v.status === 'published');
     setDraft(structuredClone(editable?.definition.graph ?? { nodes: [], edges: [] }));
     setPack(editable?.definition.pack ? structuredClone(editable.definition.pack) : undefined);
+    setRules(rulesFrom(editable?.definition));
     setPendingPack(undefined);
     setSelected(undefined);
   }, []);
@@ -153,7 +173,11 @@ function SopWorkspace() {
   const published = versions.find((v) => v.status === 'published');
   const openDraft = versions.find((v) => v.status !== 'published');
   const saved = openDraft ?? published;
-  const dirty = !!saved && (JSON.stringify(saved.definition.graph ?? { nodes: [], edges: [] }) !== JSON.stringify(draft) || JSON.stringify(saved.definition.pack ?? null) !== JSON.stringify(pack ?? null));
+  const dirty =
+    !!saved &&
+    (JSON.stringify(saved.definition.graph ?? { nodes: [], edges: [] }) !== JSON.stringify(draft) ||
+      JSON.stringify(saved.definition.pack ?? null) !== JSON.stringify(pack ?? null) ||
+      JSON.stringify(rulesFrom(saved.definition)) !== JSON.stringify(rules));
   const vstate = validationState(openDraft, dirty);
   const unconfirmed = unconfirmedItems(pack);
   const packs = 'recs' in (knowledge ?? {}) ? (knowledge as { recs: KnowledgeRecommendation[] }).recs.filter((r) => r.kind === 'sop').map(packFromRecommendation) : [];
@@ -164,7 +188,7 @@ function SopWorkspace() {
 
   async function save(graph = draft, nextPack = pack, forSop = sopId) {
     const base = forSop === sopId ? (openDraft ?? published) : undefined;
-    const definition = { ...(base?.definition ?? { requiredFields: [], employeeStatus: 'active' }), graph, pack: nextPack ?? null };
+    const definition = { ...(base?.definition ?? { employeeStatus: 'active' }), ...rulesTo(rules), graph, pack: nextPack ?? null };
     const r = base
       ? await api<SopVersionView>(`/api/v1/sop/drafts/${encodeURIComponent(base.id)}`, { method: 'PUT', body: JSON.stringify({ definition }) })
       : await api<SopVersionView>('/api/v1/sop/drafts', { method: 'POST', body: JSON.stringify({ sopId: forSop, definition }) });
@@ -283,6 +307,21 @@ function SopWorkspace() {
               setSelected(undefined);
             }} /> : null}
             <GraphEditor graph={draft} tools={tools} employees={employees} onChange={setDraft} />
+            <fieldset className="pack-items" aria-label="运行规则">
+              <legend>运行规则（校验时用作回归用例的输入）</legend>
+              <label className="field">
+                <span>必填字段（逗号分隔，缺少时停下补充）</span>
+                <input aria-label="必填字段" value={rules.requiredFields} onChange={(e) => setRules({ ...rules, requiredFields: e.target.value })} placeholder="例如 发票号, 金额" />
+              </label>
+              <label className="field">
+                <span>超阈值转人工：字段</span>
+                <input aria-label="阈值字段" value={rules.thresholdField} onChange={(e) => setRules({ ...rules, thresholdField: e.target.value })} placeholder="例如 金额" />
+              </label>
+              <label className="field">
+                <span>超阈值转人工：上限</span>
+                <input aria-label="阈值上限" inputMode="decimal" value={rules.thresholdMax} onChange={(e) => setRules({ ...rules, thresholdMax: e.target.value })} placeholder="例如 5000" />
+              </label>
+            </fieldset>
             {pack ? (
               <fieldset className="pack-items" aria-label="流程包确认">
                 <legend>流程包「{pack.name}」：规则与触发需逐项确认</legend>

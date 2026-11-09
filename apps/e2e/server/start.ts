@@ -9,7 +9,7 @@ import { buildApp } from '../../server/src/app.js';
 import { InMemoryConfigRepo, StaticAllowlist } from '../../server/src/modules/setup/service.js';
 import { InMemorySecretStore } from '../../server/src/modules/setup/secrets.js';
 import { createKnowledgeFixture } from './knowledge-fixture.js';
-import { fakeSopRuntime } from './fake-sop.js';
+import { sopState } from '../../server/src/modules/sop/index.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
 
@@ -56,8 +56,10 @@ const app = await buildApp({
     fetchFn: (url, init) => fetch(String(url).replace('https://api.anthropic.com', stub), init),
   },
 });
-// SOP runtime contract (T-41) — test double until the runtime module is merged.
-await app.register(fakeSopRuntime(), { prefix: '/api/v1/sop' });
+// The real SOP runtime (T-41) is mounted by buildApp. Test-only hook: start an instance pinned to a version, as a
+// trigger would, so specs can show that publishing a new version leaves running instances on the old one.
+let e2eEvent = 0;
+app.post<{ Params: { id: string } }>('/__e2e/sop/versions/:id/instances', async (req) => sopState.current.manualStart('e2e', req.params.id, `e2e-event-${++e2eEvent}`, true));
 await knowledge.attach(app);
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT ?? 4173) });
 console.log(JSON.stringify({ msg: 'e2e server ready', stub }));

@@ -17,11 +17,12 @@ async function knowledge(page: Page, versions: { s1: string; s2: string | null }
     route.fulfill({ json: { recommendations: [{ id: 'k1', key: 'invoice-intake', kind: 'sop', name: '发票受理', description: '受理供应商发票', evidence, humanLocked: false, deleted: false }] } }),
   );
 }
+const rules = { requiredFields: ['invoiceNo', 'amount'], threshold: { field: 'amount', max: 5000 } };
 const validateBtn = (page: Page) => page.getByRole('button', { name: '校验（运行回归用例）' });
 const publishBtn = (page: Page) => page.getByRole('button', { name: '发布', exact: true });
 
 test('validation runs the regression cases; an edit makes it stale and says so; revalidation allows publishing', async ({ page, request }) => {
-  expect((await request.post('/api/v1/sop/drafts', { data: { sopId: 'e2e.month-end', definition: { requiredFields: [], employeeStatus: 'active', graph: ok } } })).status()).toBe(200);
+  expect((await request.post('/api/v1/sop/drafts', { data: { sopId: 'e2e.month-end', definition: { ...rules, employeeStatus: 'active', graph: ok } } })).status()).toBe(200);
   await page.goto('/#brain');
   await page.getByLabel('选择流程').selectOption('e2e.month-end');
   await expect(publishBtn(page)).toBeDisabled(); // never published without a validation
@@ -52,7 +53,7 @@ test('validation runs the regression cases; an edit makes it stale and says so; 
 });
 
 test('a validation report missing baseline regression cases blocks publishing', async ({ page, request }) => {
-  await request.post('/api/v1/sop/drafts', { data: { sopId: 'e2e.partial', definition: { requiredFields: [], employeeStatus: 'active', graph: ok } } });
+  await request.post('/api/v1/sop/drafts', { data: { sopId: 'e2e.partial', definition: { ...rules, employeeStatus: 'active', graph: ok } } });
   const v = ((await (await request.get('/api/v1/sop/e2e.partial/versions')).json()) as { versions: { id: string }[] }).versions[0]!;
   await request.post(`/api/v1/sop/${v.id}/validate`, { data: { employees: {}, tools: {} } });
   // the runtime answers with a report that lacks nine of the ten regression cases
@@ -84,7 +85,16 @@ test('a pack starts as a draft with every rule and trigger unconfirmed; it canno
   for (const c of await items.all()) await c.check();
   await page.getByRole('button', { name: '保存草稿' }).click();
   await expect(page.locator('[data-block="pack"]')).toHaveCount(0);
-  await validateBtn(page).click(); // a confirmed pack validates
+  // without run rules the real regression cases fail and say why
+  await validateBtn(page).click();
+  await expect(page.getByRole('status')).toContainText('校验未通过');
+  await expect(page.getByRole('list', { name: '回归用例' }).locator('[data-gate="over_threshold"]')).toContainText('no threshold configured');
+  await expect(publishBtn(page)).toBeDisabled();
+  await page.getByLabel('必填字段').fill('发票号, 金额');
+  await page.getByLabel('阈值字段').fill('金额');
+  await page.getByLabel('阈值上限').fill('5000');
+  await page.getByRole('button', { name: '保存草稿' }).click();
+  await validateBtn(page).click(); // a confirmed pack with its rules validates
   await expect(page.getByRole('status')).toContainText('校验通过');
   await expect(publishBtn(page)).toBeEnabled();
 });

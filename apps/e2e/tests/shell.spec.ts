@@ -34,8 +34,8 @@ test('no horizontal page scroll at phone width', async ({ page, isMobile }) => {
 });
 
 test('unbuilt modules say who owns them instead of showing invented data', async ({ page }) => {
-  await page.goto('/#room');
-  await expect(page.locator('main')).toContainText('T-41');
+  await page.goto('/#employees');
+  await expect(page.locator('main')).toContainText('T-42');
   await expect(page.locator('main')).not.toContainText(/已完成|已发布/);
 });
 
