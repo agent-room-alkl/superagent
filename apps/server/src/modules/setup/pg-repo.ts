@@ -15,8 +15,8 @@ export class PgConfigRepo implements ConfigRepo {
   async get(tenantId: string): Promise<LlmConfigRecord> {
     const r = await this.pool.query('SELECT * FROM llm_config WHERE tenant_id = $1', [tenantId]);
     const h = await this.pool.query(
-      'SELECT action, detail, created_at FROM audit_log WHERE tenant_id = $1 AND object_type = $2 AND object_id = $1::text ORDER BY created_at, id',
-      [tenantId, OBJECT_TYPE],
+      'SELECT action, detail, created_at FROM audit_log WHERE tenant_id = $1 AND object_type = $2 AND object_id = $3 ORDER BY created_at, id',
+      [tenantId, OBJECT_TYPE, tenantId],
     );
     const row = r.rows[0];
     return {
@@ -46,11 +46,11 @@ export class PgConfigRepo implements ConfigRepo {
            status = EXCLUDED.status, updated_at = now()`,
         [rec.tenantId, rec.provider, rec.endpoint, rec.secret?.name ?? null, rec.secret?.version ?? null, rec.keyLast4, rec.primaryModel, rec.economyModel, rec.status],
       );
-      const n = await c.query('SELECT count(*)::int AS n FROM audit_log WHERE tenant_id = $1 AND object_type = $2 AND object_id = $1::text', [rec.tenantId, OBJECT_TYPE]);
+      const n = await c.query('SELECT count(*)::int AS n FROM audit_log WHERE tenant_id = $1 AND object_type = $2 AND object_id = $3', [rec.tenantId, OBJECT_TYPE, rec.tenantId]);
       for (const h of rec.history.slice(n.rows[0].n)) {
         await c.query(
-          "INSERT INTO audit_log (tenant_id, actor, action, object_type, object_id, version_ref, result, detail) VALUES ($1, 'setup', $2, $3, $1::text, $4, 'ok', $5)",
-          [rec.tenantId, h.event, OBJECT_TYPE, rec.secret?.version ?? null, JSON.stringify(sanitize(h.detail))],
+          "INSERT INTO audit_log (tenant_id, actor, action, object_type, object_id, version_ref, result, detail) VALUES ($1, 'setup', $2, $3, $6, $4, 'ok', $5)",
+          [rec.tenantId, h.event, OBJECT_TYPE, rec.secret?.version ?? null, JSON.stringify(sanitize(h.detail)), rec.tenantId],
         );
       }
       await c.query('COMMIT');
