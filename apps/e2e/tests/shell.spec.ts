@@ -34,7 +34,13 @@ test('no horizontal page scroll at phone width', async ({ page, isMobile }) => {
 });
 
 test('unbuilt modules say who owns them instead of showing invented data', async ({ page }) => {
-  await page.goto('/#knowledge');
-  await expect(page.locator('main')).toContainText('T-40');
+  await page.goto('/#room');
+  await expect(page.locator('main')).toContainText('T-41');
   await expect(page.locator('main')).not.toContainText(/已完成|已发布/);
+});
+
+test('knowledge without configured storage says so instead of inventing sources (fail closed)', async ({ page }) => {
+  await page.goto('/#knowledge');
+  await expect(page.locator('main')).toContainText('企业知识存储尚未配置');
+  await expect(page.locator('main')).not.toContainText(/已确认|已完成|已发布/);
 });
