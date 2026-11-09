@@ -76,13 +76,16 @@ jobs:
           grep -q 'tracker.invalid' sandbox-run.log
           echo "--- guard: refuses main-app settings ---"
           if docker run --rm -e APP_ROLE=browser -e KEY_VAULT_URL=https://kv.example -e RUN_SPEC="$SPEC" superagent-browser:ci; then echo "should have refused"; exit 1; fi
-      - name: Web role fails closed without production settings
+      - name: Web and worker roles fail closed without production settings
         run: |
           set +e
           docker run --rm -e APP_ROLE=web superagent:ci > refuse.log 2>&1; code=$?
           cat refuse.log
           test $code -ne 0 || { echo "should have refused to start"; exit 1; }
           grep -q 'ENTRA_TENANT_ID' refuse.log && grep -q 'KEY_VAULT_URL' refuse.log && grep -q 'PLATFORM_TENANT_ID' refuse.log || { echo 'refusal must name the missing settings'; exit 1; }
+          docker run --rm -e APP_ROLE=worker superagent:ci > worker.log 2>&1; code=$?
+          cat worker.log
+          test $code -ne 0 && grep -q 'PLATFORM_TENANT_ID' worker.log || { echo 'worker must refuse to start without production settings'; exit 1; }
           docker run --rm -e APP_ROLE=web -e AUTH_MODE=dev superagent:ci > dev.log 2>&1; code=$?
           test $code -ne 0 && grep -q 'AUTH_MODE=dev is not allowed in production' dev.log || { cat dev.log; echo "dev auth must be refused in production"; exit 1; }
       - name: Smoke test web role (production wiring, unreachable dependencies)

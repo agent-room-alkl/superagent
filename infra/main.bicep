@@ -128,6 +128,12 @@ resource artifacts 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   parent: blobSvc
   name: 'artifacts'
 }
+// Knowledge originals (uploads, parsed binaries) keyed by content digest (T-40). Private; app identity only.
+resource knowledge 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobSvc
+  name: 'knowledge'
+  properties: { publicAccess: 'None' }
+}
 // Restricted screenshot retention for sandbox runs: private container, deleted automatically after 7 days.
 resource screenshots 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobSvc

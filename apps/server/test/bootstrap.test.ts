@@ -111,3 +111,36 @@ const url = process.env.DATABASE_URL;
     expect(m.has('ux')).toBe(false);
   });
 });
+
+describe('worker entry uses the same fail-closed bootstrap', () => {
+  it('refuses to start without production settings', async () => {
+    const { runWorker } = await import('../src/worker.js');
+    const saved = { ...process.env };
+    try {
+      for (const k of Object.keys(prodEnv)) delete process.env[k];
+      process.env.NODE_ENV = 'production';
+      await expect(runWorker({ heartbeatMs: 1 })).rejects.toBeInstanceOf(BootstrapError);
+    } finally {
+      process.env = saved;
+    }
+  });
+
+  it('checks the database before looping, runs registered ticks with the runtime, and closes the pool on stop', async () => {
+    const { runWorker } = await import('../src/worker.js');
+    const seen: string[] = [];
+    const pool = { query: async (q: string) => (seen.push(q), { rows: [{ ok: 1 }] }), end: async () => void seen.push('end') } as unknown as pg.Pool;
+    const rt = await createRuntime(prodEnv, { pool: () => pool, keyVault: async () => new InMemorySecretStore() });
+    const ac = new AbortController();
+    let ticks = 0;
+    await runWorker({ runtime: rt, signal: ac.signal, heartbeatMs: 1, log: () => undefined, ticks: [async (r) => { ticks++; expect(r.config.mode).toBe('production'); ac.abort(); }] });
+    expect(seen[0]).toBe('SELECT 1');
+    expect(ticks).toBe(1);
+    expect(seen.at(-1)).toBe('end');
+  });
+
+  it('an unreachable database stops the worker at startup', async () => {
+    const { runWorker } = await import('../src/worker.js');
+    const rt = await createRuntime(prodEnv, { pool: () => fakePool(false), keyVault: async () => new InMemorySecretStore() });
+    await expect(runWorker({ runtime: rt, heartbeatMs: 1, log: () => undefined })).rejects.toThrow('down');
+  });
+});
