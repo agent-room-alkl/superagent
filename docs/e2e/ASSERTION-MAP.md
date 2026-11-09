@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 84 |
-| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 61 |
-| pending | Feature not built yet; the owner task will add the E2E | 112 |
+| e2e | Covered by a Playwright test against the real app | 96 |
+| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 66 |
+| pending | Feature not built yet; the owner task will add the E2E | 95 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 97, T-45 15
+Pending by owner: T-41 87, T-45 8
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -26,14 +26,14 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 6 | Write approval waits for data confirmation | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 7 | Invalid monetary input cannot be confirmed | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 8 | Data confirmation does not execute write | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 9 | Approved action inherits confirmed data | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 10 | Approval is distinct from execution | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 9 | Approved action inherits confirmed data | e2e | apps/e2e/tests/mainline.spec.ts |
+| 10 | Approval is distinct from execution | e2e | apps/e2e/tests/mainline.spec.ts |
 | 11 | Unsaved changes cannot execute old approval | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 12 | Saved revision invalidates approval | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 13 | Unknown outcome retains single submission | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 14 | Unknown outcome has no resubmit action | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 15 | Unknown readback does not retry | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 16 | Readback compares approved values | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 12 | Saved revision invalidates approval | unit | apps/server/test/execution.test.ts |
+| 13 | Unknown outcome retains single submission | e2e | apps/e2e/tests/mainline.spec.ts |
+| 14 | Unknown outcome has no resubmit action | e2e | apps/e2e/tests/mainline.spec.ts |
+| 15 | Unknown readback does not retry | unit | apps/server/test/execution.test.ts |
+| 16 | Readback compares approved values | e2e | apps/e2e/tests/mainline.spec.ts |
 | 17 | Manual report requires evidence | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 18 | Manual evidence is not system verified | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 19 | Quality review grants no action authority | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
@@ -56,7 +56,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 36 | Project filter selects only relevant work | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 37 | Project filter also scopes batch contents | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 38 | Upstream revision revokes downstream permission | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 39 | Mismatched readback stops without resubmission | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 40 | Manual note cannot erase mismatched system outcome | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
 | 41 | Existing conversation still produces draft | pending | T-41 |
 | 42 | Existing task evidence boundary retained | pending | T-41 |
@@ -178,13 +178,13 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 4 | Async employee report replaced composer | pending | T-41 |
 | 5 | Draft incorrectly marked human-accepted | pending | T-41 |
 | 6 | Draft boundary missing | pending | T-41 |
-| 7 | Execution identity untraceable | pending | T-41 |
+| 7 | Execution identity untraceable | e2e | apps/e2e/tests/mainline.spec.ts |
 | 8 | Raw implementation JSON in result | pending | T-41 |
 | 9 | Verified result cannot be reviewed | pending | T-41 |
 | 10 | Malformed evidence passed | pending | T-41 |
 | 11 | Failed evidence can be accepted | pending | T-41 |
 | 12 | Human result acceptance missing | pending | T-41 |
-| 13 | Missing information fake-executed | pending | T-41 |
+| 13 | Missing information fake-executed | e2e | apps/e2e/tests/mainline.spec.ts |
 | 14 | Empty supplement accepted | pending | T-41 |
 | 15 | Supplement restarted/replaced task | pending | T-41 |
 | 16 | Revoked tool still usable | unit | apps/server/test/tools.test.ts |
@@ -200,14 +200,14 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 26 | Summary leaks other owner | pending | T-41 |
 | 27 | Employee navigation expanded | pending | T-41 — employee navigation (simulated view) ships with the command room |
 | 28 | Write rehearsal auto-approved | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 29 | Approval does not bind parameters | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 30 | Timeout marked complete/retried | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 31 | Unknown write can be accepted | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 32 | Unknown readback retried write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 33 | Mismatched write accepted or repeated | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 34 | Mismatched result review enabled | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 29 | Approval does not bind parameters | unit | apps/server/test/execution.test.ts |
+| 30 | Timeout marked complete/retried | unit | apps/server/test/execution.test.ts |
+| 31 | Unknown write can be accepted | e2e | apps/e2e/tests/mainline.spec.ts |
+| 32 | Unknown readback retried write | unit | apps/server/test/execution.test.ts |
+| 33 | Mismatched write accepted or repeated | e2e | apps/e2e/tests/mainline.spec.ts |
+| 34 | Mismatched result review enabled | e2e | apps/e2e/tests/mainline.spec.ts |
 | 35 | Corrected external data could not be reread without a second write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 36 | Matching readback did not verify original request | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 36 | Matching readback did not verify original request | e2e | apps/e2e/tests/mainline.spec.ts |
 | 37 | Changed contract retains old action approval/acceptance | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
 | 38 | Contract revision repeats write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
 | 39 | Offline rehearsal discarded original task | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
