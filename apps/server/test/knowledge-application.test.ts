@@ -74,7 +74,9 @@ describe('knowledge application: real source store + transactions', () => {
     await app.register(knowledgeModule, { prefix: '/knowledge' }); expect((await app.inject('/knowledge/overview')).statusCode).toBe(503); await app.close();
     const f = await fixture(), wired = Fastify(); wired.addHook('preHandler', async req => { req.user = owner; });
     await wired.register(knowledgeModule, { prefix: '/knowledge', deps: { repo: f.repo } });
-    expect((await wired.inject('/knowledge/overview')).json().items).toHaveLength(1);
+    const overview = (await wired.inject('/knowledge/overview')).json(); expect(overview.items).toHaveLength(1);
+    expect(overview.items[0].id).toHaveLength(64);
+    expect((await wired.inject({ method: 'POST', url: `/knowledge/items/${overview.items[0].id}/confirm`, payload: { version: overview.items[0].version } })).statusCode).toBe(200);
     expect((await wired.inject({ method: 'POST', url: '/knowledge/connections', payload: [] })).statusCode).toBe(400);
     expect((await wired.inject({ method: 'POST', url: '/knowledge/analyses', payload: {} })).statusCode).toBe(503); await wired.close();
   });
