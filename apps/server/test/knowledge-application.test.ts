@@ -70,7 +70,8 @@ describe('knowledge application: real source store + transactions', () => {
   });
   it('unconfigured external connectors and analysis return actionable errors', async () => {
     const f = await confirmed();
-    await expect(f.service.createConnection(owner, { name: '数据库', pluginId: 'database' })).rejects.toMatchObject({ code: 'connector_not_configured', statusCode: 503 });
+    await f.service.installPlugin(owner, 'database');
+    await expect(f.service.createConnection(owner, { name: '数据库', pluginId: 'database', readOnlyAcknowledged: true })).rejects.toMatchObject({ code: 'connector_not_configured', statusCode: 503 });
     await expect(f.service.startAnalysis(owner)).rejects.toMatchObject({ code: 'analysis_unavailable', statusCode: 503 });
     await expect(f.service.createConnection(owner, { name: 'x', pluginId: 'local-file', scope: { password: 'placeholder' } })).rejects.toMatchObject({ code: 'secret_not_allowed' });
   });
@@ -131,6 +132,9 @@ describe('analysis stage worker', () => {
     const rec = (await f.repo.read(owner)).recommendations[0]!;
     await service.editRecommendation(owner,rec.id,{name:'人工保留',description:'人工职责'});
     await service.upload(owner,{connectionId:f.conn.id,name:'policy.md',text:'规则\n\n付款前复核金额与审批。'});
+    expect((await service.overview(owner)).recommendations[0]).toMatchObject({ name:'人工保留', description:'人工职责', humanLocked:true, stale:true, evidence:[] });
+    await expect(service.editRecommendation(owner,rec.id,{name:'绕过确认',description:'不应写入'})).rejects.toMatchObject({code:'not_found'});
+    await expect(service.adoptRecommendation(owner,rec.id)).rejects.toMatchObject({code:'proposal_unavailable'});
     const current = (await f.repo.read(owner)).source.items.find(i=>i.current)!; await service.confirm(owner,current.id,current.version);
     await service.startAnalysis(owner); await runAnalysis(f.repo,model,owner,queued);
     const visible = (await service.overview(owner)).recommendations[0]!;

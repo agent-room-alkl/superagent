@@ -39,8 +39,9 @@ test('unbuilt modules say who owns them instead of showing invented data', async
   await expect(page.locator('main')).not.toContainText(/已完成|已发布/);
 });
 
-test('knowledge without configured storage says so instead of inventing sources (fail closed)', async ({ page }) => {
+test('configured knowledge starts with an empty source list for an ungranted owner', async ({ page }) => {
   await page.goto('/#knowledge');
-  await expect(page.locator('main')).toContainText('企业知识存储尚未配置');
-  await expect(page.locator('main')).not.toContainText(/已确认|已完成|已发布/);
+  await expect(page.locator('main')).toContainText('还没有资料。上传后将在这里显示解析与确认状态。');
+  await expect(page.locator('.knowledge-item')).toHaveCount(0);
+  await expect(page.locator('.knowledge-recommendation')).toHaveCount(0);
 });

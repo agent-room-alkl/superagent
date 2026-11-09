@@ -42,7 +42,8 @@ function fixture() {
   const repo = new MemoryKnowledgeRepository();
   const service = new KnowledgeService({ repo, database });
   async function connect() {
-    const connection = await service.createConnection(owner, { name: 'Finance', pluginId: 'database', scope: { resourceId: resource.id } });
+    await service.installPlugin(owner, 'database');
+    const connection = await service.createConnection(owner, { name: 'Finance', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: resource.id } });
     await service.confirmConnection(owner, connection.id);
     return connection;
   }
@@ -57,7 +58,8 @@ function fixture() {
 describe('database KnowledgeService integration (synthetic source, real service/repository/gateway)', () => {
   it('requires connection and version confirmation, indexes approved structure only, and never stores live rows', async () => {
     const f = fixture();
-    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', scope: { resourceId: f.resource.id } });
+    await f.service.installPlugin(owner, 'database');
+    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } });
     await expect(f.service.sync(owner, connection.id)).rejects.toMatchObject({ code: 'connection_unconfirmed' });
     await f.service.confirmConnection(owner, connection.id);
     expect(await f.service.sync(owner, connection.id)).toMatchObject({ applied: 1, cursorAdvanced: true });
@@ -103,7 +105,7 @@ describe('database KnowledgeService integration (synthetic source, real service/
     const template = await f.service.approveTemplate(owner, connection.id, { sql, params: ['status'] });
     const other = await f.connect();
     await expect(f.service.query(owner, other.id, { templateId: template.id, args: ['open'] })).rejects.toMatchObject({ code: 'template_not_approved' });
-    const draft = await f.service.createConnection(owner, { name: 'Draft', pluginId: 'database', scope: { resourceId: f.resource.id } });
+    const draft = await f.service.createConnection(owner, { name: 'Draft', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } });
     await expect(f.service.approveTemplate(owner, draft.id, { sql, params: ['status'] })).rejects.toMatchObject({ code: 'source_denied' });
     expect(f.open).not.toHaveBeenCalled();
   });
@@ -165,13 +167,15 @@ describe('database KnowledgeService integration (synthetic source, real service/
 
   it('prevents caller JSON from expanding DBA tables, audience, row cap and project scope', async () => {
     const f = fixture();
-    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', scope: { resourceId: f.resource.id, maxRows: 9999, tables: { payroll: { columns: ['salary'] } }, projectIds: [] } });
+    await f.service.installPlugin(owner, 'database');
+    await expect(f.service.createConnection(owner, { name: 'Expanded', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id, maxRows: 9999, tables: { payroll: { columns: ['salary'] } }, projectIds: [] } })).rejects.toMatchObject({ code: 'scope_denied' });
+    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } });
     expect(connection.scope).toMatchObject({ maxRows: 25, projectIds: ['finance'], tables: f.resource.scope.tables });
     expect(connection.scope.tables).not.toHaveProperty('payroll');
-    await expect(f.service.createConnection(owner, { name: 'Audience expansion', pluginId: 'database', scope: { resourceId: f.resource.id }, audience: ['alice', 'mallory'] })).rejects.toMatchObject({ code: 'scope_denied' });
+    await expect(f.service.createConnection(owner, { name: 'Audience expansion', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id }, audience: ['alice', 'mallory'] })).rejects.toMatchObject({ code: 'scope_denied' });
     for (const denied of [{ ...owner, userId: 'mallory' }, { ...owner, projectScopes: [] }]) {
       expect(f.database.list(denied)).toEqual([]);
-      await expect(f.service.createConnection(denied, { name: 'Bypass', pluginId: 'database', scope: { resourceId: f.resource.id } })).rejects.toMatchObject({ code: 'source_denied' });
+      await expect(f.service.createConnection(denied, { name: 'Bypass', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } })).rejects.toMatchObject({ code: 'source_denied' });
     }
   });
 
@@ -240,7 +244,8 @@ describe('database KnowledgeService integration (synthetic source, real service/
 
   it('refuses failed read-only identity verification on confirmation and again before every query', async () => {
     const f = fixture();
-    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', scope: { resourceId: f.resource.id } });
+    await f.service.installPlugin(owner, 'database');
+    const connection = await f.service.createConnection(owner, { name: 'Finance', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } });
     f.setReadOnly(false);
     await expect(f.service.confirmConnection(owner, connection.id)).rejects.toMatchObject({ code: 'readonly_account_required' });
     expect((await f.repo.read(owner)).source.connections[0]!.status).toBe('draft');
@@ -274,7 +279,7 @@ describe('postgresResource driver adapter (injected Pool fixtures)', () => {
       { table_name: 'approved_invoices', column_name: 'id', data_type: 'integer' },
       { table_name: 'approved_invoices', column_name: 'status', data_type: 'text' },
       { table_name: 'approved_invoices', column_name: 'hidden', data_type: 'text' },
-    ] } : { rows: [{ elevated: false }] });
+    ] } : statement.includes('pg_current_snapshot') ? { rows: [{ revision: '100:101:' }] } : { rows: [{ elevated: false }] });
     const clientQuery = vi.fn(async (_statement: string, _params?: unknown[]) => ({ rows: [{ id: 1 }] }));
     const release = vi.fn();
     const connect = vi.fn(async () => ({ query: clientQuery, release }));
@@ -323,7 +328,8 @@ describe('postgresResource driver adapter (injected Pool fixtures)', () => {
   it('pins native relation/function resolution to trusted public/pg_catalog schemas before executing approved SQL', async () => {
     const f = nativeFixture(), repo = new MemoryKnowledgeRepository(), gateway = new DatabaseGateway([f.resource]);
     const service = new KnowledgeService({ repo, database: gateway });
-    const connection = await service.createConnection(owner, { name: 'Native', pluginId: 'database', scope: { resourceId: f.resource.id } });
+    await service.installPlugin(owner, 'database');
+    const connection = await service.createConnection(owner, { name: 'Native', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: f.resource.id } });
     await service.confirmConnection(owner, connection.id);
     const template = await service.approveTemplate(owner, connection.id, { sql: 'SELECT id FROM approved_invoices', params: [] });
     await service.query(owner, connection.id, { templateId: template.id, args: [] });
@@ -368,7 +374,8 @@ describe.skipIf(!process.env.DATABASE_URL)('native PostgreSQL source integration
       const resource = postgresResource(readOnly, { id: 'native-db', name: 'Isolated native source', projectIds: ['finance'], scope: { tables: { approved_invoices: { columns: ['id', 'status', 'contact_email'], sensitive: ['contact_email'] } }, audience: ['alice'], maxRows: 5 } });
       expect(await resource.verifyReadOnly()).toBe(true);
       const service = new KnowledgeService({ repo: new MemoryKnowledgeRepository(), database: new DatabaseGateway([resource]) });
-      const connection = await service.createConnection(owner, { name: 'Native view', pluginId: 'database', scope: { resourceId: resource.id } });
+      await service.installPlugin(owner, 'database');
+      const connection = await service.createConnection(owner, { name: 'Native view', pluginId: 'database', readOnlyAcknowledged: true, scope: { resourceId: resource.id } });
       await service.confirmConnection(owner, connection.id);
       await service.sync(owner, connection.id);
       const template = await service.approveTemplate(owner, connection.id, { sql, params: ['status'] });

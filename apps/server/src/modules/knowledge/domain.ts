@@ -7,6 +7,7 @@ export interface Snapshot { connections: Connection[]; items: Item[]; chunks: Ch
 export interface Evidence { sourceId: string; version: string; start: number; end: number; locator: string; quote: string }
 export interface Recommendation {
   id: string; key: string; kind: 'employee' | 'tool' | 'sop' | 'object' | 'relation'; name: string; description: string;
+  origin?: 'manual' | 'inferred';
   relation?: { from: string; to: string; label: string };
   evidence: Evidence[]; humanLocked: boolean; deleted: boolean;
   proposedChange?: { name: string; description: string; evidence: Evidence[]; relation?: { from:string;to:string;label:string } };
@@ -21,10 +22,11 @@ export interface ParseJob {
   notBefore: number; leaseToken: string | null; leaseUntil: number; attempts: number; error: string | null;
 }
 export interface KnowledgeState {
+  spaceName: string; installedPlugins: string[];
   revision: number; source: Snapshot; connectionMeta: Record<string, ConnectionMeta>; confirmations: Record<string, Confirmation>;
   analyses: AnalysisRun[]; recommendations: Recommendation[]; uploads: Upload[]; disabledPlugins: string[]; parseJobs: ParseJob[]; queryTemplates: StoredQueryTemplate[];
 }
-export const emptyState = (): KnowledgeState => ({ revision: 0, source: { connections: [], items: [], chunks: [], citations: [], flagged: [] }, connectionMeta: {}, confirmations: {}, analyses: [], recommendations: [], uploads: [], disabledPlugins: [], parseJobs: [], queryTemplates: [] });
+export const emptyState = (): KnowledgeState => ({ spaceName: '企业知识', installedPlugins: ['local-file'], revision: 0, source: { connections: [], items: [], chunks: [], citations: [], flagged: [] }, connectionMeta: {}, confirmations: {}, analyses: [], recommendations: [], uploads: [], disabledPlugins: [], parseJobs: [], queryTemplates: [] });
 export const stamp = () => new Date().toISOString();
 export const id = () => randomUUID();
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -40,9 +42,14 @@ export function itemSignature(state: KnowledgeState, item: Item): string {
   return hash(JSON.stringify([item.version, item.contentHash, item.acl, conn?.scope, state.connectionMeta[item.connectionId]?.projectIds]));
 }
 /** Role never bypasses source ACL or project intersection. Repository enforces tenant isolation. */
+export function selectedItem(scope: Record<string, unknown>, externalId: string): boolean {
+  const selected = scope.selectedExternalIds;
+  return !Array.isArray(selected) || selected.some(id => typeof id === 'string' && (id === externalId || externalId.startsWith(`${id}/att/`)));
+}
+export function pluginInstalled(state: KnowledgeState, pluginId: string): boolean { return state.installedPlugins?.includes(pluginId) ?? true; }
 export function mayRead(state: KnowledgeState, ctx: UserContext, item: Item, confirmed = true): boolean {
   const conn = state.source.connections.find(c => c.id === item.connectionId), meta = state.connectionMeta[item.connectionId];
-  if (!conn || !meta || conn.status !== 'confirmed' || state.disabledPlugins.includes(conn.pluginId) || !item.current || item.status !== 'parsed' || !item.acl?.some(a => a.access === 'read' && a.principal === ctx.userId) || !meta.projectIds.every(p => ctx.projectScopes.includes(p))) return false;
+  if (!conn || !meta || !meta.audience.includes(ctx.userId) || conn.status !== 'confirmed' || !pluginInstalled(state, conn.pluginId) || !selectedItem(conn.scope, item.externalId) || state.disabledPlugins.includes(conn.pluginId) || !item.current || item.status !== 'parsed' || !item.acl?.some(a => a.access === 'read' && a.principal === ctx.userId) || !meta.projectIds.every(p => ctx.projectScopes.includes(p))) return false;
   return !confirmed || state.confirmations[item.id]?.signature === itemSignature(state, item);
 }
 export function signature(state: KnowledgeState, ctx: UserContext): string { return hash(JSON.stringify(state.source.items.filter(i => mayRead(state, ctx, i)).map(i => [i.id, itemSignature(state, i)]).sort())); }
@@ -76,6 +83,6 @@ export function mergeRecommendations(state: KnowledgeState, ctx: UserContext, pr
     const existing = state.recommendations.find(r => r.key === p.key && r.kind === p.kind);
     if (existing?.deleted) continue;
     if (existing?.humanLocked) { existing.proposedChange = { name: p.name, description: p.description, evidence: p.evidence, ...(p.relation?{relation:p.relation}:{}) }; continue; }
-    if (existing) Object.assign(existing, p); else state.recommendations.push({ ...p, id: id(), humanLocked: false, deleted: false });
+    if (existing) Object.assign(existing, p, { origin: 'inferred' }); else state.recommendations.push({ ...p, origin: 'inferred', id: id(), humanLocked: false, deleted: false });
   }
 }

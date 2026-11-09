@@ -21,6 +21,9 @@ param platformTenantId string = guid(resourceGroup().id, 'superagent-platform-te
 @description('Optional approved read-only database sources JSON. Credential references only; never passwords or connection strings.')
 param sourceDatabasesJson string = ''
 
+@description('Approved mailbox/SharePoint metadata scopes and audiences; never credentials.')
+param knowledgeSourcesJson string = ''
+
 @description('PostgreSQL admin group (Entra) object id and display name. Password auth is disabled.')
 param pgAdminGroupObjectId string
 param pgAdminGroupName string
@@ -270,6 +273,7 @@ var commonEnv = [
   { name: 'BLOB_URL', value: storage.properties.primaryEndpoints.blob }
   { name: 'DOC_INTEL_ENDPOINT', value: docIntel.properties.endpoint }
   { name: 'SOURCE_DATABASES_JSON', value: sourceDatabasesJson }
+  { name: 'KNOWLEDGE_SOURCES_JSON', value: knowledgeSourcesJson }
   { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
 ]
 

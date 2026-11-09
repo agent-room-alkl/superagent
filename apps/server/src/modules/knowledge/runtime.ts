@@ -5,15 +5,17 @@ import { AzureBinaryStore } from './binary.js';
 import { DocumentIntelligenceAdapter } from '../../plugins/document-intelligence.js';
 import { GatewayAnalysisModel, type AnalysisGateway } from '../analysis/gateway-model.js';
 import { configuredDatabases } from './database-config.js';
+import { managedSourcePlugins } from './sources.js';
 import { PgKnowledgeAudit } from './audit.js';
 /** All identity/endpoints/pools originate from the fail-closed platform bootstrap. */
 export function createKnowledgeDeps(runtime: Runtime & { llm?: AnalysisGateway }): KnowledgeDeps {
+  const sourceResources = runtime.config.sourceResources ?? [], plugins = managedSourcePlugins(sourceResources);
   const model = runtime.llm ? new GatewayAnalysisModel(runtime.llm) : undefined;
   const database = configuredDatabases(runtime.config.sourceDatabases ?? [], runtime.app.setupDeps.secrets);
-  if (runtime.config.mode === 'dev') return { repo: new MemoryKnowledgeRepository(), model, database: database.gateway, close: database.close, enqueue: async () => undefined };
+  if (runtime.config.mode === 'dev') return { repo: new MemoryKnowledgeRepository(), sourceResources, plugins, model, database: database.gateway, close: database.close, enqueue: async () => undefined };
   if (!runtime.pool || !runtime.config.blobUrl || !runtime.config.docIntelEndpoint) throw Error('Knowledge requires persistent runtime dependencies');
   return {
-    repo: new PgKnowledgeRepository(runtime.pool),
+    repo: new PgKnowledgeRepository(runtime.pool), sourceResources, plugins,
     audit: new PgKnowledgeAudit(runtime.pool),
     model,
     database: database.gateway, close: database.close,

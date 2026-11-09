@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { KnowledgeDeps } from './service.js';
 import { runParseJob } from './binary.js';
 import { runAnalysis } from '../analysis/service.js';
+import { sourceScope } from './sources.js';
 import { mayRead } from './domain.js';
 /** The persisted parseJobs/analyses ledger is the authoritative queue; no process-local launch is required. */
 export async function tickKnowledge(deps: KnowledgeDeps, tenantId: string): Promise<boolean> {
@@ -15,6 +16,7 @@ export async function tickKnowledge(deps: KnowledgeDeps, tenantId: string): Prom
     const denied = state.source.items.some(item => {
       if (!mayRead(state, run.actor, item)) return false;
       const conn = state.source.connections.find(c => c.id === item.connectionId)!;
+      if (conn.pluginId === 'email' || conn.pluginId === 'sharepoint') { try { sourceScope(deps.sourceResources ?? [], run.actor, conn.pluginId, conn.scope, state.connectionMeta[conn.id]!.audience); return false; } catch { return true; } }
       if (conn.pluginId !== 'database') return false;
       try { return !deps.database?.scope(run.actor, conn.scope); } catch { return true; }
     });

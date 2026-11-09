@@ -26,9 +26,13 @@
 .database-source-result dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs) var(--space-lg); margin: var(--space-md) 0; font-size: 12px; }
 .database-source-result dt { color: var(--color-subtle); }
 .database-source-result dd { margin: 0; overflow-wrap: anywhere; }
-.database-source-table-scroll { overflow: auto; max-height: 480px; margin-top: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); }
-.database-source table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.database-source-table-scroll { overflow: auto; max-width: 100%; min-width: 0; max-height: 480px; margin-top: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); }
+.database-source table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 .database-source th { position: sticky; top: 0; background: var(--color-well); color: var(--color-accent); font-weight: 500; }
 .database-source th, .database-source td { padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--color-soft-rule); min-width: 100px; max-width: 340px; overflow-wrap: anywhere; vertical-align: top; }
+.database-source th { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+.database-source-result { min-width: 0; max-width: 100%; }
+.database-source-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.database-source .database-source-check input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 16px; margin: 3px 0; }
 @media (max-width: 850px) { .database-source-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .database-source { padding: var(--space-md); } .database-source-result dl { grid-template-columns: 1fr; } }

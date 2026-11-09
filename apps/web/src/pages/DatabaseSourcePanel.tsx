@@ -8,16 +8,17 @@ interface DatabaseResource {
   tables: Record<string, { columns: string[]; sensitive?: string[] }>;
   maxRows: number;
 }
-interface DatabaseConnection { id: string; name: string; pluginId: string; status: string }
+interface DatabaseConnection { id: string; name: string; pluginId: string; status: string; scope?: { resourceId?: string } }
 interface QueryTemplate { id: string; sql: string; params: string[]; approvedBy: string }
 interface CurrentFact {
   kind: 'current_fact'; rows: Record<string, unknown>[]; rowCount: number;
-  queriedAt: string; scope: unknown; schemaVersion: string;
+  queriedAt: string; scope: unknown; schemaVersion: string; revision: string | null;
 }
 export interface DatabaseSourcePanelProps {
   resources: DatabaseResource[];
   connections: DatabaseConnection[];
   onRefresh: () => Promise<void>;
+  pluginEnabled?: boolean;
 }
 
 const ROOT = '/api/v1/knowledge';
@@ -42,9 +43,10 @@ function displayValue(value: unknown): string {
 }
 
 /** The server approves templates and runs read-only queries; this panel never executes raw editor SQL. */
-export function DatabaseSourcePanel({ resources, connections, onRefresh }: DatabaseSourcePanelProps) {
+export function DatabaseSourcePanel({ resources, connections, onRefresh, pluginEnabled = true }: DatabaseSourcePanelProps) {
   const [resourceId, setResourceId] = useState('');
   const [name, setName] = useState('');
+  const [readOnlyAcknowledged, setReadOnlyAcknowledged] = useState(false);
   const [connectionId, setConnectionId] = useState('');
   const [templates, setTemplates] = useState<QueryTemplate[]>([]);
   const [templateId, setTemplateId] = useState('');
@@ -61,7 +63,7 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
   const requestSequence = useRef(0);
   const mutationActive = useRef(false);
   const selectedResource = resources.find(resource => resource.id === resourceId) ?? resources[0];
-  const confirmed = connections.filter(connection => connection.pluginId === 'database' && connection.status === 'confirmed');
+  const confirmed = connections.filter(connection => pluginEnabled && resources.length > 0 && connection.pluginId === 'database' && connection.status === 'confirmed' && (!connection.scope?.resourceId || resources.some(resource => resource.id === connection.scope?.resourceId)));
   const selectedConnection = confirmed.find(connection => connection.id === connectionId) ?? confirmed[0];
   const selectedConnectionId = selectedConnection?.id ?? '';
   const selectedTemplate = templates.find(template => template.id === templateId);
@@ -84,11 +86,11 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
 
   async function createConnection(event: FormEvent) {
     event.preventDefault();
-    if (!selectedResource || mutationActive.current) return;
+    if (!selectedResource || !pluginEnabled || !readOnlyAcknowledged || mutationActive.current) return;
     mutationActive.current = true; setBusy('create'); setError(''); setNotice('');
     try {
-      await request('/connections', { name: name.trim(), pluginId: 'database', scope: { resourceId: selectedResource.id } });
-      setName(''); setNotice('数据库连接草案已创建，请在来源连接列表中核对并确认。');
+      await request('/connections', { name: name.trim(), pluginId: 'database', scope: { resourceId: selectedResource.id }, readOnlyAcknowledged: true });
+      setName(''); setReadOnlyAcknowledged(false); setNotice('数据库连接草案已创建，请在来源连接列表中核对并确认。');
       try { await onRefresh(); } catch (caught) { setError(`连接已创建，列表刷新失败：${message(caught)}`); }
     } catch (caught) { setError(message(caught)); }
     finally { mutationActive.current = false; setBusy(''); }
@@ -141,6 +143,20 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
     finally { mutationActive.current = false; setBusy(''); }
   }
 
+  async function checkFreshness() {
+    if (!fact || !selectedConnectionId || !selectedTemplate || mutationActive.current) return;
+    const sequence = requestSequence.current;
+    mutationActive.current = true; setBusy('freshness'); setError(''); setNotice('');
+    try {
+      const result = await request<{ fresh: boolean; reason?: string }>(`/connections/${encodeURIComponent(selectedConnectionId)}/fact-freshness?templateId=${encodeURIComponent(selectedTemplate.id)}&revision=${encodeURIComponent(fact.revision ?? '')}`);
+      if (sequence !== requestSequence.current) return;
+      if (result.fresh) setNotice('已核对来源数据，当前事实仍有效。');
+      else { setFact(null); setError('来源数据已变化或无法核实，结果已过期，请重新查询'); }
+    } catch (caught) {
+      if (sequence === requestSequence.current) { setFact(null); setError(`来源数据已变化或无法核实，结果已过期，请重新查询。${message(caught)}`); }
+    } finally { mutationActive.current = false; setBusy(''); }
+  }
+
   const rows = fact?.rows.slice(0, MAX_DISPLAY_ROWS) ?? [];
   const allColumns = [...new Set(rows.flatMap(row => Object.keys(row)))];
   const columns = allColumns.slice(0, MAX_DISPLAY_COLUMNS);
@@ -148,15 +164,17 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
   return <section className="panel database-source" aria-labelledby="database-source-heading">
     <header className="database-source-head"><div><span className="database-source-eyebrow">READ-ONLY DATA / 受控查询</span><h2 id="database-source-heading">只读数据库来源</h2></div><span className="database-source-tag">当前事实</span></header>
     <p className="helper">仅连接 DBA 已批准的独立只读账号与表／视图范围。模板批准与执行分开管理，查询结果附带时间与范围。</p>
+    <p className="helper">凭据由管理员通过托管身份或安全凭据引用配置。请勿在连接名称或 SQL 中填写原始密钥、密码、连接字符串或 DSN。</p>
     {error ? <p className="database-source-error" role="alert">{error}</p> : null}
     {notice ? <p className="database-source-notice" role="status">{notice}</p> : null}
-    {!resources.length ? <p className="database-source-empty">尚未配置 DBA 批准的数据库资源。请先配置独立只读数据库账号，以及允许访问的表、行过滤视图和列范围，再创建连接。</p> : <>
+    {!pluginEnabled ? <p className="database-source-empty">请先在来源插件目录安装并启用数据库插件，再配置只读来源。</p> : !resources.length ? <p className="database-source-empty">尚未配置 DBA 批准的数据库资源。请先配置独立只读数据库账号，以及允许访问的表、行过滤视图和列范围，再创建连接。</p> : <>
       <form className="database-source-form database-source-inset" onSubmit={createConnection}>
         <h3>创建受控连接</h3>
-        <label className="field"><span>DBA 批准的资源</span><select value={selectedResource?.id ?? ''} disabled={!!busy} onChange={event => setResourceId(event.target.value)}>{resources.map(resource => <option key={resource.id} value={resource.id}>{resource.name}</option>)}</select></label>
+        <label className="field"><span>DBA 批准的资源</span><select value={selectedResource?.id ?? ''} disabled={!!busy} onChange={event => { setResourceId(event.target.value); setReadOnlyAcknowledged(false); }}>{resources.map(resource => <option key={resource.id} value={resource.id}>{resource.name}</option>)}</select></label>
         {selectedResource ? <div className="database-source-scope"><p>每次查询最多 {selectedResource.maxRows} 行 · 资源 {selectedResource.id}</p><ul>{Object.entries(selectedResource.tables).map(([table, spec]) => <li key={table}><strong>{table}</strong><span>{spec.columns.join(', ') || '未配置可读列'}</span>{spec.sensitive?.length ? <small>敏感列由网关限制并脱敏：{spec.sensitive.join(', ')}</small> : null}</li>)}</ul></div> : null}
         <label className="field"><span>数据库连接名称</span><input required maxLength={160} value={name} onChange={event => setName(event.target.value)} placeholder="例如：运营只读视图" /></label>
-        <button className="btn" disabled={!!busy || !name.trim() || !selectedResource}>{busy === 'create' ? '创建中…' : '创建数据库连接草案'}</button>
+        <label className="database-source-check"><input type="checkbox" required checked={readOnlyAcknowledged} onChange={event => setReadOnlyAcknowledged(event.target.checked)} /><span>我已核对数据库范围，并确认使用独立只读账号接入</span></label>
+        <button className="btn" disabled={!!busy || !name.trim() || !selectedResource || !readOnlyAcknowledged}>{busy === 'create' ? '创建中…' : '创建数据库连接草案'}</button>
       </form>
     </>}
 
@@ -191,6 +209,7 @@ export function DatabaseSourcePanel({ resources, connections, onRefresh }: Datab
     {fact ? <section className="database-source-result" aria-label="数据库当前事实结果" aria-live="polite">
       <h3>当前事实 · 查询时点结果</h3><p className="helper">这些结果只描述当前查询事实，不作为企业制度或规则知识保存。</p>
       <dl><div><dt>查询时间</dt><dd>{fact.queriedAt}</dd></div><div><dt>查询范围</dt><dd>{displayValue(fact.scope)}</dd></div><div><dt>结构版本</dt><dd>{fact.schemaVersion}</dd></div><div><dt>返回行数</dt><dd>{fact.rowCount}</dd></div></dl>
+      <button className="btn" type="button" disabled={!!busy} onClick={() => void checkFreshness()}>{busy === 'freshness' ? '正在核对来源数据…' : '核对事实是否仍有效'}</button>
       {rows.length ? <><p className="helper">显示 {rows.length} 行、{columns.length} 列。{fact.rows.length > MAX_DISPLAY_ROWS || allColumns.length > MAX_DISPLAY_COLUMNS ? '结果较多，当前页面仅展示前 100 行、30 列；单元格最多显示 500 个字符。' : '单元格最多显示 500 个字符。'}</p><div className="database-source-table-scroll" tabIndex={0} aria-label="可横向滚动的查询结果"><table><thead><tr>{columns.map(column => <th key={column} scope="col">{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{columns.map(column => <td key={column}>{displayValue(row[column])}</td>)}</tr>)}</tbody></table></div></> : <p className="database-source-empty">本次查询没有返回记录。</p>}
     </section> : null}
   </section>;

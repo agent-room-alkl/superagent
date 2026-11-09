@@ -1,6 +1,6 @@
 import type { UserContext } from '@superagent/shared';
 import { Pool, type PoolClient } from 'pg';
-import { emptyState, itemSignature, positionedChunks, type Evidence, type KnowledgeState } from './domain.js';
+import { emptyState, itemSignature, positionedChunks, pluginInstalled, selectedItem, type Evidence, type KnowledgeState } from './domain.js';
 import { appendPgAudit, auditDiff, auditSnapshot } from './audit.js';
 import type { AuditEntry } from '../audit/audit.js';
 export interface SearchHit extends Evidence { title: string; score: number }
@@ -10,17 +10,17 @@ export interface KnowledgeRepository {
   search(ctx: UserContext, query: string, limit: number): Promise<SearchHit[]>;
 }
 interface IndexedChunk extends Evidence { title: string; principals: string[]; projectIds: string[] }
-const normalized = (value: KnowledgeState): KnowledgeState => ({ ...emptyState(), ...value });
+const normalized = (value: KnowledgeState): KnowledgeState => ({ ...emptyState(), ...value, installedPlugins: value.installedPlugins ?? [...new Set(['local-file', ...value.source.connections.map(c => c.pluginId)])] });
 export function indexableChunks(state: KnowledgeState): IndexedChunk[] {
   const result: IndexedChunk[] = [], seen = new Set<string>();
   for (const item of state.source.items) {
     const conn = state.source.connections.find(c => c.id === item.connectionId), meta = state.connectionMeta[item.connectionId];
-    if (!conn || !meta || conn.status !== 'confirmed' || state.disabledPlugins.includes(conn.pluginId) || !item.current || item.status !== 'parsed' || !item.acl || state.confirmations[item.id]?.signature !== itemSignature(state, item)) continue;
+    if (!conn || !meta || conn.status !== 'confirmed' || !pluginInstalled(state, conn.pluginId) || !selectedItem(conn.scope, item.externalId) || state.disabledPlugins.includes(conn.pluginId) || !item.current || item.status !== 'parsed' || !item.acl || state.confirmations[item.id]?.signature !== itemSignature(state, item)) continue;
     for (const chunk of positionedChunks(state, item)) for (let offset = 0; offset < chunk.text.length; offset += 1040) {
       const end = Math.min(offset + 1200, chunk.text.length);
       const key = JSON.stringify([item.id, item.version, chunk.start + offset, chunk.start + end, chunk.locator]);
       if (seen.has(key)) continue; seen.add(key);
-      result.push({ sourceId: item.id, version: item.version, start: chunk.start + offset, end: chunk.start + end, quote: chunk.text.slice(offset, end), locator: chunk.locator, title: item.title, principals: item.acl.filter(a => a.access === 'read').map(a => a.principal), projectIds: meta.projectIds });
+      result.push({ sourceId: item.id, version: item.version, start: chunk.start + offset, end: chunk.start + end, quote: chunk.text.slice(offset, end), locator: chunk.locator, title: item.title, principals: item.acl.filter(a => a.access === 'read' && meta.audience.includes(a.principal)).map(a => a.principal), projectIds: meta.projectIds });
     }
   }
   return result;

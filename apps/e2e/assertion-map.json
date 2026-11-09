@@ -606,65 +606,73 @@
    "id": "qa-enablement#1",
    "suite": "qa-enablement",
    "assertion": "New company begins without invented knowledge",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#1])"
   },
   {
    "id": "qa-enablement#2",
    "suite": "qa-enablement",
    "assertion": "Recommendations gated before knowledge confirmation",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#2])"
   },
   {
    "id": "qa-enablement#3",
    "suite": "qa-enablement",
    "assertion": "Manual role is distinguished from document inference",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#3])"
   },
   {
    "id": "qa-enablement#4",
    "suite": "qa-enablement",
    "assertion": "Actual local text file is read",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#4])"
   },
   {
    "id": "qa-enablement#5",
    "suite": "qa-enablement",
    "assertion": "Imported but unconfirmed knowledge cannot generate recommendations",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#5])"
   },
   {
    "id": "qa-enablement#6",
    "suite": "qa-enablement",
    "assertion": "Four roles follow distinct evidence-bearing responsibilities",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#6])"
   },
   {
    "id": "qa-enablement#7",
    "suite": "qa-enablement",
    "assertion": "Every inferred role cites a source line",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#7])"
   },
   {
    "id": "qa-enablement#8",
    "suite": "qa-enablement",
    "assertion": "Tools proposed alongside roles before business execution",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#8])"
   },
   {
    "id": "qa-enablement#9",
@@ -677,9 +685,10 @@
    "id": "qa-enablement#10",
    "suite": "qa-enablement",
    "assertion": "Reanalysis preserves human edits and presents differences",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#10])"
   },
   {
    "id": "qa-enablement#11",
@@ -989,9 +998,10 @@
    "id": "qa-enablement#50",
    "suite": "qa-enablement",
    "assertion": "Reanalysis preserves explicit role deletion instead of recreating it",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#50])"
   },
   {
    "id": "qa-enablement#51",
@@ -1525,65 +1535,73 @@
    "id": "qa-database-knowledge#1",
    "suite": "qa-database-knowledge",
    "assertion": "Documents and databases share enterprise knowledge entry",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#1])"
   },
   {
    "id": "qa-database-knowledge#2",
    "suite": "qa-database-knowledge",
    "assertion": "Data source requires explicit read-only policy acknowledgement",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#2])"
   },
   {
    "id": "qa-database-knowledge#3",
    "suite": "qa-database-knowledge",
    "assertion": "Connection string cannot be pasted into credential reference",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#3])"
   },
   {
    "id": "qa-database-knowledge#4",
    "suite": "qa-database-knowledge",
    "assertion": "Database source can start without any uploaded file",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#4])"
   },
   {
    "id": "qa-database-knowledge#5",
    "suite": "qa-database-knowledge",
    "assertion": "Unconfirmed database cannot feed recommendations",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#5])"
   },
   {
    "id": "qa-database-knowledge#6",
    "suite": "qa-database-knowledge",
    "assertion": "Confirming source forms logical enterprise knowledge space",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#6])"
   },
   {
    "id": "qa-database-knowledge#7",
    "suite": "qa-database-knowledge",
    "assertion": "Knowledge space can be named without copying database",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#7])"
   },
   {
    "id": "qa-database-knowledge#8",
    "suite": "qa-database-knowledge",
    "assertion": "Confirmed metadata can support role candidates",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#8])"
   },
   {
    "id": "qa-database-knowledge#9",
@@ -1597,17 +1615,19 @@
    "id": "qa-database-knowledge#10",
    "suite": "qa-database-knowledge",
    "assertion": "Schema does not become a published SOP",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#10])"
   },
   {
    "id": "qa-database-knowledge#11",
    "suite": "qa-database-knowledge",
    "assertion": "Database metadata recommends read-only query placeholder without inventing mail workflow",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#11])"
   },
   {
    "id": "qa-database-knowledge#12",
@@ -1677,25 +1697,28 @@
    "id": "qa-database-knowledge#20",
    "suite": "qa-database-knowledge",
    "assertion": "Row update expires fact result without changing metadata analysis",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#20])"
   },
   {
    "id": "qa-database-knowledge#21",
    "suite": "qa-database-knowledge",
    "assertion": "Next query reads new synthetic value",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#21])"
   },
   {
    "id": "qa-database-knowledge#22",
    "suite": "qa-database-knowledge",
    "assertion": "Data change does not silently rewrite schema rules or team",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#22])"
   },
   {
    "id": "qa-database-knowledge#23",
@@ -1709,41 +1732,46 @@
    "id": "qa-database-knowledge#24",
    "suite": "qa-database-knowledge",
    "assertion": "Reads and denials leave audit metadata",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#24])"
   },
   {
    "id": "qa-database-knowledge#25",
    "suite": "qa-database-knowledge",
    "assertion": "Unavailable source cannot be queried",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#25])"
   },
   {
    "id": "qa-database-knowledge#26",
    "suite": "qa-database-knowledge",
    "assertion": "Parameterized Lot lookup stays inside approved project",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#26])"
   },
   {
    "id": "qa-database-knowledge#27",
    "suite": "qa-database-knowledge",
    "assertion": "Database column names do not split words",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "table rendering of facts in the knowledge UI"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#27])"
   },
   {
    "id": "qa-database-knowledge#28",
    "suite": "qa-database-knowledge",
    "assertion": "Last fact column is reachable through local horizontal scroll",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "table rendering of facts in the knowledge UI"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#28])"
   },
   {
    "id": "qa-database-knowledge#29",
@@ -1757,17 +1785,19 @@
    "id": "qa-database-knowledge#30",
    "suite": "qa-database-knowledge",
    "assertion": "Database capability cannot be changed to write in UI",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#30])"
   },
   {
    "id": "qa-database-knowledge#31",
    "suite": "qa-database-knowledge",
    "assertion": "Saving write effect is refused even if DOM is manipulated",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#31])"
   },
   {
    "id": "qa-database-knowledge#32",
@@ -1781,33 +1811,37 @@
    "id": "qa-database-knowledge#33",
    "suite": "qa-database-knowledge",
    "assertion": "Personal project options stay inside source permission",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#33])"
   },
   {
    "id": "qa-database-knowledge#34",
    "suite": "qa-database-knowledge",
    "assertion": "Forged personal scope cannot expand source permission",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#34])"
   },
   {
    "id": "qa-database-knowledge#35",
    "suite": "qa-database-knowledge",
    "assertion": "Schema change withdraws source confirmation and invalidates old analysis",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#35])"
   },
   {
    "id": "qa-database-knowledge#36",
    "suite": "qa-database-knowledge",
    "assertion": "Metadata reanalysis preserves human role edits",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": ""
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#36])"
   },
   {
    "id": "qa-database-knowledge#37",
@@ -1863,25 +1897,28 @@
    "id": "qa-source-plugins#1",
    "suite": "qa-source-plugins",
    "assertion": "Four knowledge-source manifests visible",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#1])"
   },
   {
    "id": "qa-source-plugins#2",
    "suite": "qa-source-plugins",
    "assertion": "Local single-import built in, remote plugin not installed",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#2])"
   },
   {
    "id": "qa-source-plugins#3",
    "suite": "qa-source-plugins",
    "assertion": "Catalog install has no implied connection or source",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#3])"
   },
   {
    "id": "qa-source-plugins#4",
@@ -1903,17 +1940,19 @@
    "id": "qa-source-plugins#6",
    "suite": "qa-source-plugins",
    "assertion": "Import does not imply source confirmation",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#6])"
   },
   {
    "id": "qa-source-plugins#7",
    "suite": "qa-source-plugins",
    "assertion": "Mail plugin installation creates no connection or source",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#7])"
   },
   {
    "id": "qa-source-plugins#8",
@@ -1927,9 +1966,10 @@
    "id": "qa-source-plugins#9",
    "suite": "qa-source-plugins",
    "assertion": "Connection requires explicit read-only scope",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#9])"
   },
   {
    "id": "qa-source-plugins#10",
@@ -1943,9 +1983,10 @@
    "id": "qa-source-plugins#11",
    "suite": "qa-source-plugins",
    "assertion": "Preview shows mailbox folder and date scope",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#11])"
   },
   {
    "id": "qa-source-plugins#12",
@@ -1967,9 +2008,10 @@
    "id": "qa-source-plugins#14",
    "suite": "qa-source-plugins",
    "assertion": "Forged preview selection cannot bypass ACL",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#14])"
   },
   {
    "id": "qa-source-plugins#15",
@@ -1983,17 +2025,19 @@
    "id": "qa-source-plugins#16",
    "suite": "qa-source-plugins",
    "assertion": "Imported mail independently awaits confirmation with references and versions",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#16])"
   },
   {
    "id": "qa-source-plugins#17",
    "suite": "qa-source-plugins",
    "assertion": "Confirmed mixed knowledge creates evidence-based candidates",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#17])"
   },
   {
    "id": "qa-source-plugins#18",
@@ -2015,17 +2059,19 @@
    "id": "qa-source-plugins#20",
    "suite": "qa-source-plugins",
    "assertion": "Delta does not overwrite human role edit",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#20])"
   },
   {
    "id": "qa-source-plugins#21",
    "suite": "qa-source-plugins",
    "assertion": "Reanalysis preserves human edits",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#21])"
   },
   {
    "id": "qa-source-plugins#22",
@@ -2039,9 +2085,10 @@
    "id": "qa-source-plugins#23",
    "suite": "qa-source-plugins",
    "assertion": "Recovery requires source confirmation again",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#23])"
   },
   {
    "id": "qa-source-plugins#24",
@@ -2055,9 +2102,10 @@
    "id": "qa-source-plugins#25",
    "suite": "qa-source-plugins",
    "assertion": "Forged source confirmation cannot override revoked ACL",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#25])"
   },
   {
    "id": "qa-source-plugins#26",
@@ -2079,25 +2127,28 @@
    "id": "qa-source-plugins#28",
    "suite": "qa-source-plugins",
    "assertion": "Paused knowledge plugin blocks its source references",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#28])"
   },
   {
    "id": "qa-source-plugins#29",
    "suite": "qa-source-plugins",
    "assertion": "Database plugin leads to existing scoped read-only configuration",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#29])"
   },
   {
    "id": "qa-source-plugins#30",
    "suite": "qa-source-plugins",
    "assertion": "Installing knowledge plugins did not install employee business tools",
-   "status": "pending",
+   "status": "e2e",
    "owner": "T-40",
-   "note": "plugin catalogue / connection / confirmation UI and analysis"
+   "note": "Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic.",
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-source-plugins#30])"
   },
   {
    "id": "qa-source-plugins#31",

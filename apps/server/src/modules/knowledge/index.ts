@@ -7,6 +7,12 @@ export const knowledgeModule: FastifyPluginAsync<{ deps?: KnowledgeDeps }> = asy
   app.get('/status', async () => ({ module: 'knowledge', implemented: true, configured: !!service }));
   app.setErrorHandler((err, _req, reply) => { if (err instanceof KnowledgeError) return reply.code(err.statusCode).send({ error: err.code, message: err.message }); const code = (err as { statusCode?: number }).statusCode; return reply.code(code && code < 500 ? code : 500).send({ error: 'knowledge_request_failed', message: '请求未完成，请稍后重试。' }); });
   const body = (req: { body: unknown }) => { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new KnowledgeError('invalid_input', '请求结构无效。'); return req.body as Record<string, unknown>; };
+  app.put('/space', req => service!.renameSpace(req.user!, body(req)));
+  app.post('/manual-roles', (req, reply) => { reply.code(201); return service!.createManualRole(req.user!, body(req)); });
+  app.post<{ Params: { id: string } }>('/plugins/:id/install', req => service!.installPlugin(req.user!, req.params.id));
+  app.get<{ Params: { id: string } }>('/connections/:id/preview', req => service!.previewConnection(req.user!, req.params.id));
+  app.post<{ Params: { id: string } }>('/connections/:id/import', async (req, reply) => { const result = await service!.importSelection(req.user!, req.params.id, body(req)); return result.error ? reply.code(502).send({ error: 'source_sync_failed', message: result.error }) : result; });
+  app.get<{ Params: { id: string }; Querystring: { templateId?: string; revision?: string } }>('/connections/:id/fact-freshness', req => service!.factFreshness(req.user!, req.params.id, req.query.templateId ?? '', req.query.revision ?? ''));
   app.get('/overview', req => service!.overview(req.user!));
   app.post('/connections', (req, reply) => { reply.code(201); return service!.createConnection(req.user!, body(req)); });
   app.post<{ Params: { id: string } }>('/connections/:id/confirm', req => service!.confirmConnection(req.user!, req.params.id));

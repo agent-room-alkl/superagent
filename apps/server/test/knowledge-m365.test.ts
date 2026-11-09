@@ -8,6 +8,9 @@ import { syncConnection } from '../src/modules/knowledge/sync.js';
 import { createMailPlugin } from '../src/modules/knowledge/plugins/mail.js';
 import { createSharePointPlugin, inFolder, permissionsToAcl } from '../src/modules/knowledge/plugins/sharepoint.js';
 import { GRAPH } from '../src/modules/knowledge/plugins/graph.js';
+import { MemoryKnowledgeRepository } from '../src/modules/knowledge/repository.js';
+import { KnowledgeService } from '../src/modules/knowledge/service.js';
+import type { UserContext } from '@superagent/shared';
 
 type Handler = (url: URL, headers: Headers) => Response;
 
@@ -179,6 +182,10 @@ describe('SharePoint plugin (Graph drive delta)', () => {
     const plugin = createSharePointPlugin(deps(g));
     addConn('sp', 'm365-sharepoint', scope);
     await syncConnection(store, plugin, 'sp');
+    g.on(DRIVE_DELTA, {
+      value: [{ id: 'i1', name: 'approval.md', file: {}, cTag: 'c1', webUrl: 'https://sp.example/Policies/approval.md', parentReference: parent('/Policies') }],
+      '@odata.deltaLink': `${GRAPH}/drives/drv1/root/delta?token=t2`,
+    });
     g.on(/token=t1/, {
       value: [
         { id: 'i2', deleted: { state: 'deleted' } },
@@ -188,9 +195,96 @@ describe('SharePoint plugin (Graph drive delta)', () => {
     });
     g.on(/\/items\/i1\/permissions$/, { value: [{ roles: ['read'], grantedToV2: { user: { id: 'user-oid-1' } } }] });
     const r = await syncConnection(store, plugin, 'sp');
+    expect(r.fullRelist).toBe(true); // The deletion has no item kind, so reconcile possible folder descendants too.
     expect(r.skippedDuplicates).toBe(1); // same content hash
     expect(store.currentItem('sp', 'i2')!.status).toBe('deleted');
     expect(store.currentItem('sp', 'i1')!.acl!.map((e) => e.principal)).toEqual(['user-oid-1']);
+  });
+
+  it('withdraws moved-out selected files without exposing outside titles and requires confirmation after a same-version move back', async () => {
+    const g = graph(), plugin = createSharePointPlugin(deps(g));
+    const ctx: UserContext = { tenantId: 'sp-move-fixture', userId: 'user-oid-1', roles: ['owner'], projectScopes: [] };
+    const repo = new MemoryKnowledgeRepository();
+    const service = new KnowledgeService({ repo, plugins: { sharepoint: plugin }, sourceResources: [{ id: 'policies', name: 'Approved policies', pluginId: 'sharepoint', scope, audience: [ctx.userId], projectIds: [] }] });
+    g.on(/\/drives\/drv1\?\$select=/, { id: 'drv1', name: 'Approved library' });
+    await service.installPlugin(ctx, 'sharepoint');
+    const connection = await service.createConnection(ctx, { name: 'Policies', pluginId: 'sharepoint', readOnlyAcknowledged: true, scope: { resourceId: 'policies' } });
+    await service.confirmConnection(ctx, connection.id);
+    const initialPreview = await service.previewConnection(ctx, connection.id);
+    expect(initialPreview.items.map(item => item.title)).toEqual(['approval.md', 'travel.txt']);
+    expect(JSON.stringify(initialPreview)).not.toContain('other.txt');
+    const selected = initialPreview.items.find(item => item.title === 'approval.md')!;
+    await service.importSelection(ctx, connection.id, { ids: [selected.id] });
+    const original = (await repo.read(ctx)).source.items.find(item => item.externalId === 'i1')!;
+    await service.confirm(ctx, original.id, original.version);
+    expect((await service.search(ctx, 'Approve')).hits).toHaveLength(1);
+    await repo.transact(ctx, state => { state.source.citations.push([original.id, ['answer:moved-policy']]); });
+    const contentCalls = () => g.calls.filter(call => /\/items\/i1\/content$/.test(call.url)).length;
+    expect(contentCalls()).toBe(1);
+
+    const outside = { id: 'i1', name: 'OUTSIDE SECRET TITLE.md', file: {}, cTag: 'c1', webUrl: 'https://sp.example/Outside/SECRET', parentReference: parent('/Outside') };
+    g.on(DRIVE_DELTA, { value: [outside], '@odata.deltaLink': `${GRAPH}/drives/drv1/root/delta?token=t2` });
+    const withdrawal = await service.sync(ctx, connection.id);
+    expect(withdrawal).toMatchObject({ applied: 1, cursorAdvanced: true });
+    let state = await repo.read(ctx);
+    expect(state.source.items.find(item => item.id === original.id)).toMatchObject({ status: 'access_revoked' });
+    expect(state.source.chunks.filter(chunk => chunk.itemId === original.id)).toEqual([]);
+    expect(state.confirmations[original.id]).toBeUndefined();
+    expect(state.source.flagged).toContainEqual(['answer:moved-policy', expect.stringMatching(/access revoked/)]);
+    expect((await service.search(ctx, 'Approve')).hits).toEqual([]);
+    const outsidePreview = await service.previewConnection(ctx, connection.id);
+    expect(outsidePreview.items).toEqual([]);
+    expect(outsidePreview.blocked).toBe(1);
+    expect(JSON.stringify(outsidePreview)).not.toMatch(/OUTSIDE SECRET TITLE|https:\/\/sp\.example\/Outside\/SECRET/);
+    expect(contentCalls()).toBe(1);
+
+    g.on(DRIVE_DELTA, { value: [{ id: 'i1', name: 'approval.md', file: {}, cTag: 'c1', webUrl: original.locator, parentReference: parent('/Policies') }], '@odata.deltaLink': `${GRAPH}/drives/drv1/root/delta?token=t3` });
+    await service.sync(ctx, connection.id);
+    state = await repo.read(ctx);
+    const restored = state.source.items.find(item => item.current && item.externalId === 'i1')!;
+    expect(restored).toMatchObject({ status: 'parsed', version: 'c1' });
+    expect(contentCalls()).toBe(2);
+    expect(state.source.chunks.some(chunk => chunk.itemId === restored.id && chunk.text === 'Approve under 500')).toBe(true);
+    expect((await service.search(ctx, 'Approve')).hits).toEqual([]);
+    expect((await service.overview(ctx)).items[0]).toMatchObject({ confirmed: false });
+    await service.confirm(ctx, restored.id, restored.version);
+    expect((await service.search(ctx, 'Approve')).hits).toHaveLength(1);
+  });
+
+  it('reconciles a folder-only move delta once and withdraws omitted selected descendants from references and storage', async () => {
+    const g = graph(), plugin = createSharePointPlugin(deps(g));
+    const ctx: UserContext = { tenantId: 'sp-folder-move-fixture', userId: 'user-oid-1', roles: ['owner'], projectScopes: [] };
+    const repo = new MemoryKnowledgeRepository();
+    const service = new KnowledgeService({ repo, plugins: { sharepoint: plugin }, sourceResources: [{ id: 'policies', name: 'Approved policies', pluginId: 'sharepoint', scope, audience: [ctx.userId], projectIds: [] }] });
+    g.on(/\/drives\/drv1\?\$select=/, { id: 'drv1', name: 'Approved library' });
+    await service.installPlugin(ctx, 'sharepoint');
+    const connection = await service.createConnection(ctx, { name: 'Policies', pluginId: 'sharepoint', readOnlyAcknowledged: true, scope: { resourceId: 'policies' } });
+    await service.confirmConnection(ctx, connection.id);
+    const preview = await service.previewConnection(ctx, connection.id);
+    await service.importSelection(ctx, connection.id, { ids: [preview.items.find(item => item.title === 'approval.md')!.id] });
+    const item = (await repo.read(ctx)).source.items.find(item => item.externalId === 'i1')!;
+    await service.confirm(ctx, item.id, item.version);
+    await repo.transact(ctx, state => { state.source.citations.push([item.id, ['answer:folder-child']]); });
+    expect((await service.search(ctx, 'Approve')).hits).toHaveLength(1);
+
+    // The subsequent full snapshot still contains a folder: only a supplied incremental cursor triggers relisting.
+    g.on(DRIVE_DELTA, { value: [{ id: 'f-root', name: 'Policies', folder: {}, parentReference: parent('') }], '@odata.deltaLink': `${GRAPH}/drives/drv1/root/delta?token=t3` });
+    g.on(/token=t1/, { value: [{ id: 'moved-folder', name: 'OUTSIDE FOLDER TITLE', folder: {}, parentReference: parent('/Outside') }], '@odata.deltaLink': `${GRAPH}/drives/drv1/root/delta?token=t2` });
+    const beforeCalls = g.calls.length;
+    const result = await service.sync(ctx, connection.id);
+    expect(result).toMatchObject({ fullRelist: true, cursorAdvanced: true });
+    const deltaCalls = g.calls.slice(beforeCalls).filter(call => DRIVE_DELTA.test(call.url));
+    expect(deltaCalls).toHaveLength(2);
+    expect(deltaCalls[0]!.url).toContain('token=t1');
+    expect(deltaCalls[1]!.url).not.toContain('token=');
+    const state = await repo.read(ctx);
+    expect(state.source.items.find(source => source.id === item.id)).toMatchObject({ status: 'deleted', contentHash: '', confirmedVersion: null });
+    expect(state.source.chunks.filter(chunk => chunk.itemId === item.id)).toEqual([]);
+    expect(state.confirmations[item.id]).toBeUndefined();
+    expect(state.source.flagged).toContainEqual(['answer:folder-child', expect.stringMatching(/deleted/)]);
+    expect((await service.search(ctx, 'Approve')).hits).toEqual([]);
+    expect((await service.overview(ctx)).items).toEqual([]);
+    expect(state.source.connections[0]!.cursor).toContain('token=t3');
   });
 
   it('anonymous link → ACL unknown → unusable', () => {

@@ -25,6 +25,8 @@ jobs:
     env:
       RG: ${{ vars.AZURE_RESOURCE_GROUP }}
       ENV_NAME: ${{ inputs.environment }}
+      SOURCE_DATABASES_JSON: ${{ vars.SOURCE_DATABASES_JSON }}
+      KNOWLEDGE_SOURCES_JSON: ${{ vars.KNOWLEDGE_SOURCES_JSON }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,12 +36,24 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Prepare approved source metadata parameters
+        run: |
+          python3 - <<'PYTHON'
+          import json, os
+          parameters = {name: {"value": os.environ.get(env, "")} for name, env in [
+              ("sourceDatabasesJson", "SOURCE_DATABASES_JSON"),
+              ("knowledgeSourcesJson", "KNOWLEDGE_SOURCES_JSON"),
+          ]}
+          with open("source-parameters.json", "w") as output:
+              json.dump({"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#", "contentVersion": "1.0.0.0", "parameters": parameters}, output)
+          PYTHON
+
       - name: Ensure infrastructure (first pass creates the registry)
         id: infra
         run: |
           IMAGE_PLACEHOLDER="mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
           out=$(az deployment group create -g "$RG" -f infra/main.bicep \
-            -p env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" \
+            -p @source-parameters.json env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" \
                entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
                pgAdminGroupObjectId="${{ vars.PG_ADMIN_GROUP_ID }}" pgAdminGroupName="${{ vars.PG_ADMIN_GROUP_NAME }}" \
             --query properties.outputs -o json)
@@ -61,7 +75,7 @@ jobs:
         id: deploy
         run: |
           out=$(az deployment group create -g "$RG" -f infra/main.bicep \
-            -p env="$ENV_NAME" image="$IMAGE" \
+            -p @source-parameters.json env="$ENV_NAME" image="$IMAGE" \
                entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
                pgAdminGroupObjectId="${{ vars.PG_ADMIN_GROUP_ID }}" pgAdminGroupName="${{ vars.PG_ADMIN_GROUP_NAME }}" \
             --query properties.outputs -o json)
