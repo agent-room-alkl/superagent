@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 18 |
+| e2e | Covered by a Playwright test against the real app | 24 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 61 |
-| pending | Feature not built yet; the owner task will add the E2E | 178 |
+| pending | Feature not built yet; the owner task will add the E2E | 172 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-40 51, T-41 98, T-45 15, T-48 14
+Pending by owner: T-40 51, T-41 97, T-45 15, T-48 9
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -138,7 +138,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 32 | Completed personal binding shows summary instead of empty inputs | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts — UI E2E: T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions) |
 | 33 | Redeployment failure returns progress to deployment even after installation | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts — UI E2E: T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions) |
 | 34 | Tool availability does not bypass SOP confirmation | pending | T-41 — original-request resume and SOP gates live in the runtime |
-| 35 | Unimplemented tool nodes are explicitly blocked | pending | T-41 — original-request resume and SOP gates live in the runtime |
+| 35 | Unimplemented tool nodes are explicitly blocked | e2e | apps/e2e/tests/superagent.spec.ts |
 | 36 | Manual fallback requires explicit owner choice | pending | T-41 — original-request resume and SOP gates live in the runtime |
 | 37 | Paused original request does not auto-resume | pending | T-41 — original-request resume and SOP gates live in the runtime |
 | 38 | Same original request resumes without duplicate or fabricated execution | pending | T-41 — original-request resume and SOP gates live in the runtime |
@@ -217,20 +217,20 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 43 | Paused readback repeated/finished external write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
 | 44 | Async report erased SOP input | pending | T-41 |
 | 45 | Async report replaced or lost workflow draft | pending | T-41 |
-| 46 | Unvalidated draft can be published | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 47 | Baseline validation missing regression cases | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 48 | Valid draft cannot publish | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 49 | Validated confirmed draft not published | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 50 | Stale validation published | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 51 | Stale validation not explained | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 52 | Revalidated revision not published | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 53 | Publishing rewrote old instance | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 54 | Pack replaced draft without explicit confirmation | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 55 | Pack auto-confirmed rule/trigger | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 56 | Pack modified published workflow | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 57 | Unconfirmed package can publish | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 58 | Confirmed package cannot validate | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
-| 59 | Knowledge change has no impact/context | pending | T-48 — SOP draft/validate/publish UI (runtime side T-41) |
+| 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
+| 47 | Baseline validation missing regression cases | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
+| 49 | Validated confirmed draft not published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
+| 50 | Stale validation published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
+| 51 | Stale validation not explained | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 52 | Revalidated revision not published | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 53 | Publishing rewrote old instance | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
+| 54 | Pack replaced draft without explicit confirmation | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 55 | Pack auto-confirmed rule/trigger | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 56 | Pack modified published workflow | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 57 | Unconfirmed package can publish | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 58 | Confirmed package cannot validate | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 59 | Knowledge change has no impact/context | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
 | 60 | Summary not linked to room | pending | T-41 |
 | 61 | File origin outcome interactions broken | n/a |  — prototype opened from file://; product is served over HTTPS |
 

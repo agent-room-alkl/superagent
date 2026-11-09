@@ -79,6 +79,10 @@ export class ToolService {
     return card;
   }
 
+  list(): ToolCard[] {
+    return [...this.tools.values()];
+  }
+
   get(toolId: string): ToolCard {
     const t = this.tools.get(toolId);
     if (!t) throw new GateError(`tool ${toolId} not found`);

@@ -19,6 +19,13 @@ export const toolsModule: FastifyPluginAsync<{ service?: ToolService }> = async 
     const t = svc.createPlaceholder({ ...req.body, maintainer: req.user!.userId });
     return view(t.toolId);
   });
+  /** Compact list for pickers and SOP graph checks: current lifecycle stage and declared effect. */
+  app.get('/', async () =>
+    svc.list().map((t) => {
+      const p = svc.stage(t.toolId, t.consumers[0]);
+      return { toolId: t.toolId, name: t.name, state: t.state, effect: t.contract.effect, stage: p.done.length === 7 ? 'available' : p.current };
+    }),
+  );
   app.get<{ Params: { id: string } }>('/:id', async (req) => view(req.params.id));
   app.post<{ Params: { id: string } }>('/:id/confirm', async (req) => (svc.confirmContract(req.params.id), view(req.params.id)));
   app.post<{ Params: { id: string }; Body: { route: ToolRoute; artifact: string; developerOnline?: boolean } }>('/:id/acquire', async (req) => {
