@@ -7,9 +7,9 @@ export const test = base.extend<{ pageErrors: string[] }>({
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       page.on('console', (m) => {
-        // HTTP statuses the page renders itself (401/403 role checks, 503 "not configured") are expected states,
+        // HTTP statuses the page renders itself (400 validation, 401/403 role checks, 503 "not configured") are expected states,
         // not script errors; uncaught exceptions and other console errors still fail the test.
-        if (m.type() === 'error' && !/the server responded with a status of (401|403|503)\b/.test(m.text())) errors.push(m.text());
+        if (m.type() === 'error' && !/the server responded with a status of (400|401|403|503)\b/.test(m.text())) errors.push(m.text());
       });
       await use(errors);
       expect(errors, 'browser errors').toEqual([]);

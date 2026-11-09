@@ -51,7 +51,8 @@ export function createAuthenticate(cfg: AuthConfig): preHandlerHookHandler {
     try {
       ({ payload } = await jwtVerify(header.slice(7), jwks, {
         issuer: `https://login.microsoftonline.com/${cfg.tenantId}/v2.0`,
-        audience: cfg.clientId,
+        // v2 tokens for this API carry the client id; v1-style audiences use the api:// URI. Both name this app only.
+        audience: cfg.clientId ? [cfg.clientId, `api://${cfg.clientId}`] : undefined,
       }));
     } catch {
       return reply.code(401).send({ error: 'invalid_token' });

@@ -35,3 +35,5 @@ input, select { min-height: var(--control); border-radius: var(--radius-sm); bor
 .steps .mark { font-size: 12px; }
 .steps small { font-size: 11px; }
 @media (max-width: 600px) { .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.topbar .who { margin-left: auto; display: flex; align-items: center; gap: var(--space-sm); font-size: 14px; }

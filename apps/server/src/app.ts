@@ -31,6 +31,13 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   });
 
   app.get('/healthz', async () => ({ ok: true }));
+
+  // Public sign-in configuration for the browser (no secrets: tenant and client ids are not credentials).
+  app.get('/auth/config', async () =>
+    authCfgForBrowser.mode === 'entra'
+      ? { mode: 'entra', tenantId: authCfgForBrowser.tenantId, clientId: authCfgForBrowser.clientId, scopes: [`api://${authCfgForBrowser.clientId}/access_as_user`] }
+      : { mode: 'dev' },
+  );
   app.get('/readyz', async (_req, reply) => {
     const results = await Promise.all(
       (opts.readiness ?? []).map(async (c) => ({ name: c.name, ok: await c.check().catch(() => false) })),
@@ -44,6 +51,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   if (production && (!opts.auth || opts.auth.mode === 'dev')) throw new Error('production requires explicit Entra auth (use createRuntime in bootstrap.ts)');
   if (production && !opts.setupDeps) throw new Error('production requires persistent Setup dependencies (use createRuntime in bootstrap.ts)');
   const auth = opts.auth ?? { mode: 'dev' as const, platformTenantId: 'default' };
+  const authCfgForBrowser = auth;
   const authenticate = createAuthenticate(auth);
 
   await app.register(async (api) => {

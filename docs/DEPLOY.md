@@ -33,8 +33,16 @@ Production hardening (both optional parameters):
 
 1. **Resource group**: `az group create -n rg-superagent-staging -l australiaeast`
    Check that every service above (and your chosen model) is available in the region first.
-2. **Entra app registration (API)**: create an app registration for the workbench, expose an API, add app roles
-   `admin`, `owner`, `employee`, `reviewer`, assign users/groups. Note the tenant id and client id.
+2. **Entra app registration (workbench + API, one registration)**: note the tenant id and client id.
+   - **Expose an API**: Application ID URI `api://<client-id>`, add the scope `access_as_user` (admins and users can consent).
+   - **App roles**: add `admin`, `owner`, `employee` and `reviewer`, then assign users or groups to them.
+   - **Authentication → Single-page application**: add the redirect URI `https://<web app FQDN>` (and
+     `http://localhost:5173` for local work against a dev tenant). No client secret is created: the browser uses
+     authorization code + PKCE.
+   - **Manifest**: set `"accessTokenAcceptedVersion": 2`. The server validates the issuer
+     `https://login.microsoftonline.com/<tenant>/v2.0` and the audience (`<client-id>` or `api://<client-id>`).
+   - The browser reads `/auth/config` (tenant id, client id, scope; no secrets), signs in with MSAL using session storage
+     only, and sends `Authorization: Bearer <token>` on every API call.
 3. **PostgreSQL admin group**: create an Entra group for database administrators; note its object id and name.
 4. **GitHub OIDC**: create a federated credential on a deployment identity for this repository and environment, grant it
    Contributor + User Access Administrator on the resource group, and set repository variables:

@@ -27,16 +27,13 @@ async function tx<T>(pool: pg.Pool, fn: (c: pg.PoolClient) => Promise<T>): Promi
 export class PgBudgetStore implements BudgetStore {
   constructor(private pool: pg.Pool) {}
 
-  /** Opens the month from llm_config.monthly_cap_micro_usd on first use; null when no cap is configured. */
-  async capFor(tenantId: string, month: string): Promise<number | null> {
+  /** Opens the month, or re-caps it when Setup's cap changed (lowering below spent+reserved blocks new calls). */
+  async openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void> {
     await this.pool.query(
-      `INSERT INTO llm_budget (tenant_id, month, cap_micro_usd)
-       SELECT tenant_id, $2, monthly_cap_micro_usd FROM llm_config WHERE tenant_id = $1 AND monthly_cap_micro_usd IS NOT NULL
-       ON CONFLICT (tenant_id, month) DO NOTHING`,
-      [tenantId, month],
+      `INSERT INTO llm_budget (tenant_id, month, cap_micro_usd) VALUES ($1, $2, $3)
+       ON CONFLICT (tenant_id, month) DO UPDATE SET cap_micro_usd = EXCLUDED.cap_micro_usd`,
+      [tenantId, month, capMicroUsd],
     );
-    const r = await this.pool.query('SELECT cap_micro_usd FROM llm_budget WHERE tenant_id = $1 AND month = $2', [tenantId, month]);
-    return r.rows[0] ? Number(r.rows[0].cap_micro_usd) : null;
   }
 
   async reserve(tenantId: string, month: string, amount: number, meta?: ReservationMeta): Promise<string | null> {
