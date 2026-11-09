@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 24 |
+| e2e | Covered by a Playwright test against the real app | 33 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 61 |
-| pending | Feature not built yet; the owner task will add the E2E | 172 |
+| pending | Feature not built yet; the owner task will add the E2E | 163 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-40 51, T-41 97, T-45 15, T-48 9
+Pending by owner: T-40 51, T-41 97, T-45 15
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -218,19 +218,19 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 44 | Async report erased SOP input | pending | T-41 |
 | 45 | Async report replaced or lost workflow draft | pending | T-41 |
 | 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 47 | Baseline validation missing regression cases | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 47 | Baseline validation missing regression cases | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
 | 49 | Validated confirmed draft not published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
 | 50 | Stale validation published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 51 | Stale validation not explained | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 52 | Revalidated revision not published | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 51 | Stale validation not explained | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 52 | Revalidated revision not published | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 53 | Publishing rewrote old instance | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 54 | Pack replaced draft without explicit confirmation | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 55 | Pack auto-confirmed rule/trigger | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 56 | Pack modified published workflow | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 57 | Unconfirmed package can publish | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 58 | Confirmed package cannot validate | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
-| 59 | Knowledge change has no impact/context | pending | T-48 — runtime regression cases / SOP packs / knowledge-change impact need the T-41 runtime |
+| 54 | Pack replaced draft without explicit confirmation | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 55 | Pack auto-confirmed rule/trigger | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 56 | Pack modified published workflow | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 57 | Unconfirmed package can publish | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 58 | Confirmed package cannot validate | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 59 | Knowledge change has no impact/context | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 60 | Summary not linked to room | pending | T-41 |
 | 61 | File origin outcome interactions broken | n/a |  — prototype opened from file://; product is served over HTTPS |
 
