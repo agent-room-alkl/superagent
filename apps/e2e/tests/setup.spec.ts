@@ -63,3 +63,18 @@ test('an employee cannot read or change Setup (server-side role check)', async (
   await ctx.dispose();
   await anon.dispose();
 });
+
+test('the owner sets a monthly budget cap in Setup; invalid amounts are refused', async ({ page }) => {
+  await page.goto('/#settings');
+  await expect(page.locator('main')).toContainText('当前上限：未设置（模型调用会被拒绝）');
+  const cap = page.getByLabel('新的上限（美元，最多两位小数）');
+  await cap.fill('12.345');
+  await page.getByRole('button', { name: '保存上限' }).click();
+  await expect(page.locator('main')).toContainText('未保存：');
+  await cap.fill('200');
+  await page.getByRole('button', { name: '保存上限' }).click();
+  await expect(page.locator('main')).toContainText('已保存，立即对本月生效');
+  await expect(page.locator('main')).toContainText('当前上限：US$200.00 / 月');
+  await page.reload();
+  await expect(page.locator('main')).toContainText('当前上限：US$200.00 / 月');
+});

@@ -17,6 +17,8 @@ export interface LlmConfigRecord {
   primaryModel: string | null;
   economyModel: string | null;
   status: 'unconfigured' | 'configured' | 'revoked' | 'key_invalid';
+  /** Hard monthly model budget in micro-USD; null = not set (model calls are refused with budget_not_set). */
+  monthlyCapMicroUsd: number | null;
   history: { at: string; event: string; detail: Record<string, unknown> }[];
 }
 
@@ -157,6 +159,21 @@ export async function revokeKey(tenantId: string, deps: SetupDeps): Promise<LlmC
   return next;
 }
 
+/** Upper limit for a monthly cap: 1,000,000 USD. */
+export const MAX_MONTHLY_CAP_MICRO_USD = 1_000_000 * 1_000_000;
+
+/** Sets the hard monthly budget (PRD §3.1). Takes effect for the current month immediately; lowering it below
+ * what is already spent or reserved simply blocks further calls. */
+export async function setMonthlyCap(tenantId: string, capMicroUsd: number, actor: string, deps: Pick<SetupDeps, 'repo' | 'now'>): Promise<LlmConfigRecord> {
+  if (!Number.isSafeInteger(capMicroUsd) || capMicroUsd <= 0 || capMicroUsd > MAX_MONTHLY_CAP_MICRO_USD) throw new Error('cap must be a positive amount up to 1,000,000 USD');
+  const rec = await deps.repo.get(tenantId);
+  const now = (deps.now ?? (() => new Date()))();
+  const next: LlmConfigRecord = { ...rec, monthlyCapMicroUsd: capMicroUsd, history: [...rec.history] };
+  stamp(next, 'budget_cap_set', { from: rec.monthlyCapMicroUsd, to: capMicroUsd, actor }, now);
+  await deps.repo.save(next);
+  return next;
+}
+
 /** Public view: never includes the key or secret reference. */
 export function publicView(rec: LlmConfigRecord) {
   return {
@@ -165,6 +182,7 @@ export function publicView(rec: LlmConfigRecord) {
     keyLast4: rec.keyLast4,
     primaryModel: rec.primaryModel,
     economyModel: rec.economyModel,
+    monthlyCapMicroUsd: rec.monthlyCapMicroUsd,
     reminder: rec.history.some((h) => h.event === 'key_rotated' || h.event === 'key_revoked')
       ? 'Disabling a version here does not revoke the old key at the provider. Revoke it in the provider console.'
       : null,
@@ -184,6 +202,7 @@ export class InMemoryConfigRepo implements ConfigRepo {
         primaryModel: null,
         economyModel: null,
         status: 'unconfigured',
+        monthlyCapMicroUsd: null,
         history: [],
       },
     );

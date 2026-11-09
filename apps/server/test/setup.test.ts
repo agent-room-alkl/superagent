@@ -112,6 +112,24 @@ describe('Setup routes', () => {
   });
 });
 
+describe('Setup: monthly budget cap', () => {
+  it('owner sets the cap in USD; invalid amounts are refused; the change is recorded in history', async () => {
+    const d = deps(fakeAnthropic());
+    const app = Fastify();
+    await app.register(setupModule, { prefix: '/api/v1/setup', deps: d });
+    const put = (v: unknown) => app.inject({ method: 'PUT', url: '/api/v1/setup/llm/budget', payload: { monthlyCapUsd: v } });
+    for (const bad of [0, -1, 1.234, 'abc', 2_000_000, null]) expect((await put(bad)).statusCode).toBe(400);
+    expect((await app.inject({ url: '/api/v1/setup/llm' })).json().monthlyCapMicroUsd).toBeNull();
+    const ok = await put(25.5);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().monthlyCapMicroUsd).toBe(25_500_000);
+    const rec = await d.repo.get('default');
+    expect(rec.history.at(-1)).toMatchObject({ event: 'budget_cap_set', detail: { from: null, to: 25_500_000 } });
+    expect((await put(10)).json().monthlyCapMicroUsd).toBe(10_000_000);
+    expect((await d.repo.get('default')).history.at(-1)!.detail).toMatchObject({ from: 25_500_000, to: 10_000_000 });
+  });
+});
+
 describe('Budget: bounded reservation keeps the cap hard under concurrency', () => {
   const price: Price = { inputPerMTokMicroUsd: 3_000_000, outputPerMTokMicroUsd: 15_000_000, fullyBoundable: true };
 

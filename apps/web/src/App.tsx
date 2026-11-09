@@ -3,6 +3,7 @@ import { SetupPage } from './pages/SetupPage';
 import { Placeholder } from './pages/Placeholder';
 import { ToolsPage } from './pages/ToolsPage';
 import { KnowledgePage } from './pages/KnowledgePage';
+import { signOut, type SignedIn } from './auth';
 
 type NavItem = { id: string; label: string; owner: string };
 
@@ -43,7 +44,7 @@ function useHashPage(): string {
   return page;
 }
 
-export function App() {
+export function App({ user = { mode: 'dev' } }: { user?: SignedIn }) {
   const page = useHashPage();
   const current = NAV.flatMap((g) => g.items).find((i) => i.id === page) ?? NAV[0]!.items[0]!;
   return (
@@ -51,6 +52,12 @@ export function App() {
       <header className="topbar">
         <span className="brand">INNOPRO</span>
         <span className="product">Super Agent</span>
+        {user.mode === 'entra' ? (
+          <span className="who">
+            <span title={user.username}>{user.name ?? user.username}</span>
+            <button className="btn" type="button" onClick={() => void signOut()}>退出</button>
+          </span>
+        ) : null}
       </header>
       <div className="app">
         <nav className="sidebar" aria-label="主菜单">
