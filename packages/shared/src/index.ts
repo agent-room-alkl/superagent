@@ -162,3 +162,4 @@ export type ActionStatus = 'not_submitted' | 'executing' | 'confirmed' | 'failed
 // ---------- Runtime roles (PRD §5.1) ----------
 export const APP_ROLES = ['web', 'worker', 'browser'] as const;
 export type AppRole = (typeof APP_ROLES)[number];
+export * from './sop-graph.js';
