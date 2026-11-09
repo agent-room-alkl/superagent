@@ -9,7 +9,10 @@ if (!APP_ROLES.includes(role)) {
 }
 
 if (role === 'web') {
-  const app = await buildApp({ serveWeb: true, logger: true });
+  const { createRuntime } = await import('./bootstrap.js');
+  const runtime = await createRuntime(process.env); // throws BootstrapError naming missing settings → container exits
+  const app = await buildApp({ ...runtime.app, serveWeb: true, logger: true });
+  app.addHook('onClose', () => runtime.close());
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });
 } else if (role === 'worker') {

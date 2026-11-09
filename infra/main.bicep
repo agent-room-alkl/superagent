@@ -15,6 +15,9 @@ param image string
 param entraTenantId string
 param entraClientId string
 
+@description('Platform tenant id (uuid) used for all rows of this single-tenant deployment. Stable per resource group.')
+param platformTenantId string = guid(resourceGroup().id, 'superagent-platform-tenant')
+
 @description('PostgreSQL admin group (Entra) object id and display name. Password auth is disabled.')
 param pgAdminGroupObjectId string
 param pgAdminGroupName string
@@ -247,6 +250,7 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 var commonEnv = [
   { name: 'NODE_ENV', value: 'production' }
   { name: 'AUTH_MODE', value: 'entra' }
+  { name: 'PLATFORM_TENANT_ID', value: platformTenantId }
   { name: 'ENTRA_TENANT_ID', value: entraTenantId }
   { name: 'ENTRA_CLIENT_ID', value: entraClientId }
   { name: 'AZURE_CLIENT_ID', value: appIdentity.properties.clientId }
