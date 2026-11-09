@@ -91,7 +91,7 @@ async function devRuntime(auth: AuthConfig): Promise<Runtime> {
   return {
     pool: null,
     // Dev: calls are refused (budget_not_set / price_unknown) until a cap is set in Setup and a priced model exists.
-    llm: createLlmGateway({ repo, secrets, budget: new InMemoryBudgetStore(), prices: new StaticPriceBook({}) }),
+    llm: createLlmGateway({ repo, secrets, budget: new InMemoryBudgetStore({ capOf: async (t) => (await repo.get(t)).monthlyCapMicroUsd }), prices: new StaticPriceBook({}) }),
     config: { mode: 'dev', platformTenantId: auth.platformTenantId, blobUrl: null, docIntelEndpoint: null },
     app: { auth, setupDeps: { repo, secrets, allowlist: new StaticAllowlist({}) }, readiness: [] },
     close: async () => undefined,

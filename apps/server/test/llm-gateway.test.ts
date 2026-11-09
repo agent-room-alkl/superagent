@@ -4,7 +4,7 @@ import type { ChatRequest, LlmProvider } from '@superagent/shared';
 import { createLlmGateway, inputTokenUpperBound, LlmCallFailed, LlmUnavailable, StaticPriceBook, type PricedModel } from '../src/modules/setup/llm-gateway.js';
 import { InMemoryBudgetStore, SettlementRefused } from '../src/modules/setup/budget.js';
 import { InMemorySecretStore } from '../src/modules/setup/secrets.js';
-import { InMemoryConfigRepo } from '../src/modules/setup/service.js';
+import { InMemoryConfigRepo, setMonthlyCap } from '../src/modules/setup/service.js';
 import { ProviderHttpError } from '../src/modules/setup/providers.js';
 import { PgBudgetStore, PgPriceBook } from '../src/modules/setup/pg-budget.js';
 import { migrate } from '../src/migrate.js';
@@ -50,7 +50,7 @@ const req = { messages: [{ role: 'user' as const, content: 'Summarise the approv
 beforeEach(() => {
   repo = new InMemoryConfigRepo();
   secrets = new InMemorySecretStore();
-  budget = new InMemoryBudgetStore();
+  budget = new InMemoryBudgetStore({ capOf: async (t) => (await repo.get(t)).monthlyCapMicroUsd });
   calls = [];
   behave = async () => ({ inputTokens: 20, outputTokens: 300 });
 });
@@ -193,6 +193,36 @@ describe('budgeted LLM gateway: reservation, settlement, release, freeze', () =>
     for (const ms of [0, -1, 1.5, 700_000]) expect(() => createLlmGateway({ repo, secrets, budget, prices: new StaticPriceBook({}), timeoutMs: ms })).toThrow(/timeoutMs/);
   });
 
+  it('T-54: a request holding an old Setup snapshot cannot raise a cap that was lowered meanwhile', async () => {
+    // A reads Setup (cap 1,000,000) and is paused while resolving the price; the admin lowers the cap to 10;
+    // B starts afterwards. Neither may reserve: the store checks the cap current at reservation time.
+    let release!: () => void;
+    const gate = new Promise<void>((ok) => (release = ok));
+    const slowBook = { price: async (p: string, m: string) => (await gate, defaults()[`${p}/${m}` as 'anthropic/model-big'] ?? null), markUnbounded: async () => undefined };
+    const a = createLlmGateway({ repo, secrets, budget, prices: slowBook, providerFactory: (cfg) => fakeProvider(cfg.apiKey), now });
+    const pendingA = code(a.chat(T, 'primary', req));
+    await new Promise((ok) => setTimeout(ok, 5)); // A has read the 1,000,000 snapshot
+    await setMonthlyCap(T, 10, 'admin', { repo });
+    expect(await code(gw().chat(T, 'primary', req))).toBe('budget_exhausted'); // B
+    release();
+    expect(await pendingA).toBe('budget_exhausted'); // A, despite its old snapshot
+    expect(calls).toEqual([]);
+    expect(budget.snapshot(T, '2026-11')).toMatchObject({ cap: 10, reserved: 0, spent: 0 });
+  });
+
+  it('removing the cap after a request read Setup still refuses with budget_not_set', async () => {
+    const r0 = await repo.get(T);
+    let release!: () => void;
+    const gate = new Promise<void>((ok) => (release = ok));
+    const slowBook = { price: async (p: string, m: string) => (await gate, defaults()[`${p}/${m}` as 'anthropic/model-big'] ?? null), markUnbounded: async () => undefined };
+    const pending = code(createLlmGateway({ repo, secrets, budget, prices: slowBook, providerFactory: (cfg) => fakeProvider(cfg.apiKey), now }).chat(T, 'primary', req));
+    await new Promise((ok) => setTimeout(ok, 5));
+    await repo.save({ ...r0, monthlyCapMicroUsd: null });
+    release();
+    expect(await pending).toBe('budget_not_set');
+    expect(calls).toEqual([]);
+  });
+
   it('rejects requests without a positive maxOutputTokens', async () => {
     await expect(gw().chat(T, 'primary', { ...req, maxOutputTokens: 0 })).rejects.toThrow(/maxOutputTokens/);
   });
@@ -209,9 +239,12 @@ const url = process.env.DATABASE_URL;
     await pool.query('DELETE FROM llm_budget WHERE tenant_id = $1', [tenant]);
     await pool.query('DELETE FROM llm_config WHERE tenant_id = $1', [tenant]);
     const store = new PgBudgetStore(pool);
-    await store.openMonth(tenant, '2026-11', 500_000);
-    await store.openMonth(tenant, '2026-11', 1_000_000); // re-cap follows Setup
-    expect((await pool.query('SELECT cap_micro_usd::int c FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0].c).toBe(1_000_000);
+    expect('openMonth' in store).toBe(false); // no API writes a caller-supplied (possibly stale) cap
+    expect(await store.reserve(tenant, '2026-11', 56)).toBeNull(); // no cap in Setup yet
+    await pool.query("INSERT INTO llm_config (tenant_id, status, monthly_cap_micro_usd) VALUES ($1, 'configured', 1000000)", [tenant]);
+    const probe = await store.reserve(tenant, '2026-11', 56);
+    expect(probe).not.toBeNull();
+    await store.release(probe!);
     await expect(store.reserve(tenant, '2026-11', -56)).rejects.toThrow(/invalid reservation/);
 
     const ids = await Promise.all(Array.from({ length: 30 }, () => store.reserve(tenant, '2026-11', 60_000, { provider: 'anthropic', model: 'm' })));
@@ -238,6 +271,31 @@ const url = process.env.DATABASE_URL;
     expect(by[granted[2]!]).toMatchObject({ status: 'frozen_unknown', cost: 70_000 });
     const after = (await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0];
     expect(after).toEqual({ r: 14 * 60_000, s: 60_000 }); // granted[2] and granted[3] frozen: still held
+  });
+
+  it('T-54: lowering the cap waits for an in-flight reservation, then no reservation can exceed the new cap', async () => {
+    const t2 = '00000000-0000-0000-0000-0000000000b2';
+    await pool.query('DELETE FROM llm_budget WHERE tenant_id = $1', [t2]);
+    await pool.query('DELETE FROM llm_config WHERE tenant_id = $1', [t2]);
+    await pool.query("INSERT INTO llm_config (tenant_id, status, monthly_cap_micro_usd) VALUES ($1, 'configured', 1000000)", [t2]);
+    const store = new PgBudgetStore(pool);
+
+    // an in-flight reservation holds the share lock on the config row
+    const c1 = await pool.connect();
+    await c1.query('BEGIN');
+    await c1.query('SELECT monthly_cap_micro_usd FROM llm_config WHERE tenant_id = $1 FOR SHARE', [t2]);
+    let lowered = false;
+    const lower = pool.query('UPDATE llm_config SET monthly_cap_micro_usd = 10 WHERE tenant_id = $1', [t2]).then(() => (lowered = true));
+    await new Promise((ok) => setTimeout(ok, 200));
+    expect(lowered).toBe(false); // the cap change waits for the reservation's transaction
+    await c1.query('COMMIT');
+    c1.release();
+    await lower;
+
+    const results = await Promise.all(Array.from({ length: 20 }, () => store.reserve(t2, '2026-11', 56, { provider: 'anthropic', model: 'm' })));
+    expect(results.filter(Boolean)).toEqual([]); // cap 10 < 56: nothing granted, by anyone
+    const row = (await pool.query('SELECT cap_micro_usd::int c, reserved_micro_usd::int r FROM llm_budget WHERE tenant_id = $1', [t2])).rows[0];
+    expect(row).toEqual({ c: 10, r: 0 }); // the ledger cap follows Setup and was never rewritten upward
   });
 
   it('price book returns valid verified records only; a bound violation suspends the record', async () => {

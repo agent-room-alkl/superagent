@@ -121,9 +121,13 @@ export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
       const reserved = maxBillableMicroUsd(inputTokenUpperBound(req, price.overheadTokens), req.maxOutputTokens, price);
       const month = (deps.now?.() ?? new Date()).toISOString().slice(0, 7);
       if (rec.monthlyCapMicroUsd == null) throw new LlmUnavailable('budget_not_set', 'no monthly model budget is set in Setup');
-      await deps.budget.openMonth(tenantId, month, rec.monthlyCapMicroUsd);
+      // The store checks against the cap current at reservation time, not the snapshot read above.
       const r = await deps.budget.reserve(tenantId, month, reserved, { provider: rec.provider!, model, taskId: req.taskId });
-      if (!r) throw new LlmUnavailable('budget_exhausted', 'the monthly model budget would be exceeded');
+      if (!r) {
+        const now = await deps.repo.get(tenantId);
+        if (now.monthlyCapMicroUsd == null) throw new LlmUnavailable('budget_not_set', 'no monthly model budget is set in Setup');
+        throw new LlmUnavailable('budget_exhausted', 'the monthly model budget would be exceeded');
+      }
 
       let res: ChatResponse;
       let timer: ReturnType<typeof setTimeout> | undefined;
