@@ -26,7 +26,7 @@ test('page heading and subtitle share one row and are vertically centred (qa-roo
 
 test('no horizontal page scroll at phone width', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'phone-width rule');
-  for (const hash of ['room', 'settings', 'tools']) {
+  for (const hash of ['room', 'settings', 'tools', 'knowledge', 'brain']) {
     await page.goto(`/#${hash}`);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, `#${hash}`).toBeLessThanOrEqual(0);
