@@ -339,12 +339,15 @@ describe.skipIf(!process.env.DATABASE_URL)('native PostgreSQL source integration
     const databaseName = `knowledge_dbtest_${suffix}`, roleName = `knowledge_read_${suffix}`;
     const password = randomUUID();
     const admin = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    const idleErrors:string[]=[];
+    const watch=(pool:Pool)=>pool.on('error',error=>{idleErrors.push(String((error as {code?:string}).code??'unknown'));}); watch(admin);
     let isolated: Pool | undefined, readOnly: Pool | undefined, createdRole = false, createdDatabase = false;
     try {
       await admin.query(`CREATE ROLE ${roleName} LOGIN PASSWORD '${password}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`); createdRole = true;
       await admin.query(`CREATE DATABASE ${databaseName}`); createdDatabase = true;
       const isolatedUrl = new URL(process.env.DATABASE_URL!); isolatedUrl.pathname = `/${databaseName}`;
       isolated = new Pool({ connectionString: isolatedUrl.href, max: 1 });
+      watch(isolated);
       await isolated.query('REVOKE CREATE ON SCHEMA public FROM PUBLIC');
       await isolated.query('CREATE TABLE public.source_rows(id integer,status text,contact_email text,visible boolean)');
       await isolated.query("INSERT INTO public.source_rows VALUES(1,'open','pat@synthetic.example',true),(2,'open','hidden@synthetic.example',false)");
@@ -361,6 +364,7 @@ describe.skipIf(!process.env.DATABASE_URL)('native PostgreSQL source integration
       const readOnlyUrl = new URL(isolatedUrl); readOnlyUrl.username = roleName; readOnlyUrl.password = password;
       readOnlyUrl.searchParams.set('options', '-c search_path=shadow,public');
       readOnly = new Pool({ connectionString: readOnlyUrl.href, max: 1 });
+      watch(readOnly);
       const resource = postgresResource(readOnly, { id: 'native-db', name: 'Isolated native source', projectIds: ['finance'], scope: { tables: { approved_invoices: { columns: ['id', 'status', 'contact_email'], sensitive: ['contact_email'] } }, audience: ['alice'], maxRows: 5 } });
       expect(await resource.verifyReadOnly()).toBe(true);
       const service = new KnowledgeService({ repo: new MemoryKnowledgeRepository(), database: new DatabaseGateway([resource]) });
@@ -376,9 +380,13 @@ describe.skipIf(!process.env.DATABASE_URL)('native PostgreSQL source integration
       await expect(service.query(owner, connection.id, { templateId: template.id, args: ['open'] })).rejects.toMatchObject({ code: 'readonly_account_required' });
     } finally {
       await readOnly?.end(); await isolated?.end();
-      if (createdDatabase) await admin.query(`DROP DATABASE ${databaseName} WITH (FORCE)`);
+      if (createdDatabase) for(let attempt=0;attempt<10;attempt++) {
+        try {await admin.query(`DROP DATABASE ${databaseName}`); break;}
+        catch(error) {if((error as {code?:string}).code!=='55006'||attempt===9)throw Error(`Isolated database cleanup failed: ${(error as {code?:string}).code??'unknown'}`); await new Promise(resolve=>setTimeout(resolve,50));}
+      }
       if (createdRole) await admin.query(`DROP ROLE ${roleName}`);
       await admin.end();
+      expect(idleErrors).toEqual([]);
     }
   }, 60_000);
 });

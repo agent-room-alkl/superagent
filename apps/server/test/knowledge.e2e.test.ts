@@ -23,7 +23,7 @@ d('knowledge UI over real HTTP handlers', () => {
     const page = await context.newPage(), errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     try {
       await page.goto(`${base}/#knowledge`);
-      await page.getByLabel('连接名称').fill('真实 HTTP 测试资料');
+      await page.getByLabel('连接名称',{exact:true}).fill('真实 HTTP 测试资料');
       await page.getByRole('button', { name: '创建连接草案' }).click();
       await page.getByRole('button', { name: '确认连接', exact: true }).click();
       await page.getByLabel('资料名称').fill('policy.md');
@@ -61,7 +61,7 @@ d('knowledge UI over real HTTP handlers', () => {
       await page.getByLabel('参数名称（英文逗号分隔，可留空）',{exact:true}).fill('status');
       await page.getByRole('button',{name:'提交并批准查询模板',exact:true}).click();
       await page.getByText('批准人：alice',{exact:false}).waitFor();
-      await page.getByLabel('执行参数（JSON 数组）',{exact:true}).fill('["open"]');
+      await page.getByLabel('执行参数（JSON 数组）').fill('["open"]');
       await page.getByRole('button',{name:'执行已批准模板',exact:true}).click();
       await page.getByRole('cell',{name:'p***@synthetic.example',exact:true}).waitFor();
       expect(await page.locator('main').textContent()).not.toContain('person@synthetic.example');

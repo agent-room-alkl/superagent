@@ -33,5 +33,6 @@ export function configuredDatabases(configs: SourceDatabaseConfig[], secrets: Se
     password: c.secret ? () => secrets.get(c.secret!) : entraTokenProvider(), ssl: { rejectUnauthorized: true },
     max: 2, connectionTimeoutMillis: 5000, query_timeout: 7000, statement_timeout: 5000,
   }));
+  pools.forEach((pool,index)=>pool.on('error',()=>console.error(JSON.stringify({msg:'source_database_pool_unavailable',resourceId:configs[index]!.id}))));
   return { gateway: new DatabaseGateway(configs.map((c,i)=>postgresResource(pools[i]!,c))), close: async () => { await Promise.all(pools.map(p=>p.end())); } };
 }
