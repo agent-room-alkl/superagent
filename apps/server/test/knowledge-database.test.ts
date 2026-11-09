@@ -15,12 +15,14 @@ function fixture() {
   let schemaVersion = 'schema-1';
   let readOnly = true;
   let queryFailure = false;
+  let duringSelect: (() => void) | undefined;
   const release = vi.fn();
   const open = vi.fn(async () => ({
     client: { query: async (query: string, params?: unknown[]) => {
       calls.push({ sql: query, params });
       if (query.startsWith('SELECT * FROM (')) {
         if (queryFailure) throw new Error('synthetic query timeout');
+        duringSelect?.();
         return { rows: [{ id: 7, public_alias: 'pat@synthetic.example', current_fact_marker: 'live-only-synthetic-value' }] };
       }
       return { rows: [] };
@@ -32,6 +34,7 @@ function fixture() {
     inspect: vi.fn(async () => ({ version: schemaVersion, tables: {
       approved_invoices: [{ column: 'id', type: 'integer' }, { column: 'status', type: 'text' }, { column: 'contact_email', type: 'text' }, { column: 'unapproved_iban', type: 'text' }],
       unapproved_payroll: [{ column: 'salary', type: 'numeric' }],
+      approved_vendor: [{ column: 'id', type: 'integer' }, { column: 'unapproved_iban', type: 'text' }],
     } })),
     verifyReadOnly: vi.fn(async () => readOnly), open,
   };
@@ -47,6 +50,7 @@ function fixture() {
     setSchema: (version: string) => { schemaVersion = version; },
     setReadOnly: (value: boolean) => { readOnly = value; },
     failQuery: () => { queryFailure = true; },
+    duringSelect: (callback: () => void) => { duringSelect = callback; },
   };
 }
 
@@ -126,6 +130,27 @@ describe('database KnowledgeService integration (synthetic source, real service/
     expect(await f.service.query(owner, connection.id, { templateId: replacement.id, args: ['open'] })).toMatchObject({ schemaVersion: 'schema-2' });
   });
 
+  it('resolves a qualified column against its own table allowlist rather than borrowing another joined table column', async () => {
+    const f = fixture();
+    f.resource.scope.tables.approved_vendor = { columns: ['id', 'unapproved_iban'] };
+    const connection = await f.connect();
+    await expect(f.service.approveTemplate(owner, connection.id, {
+      sql: 'SELECT i.unapproved_iban FROM approved_invoices i JOIN approved_vendor v ON i.id = v.id', params: [],
+    })).rejects.toMatchObject({ code: 'invalid_template' });
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'SELECT i FROM approved_invoices i',
+    'SELECT approved_invoices FROM approved_invoices',
+    'SELECT unapproved_iban FROM approved_invoices AS unapproved_iban',
+    'SELECT id AS unapproved_iban, unapproved_iban FROM approved_invoices',
+  ])('rejects whole-row or alias-name access to unapproved physical columns: %s', async statement => {
+    const f = fixture(), connection = await f.connect();
+    await expect(f.service.approveTemplate(owner, connection.id, { sql: statement, params: [] })).rejects.toMatchObject({ code: 'invalid_template' });
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
   it('invalidates changed DBA scope, and reapproving identical SQL updates the durable template revision', async () => {
     const f = fixture(), connection = await f.connect();
     const template = await f.service.approveTemplate(owner, connection.id, { sql, params: ['status'] });
@@ -187,6 +212,21 @@ describe('database KnowledgeService integration (synthetic source, real service/
     await expect(f.service.preview(owner, item.id, item.version)).rejects.toMatchObject({ statusCode: expect.any(Number) });
     await expect(f.service.confirm(owner, item.id, item.version)).rejects.toMatchObject({ code: 'source_denied' });
     await expect(f.service.query(owner, connection.id, { templateId: template.id, args: ['open'] })).rejects.toMatchObject({ code: 'source_denied' });
+    expect(f.open).not.toHaveBeenCalled();
+  });
+
+  it('withdraws a query result if DBA authorization is revoked while the query is in flight', async () => {
+    const f = fixture(), connection = await f.connect();
+    const template = await f.service.approveTemplate(owner, connection.id, { sql, params: ['status'] });
+    f.duringSelect(() => { f.resource.scope.audience = ['bob']; });
+    await expect(f.service.query(owner, connection.id, { templateId: template.id, args: ['open'] })).rejects.toMatchObject({ code: 'source_denied' });
+    expect(f.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports argument arity as a client validation error before acquiring a source connection', async () => {
+    const f = fixture(), connection = await f.connect();
+    const template = await f.service.approveTemplate(owner, connection.id, { sql, params: ['status'] });
+    await expect(f.service.query(owner, connection.id, { templateId: template.id, args: [] })).rejects.toMatchObject({ code: 'invalid_parameters' });
     expect(f.open).not.toHaveBeenCalled();
   });
 

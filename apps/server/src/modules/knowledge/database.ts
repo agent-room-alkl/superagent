@@ -47,6 +47,7 @@ export class DatabaseGateway {
     const effective = this.scope(ctx, scope), resource = this.resource(effective.resourceId), schema = await resource.inspect();
     if (template.scopeSignature !== hash(JSON.stringify(effective)) || template.schemaVersion !== schema.version) throw new KnowledgeError('template_stale', '数据库结构或范围已变化，请重新审批查询模板。', 409);
     if (!Array.isArray(args) || args.length > 20 || args.some(v => v !== null && typeof v !== 'boolean' && !(typeof v === 'number' && Number.isFinite(v)) && !(typeof v === 'string' && v.length <= 4000))) throw new KnowledgeError('invalid_parameters', '查询参数无效。');
+    if (args.length !== template.params.length) throw new KnowledgeError('invalid_parameters', '查询参数数量与已审批模板不符。');
     if (!await resource.verifyReadOnly()) throw new KnowledgeError('readonly_account_required', '数据库账号不满足只读要求。', 409);
     const db = await resource.open();
     const pinned: DbClient = { query: async (sql, params) => {
@@ -81,10 +82,10 @@ export function postgresResource(pool: Pool, config: Omit<DatabaseResource, 'ins
     async verifyReadOnly() {
       const result = await pool.query<{ elevated: boolean }>(`SELECT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolbypassrls OR
         has_database_privilege(current_user,current_database(),'CREATE') OR
-        EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname='public' AND has_schema_privilege(current_user,n.oid,'CREATE')) OR
-        EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m') AND
-          (has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR
-          (c.relname <> ALL($1::text[]) AND has_table_privilege(current_user,c.oid,'SELECT'))))) AS elevated
+        EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema' AND has_schema_privilege(current_user,n.oid,'CREATE')) OR
+        EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT LIKE 'pg_%' AND n.nspname<>'information_schema' AND c.relkind IN ('r','p','v','m') AND
+          (has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR has_any_column_privilege(current_user,c.oid,'INSERT,UPDATE') OR
+          (n.nspname='public' AND c.relname <> ALL($1::text[]) AND (has_table_privilege(current_user,c.oid,'SELECT') OR has_any_column_privilege(current_user,c.oid,'SELECT')))))) AS elevated
         FROM pg_roles r WHERE r.rolname=current_user`, [allowed]);
       return result.rows[0]?.elevated === false;
     },

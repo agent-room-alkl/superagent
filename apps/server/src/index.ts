@@ -16,7 +16,7 @@ if (role === 'web') {
   const knowledge = createKnowledgeDeps(runtime);
   const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge,
     readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }], serveWeb: true, logger: true });
-  app.addHook('onClose', () => runtime.close());
+  app.addHook('onClose', async () => { await knowledge.close?.(); await runtime.close(); });
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });
 } else if (role === 'worker') {
@@ -26,12 +26,12 @@ if (role === 'web') {
   process.once('SIGTERM', () => controller.abort());
   process.once('SIGINT', () => controller.abort());
   const knowledge = createKnowledgeDeps(runtime);
-  if (!await knowledgeReady(knowledge)) { await runtime.close(); throw Error('Knowledge migrations are required before starting the worker'); }
+  if (!await knowledgeReady(knowledge)) { await knowledge.close?.(); await runtime.close(); throw Error('Knowledge migrations are required before starting the worker'); }
   let lastHeartbeat = 0;
-  await runWorker({ runtime, signal: controller.signal, heartbeatMs: 1000,
+  try { await runWorker({ runtime, signal: controller.signal, heartbeatMs: 1000,
     ticks: [async () => { await tickKnowledge(knowledge, runtime.config.platformTenantId); }],
     log: entry => { if (entry.msg !== 'worker heartbeat' || Date.now() - lastHeartbeat >= 15_000) { console.log(JSON.stringify(entry)); lastHeartbeat = Date.now(); } },
-  });
+  }); } finally { await knowledge.close?.(); }
 } else {
   // APP_ROLE=browser: one sandbox run per Job execution (browser image variant, Dockerfile.browser).
   const { runFromEnv } = await import('./browser/runner.js');

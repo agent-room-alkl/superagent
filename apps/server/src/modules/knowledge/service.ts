@@ -14,6 +14,7 @@ export interface KnowledgeDeps {
   enqueue?: (ctx: UserContext, runId: string) => Promise<void>;
   binary?: BinaryDeps;
   database?: DatabaseGateway;
+  close?: () => Promise<void>;
 }
 export const MANIFESTS = [
   { id: 'local-file', name: '本地文件', capabilities: ['文件导入', '版本与行定位'] },
@@ -184,6 +185,9 @@ export class KnowledgeService {
     if (!template) throw new KnowledgeError('template_not_approved', '必须选择已经审批的查询模板。', 403);
     if (!Array.isArray(input.args)) throw new KnowledgeError('invalid_parameters', '查询参数必须为数组。');
     // Results are current facts returned to the caller; never inserted into source items or the knowledge index.
-    return this.deps.database!.run(ctx, conn.scope, template, input.args);
+    const result = await this.deps.database!.run(ctx, conn.scope, template, input.args);
+    const fresh = await this.deps.repo.read(ctx); this.databaseConnection(fresh, ctx, connectionId);
+    if (!fresh.queryTemplates.some(t => t.id === template.id)) throw new KnowledgeError('template_stale', '查询模板已被撤回。', 409);
+    return result;
   }
 }
