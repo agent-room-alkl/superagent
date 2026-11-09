@@ -165,6 +165,7 @@ describe('budgeted LLM gateway: reservation, settlement, release, freeze', () =>
     expect(budget.snapshot(T, '2026-11').spent).toBe(0);
     expect(budget.snapshot(T, '2026-11').reserved).toBeGreaterThan(0);
     expect(book.violations.map((v) => v.key)).toEqual(['anthropic/model-big']);
+    expect([...budget.observed.values()]).toEqual([{ costMicroUsd: 3_015_000, inputTokens: 1_000_000, outputTokens: 1000 }]); // real figures kept, not truncated
     expect(await code(createLlmGateway({ repo, secrets, budget, prices: book, providerFactory: (cfg) => fakeProvider(cfg.apiKey), now }).chat(T, 'primary', req))).toBe('price_unknown');
   });
 
@@ -183,6 +184,11 @@ describe('budgeted LLM gateway: reservation, settlement, release, freeze', () =>
     expect(e).toMatchObject({ billing: 'frozen_unknown' });
     expect(e.message).toMatch(/exceeded 20 ms/);
     expect(budget.snapshot(T, '2026-11').reserved).toBeGreaterThan(0);
+  });
+
+  it('budget stores refuse zero, negative or fractional reservations', async () => {
+    for (const amount of [0, -56, 1.5, Number.NaN]) await expect(budget.reserve(T, '2026-11', amount)).rejects.toThrow(/invalid reservation/);
+    expect(budget.snapshot(T, '2026-11')).toMatchObject({ reserved: 0, spent: 0 });
   });
 
   it('rejects requests without a positive maxOutputTokens', async () => {
@@ -204,6 +210,7 @@ const url = process.env.DATABASE_URL;
     expect(await store.capFor(tenant, '2026-11')).toBeNull();
     await pool.query("INSERT INTO llm_config (tenant_id, status, monthly_cap_micro_usd) VALUES ($1, 'configured', 1000000)", [tenant]);
     expect(await store.capFor(tenant, '2026-11')).toBe(1_000_000);
+    await expect(store.reserve(tenant, '2026-11', -56)).rejects.toThrow(/invalid reservation/);
 
     const ids = await Promise.all(Array.from({ length: 30 }, () => store.reserve(tenant, '2026-11', 60_000, { provider: 'anthropic', model: 'm' })));
     const granted = ids.filter((x): x is string => !!x);
@@ -213,13 +220,13 @@ const url = process.env.DATABASE_URL;
 
     expect(await store.settle(granted[0]!, 99_999_999, { inputTokens: 10, outputTokens: 5 })).toBe(0); // capped at the reservation
     await store.release(granted[1]!);
-    await store.freeze(granted[2]!);
+    await store.freeze(granted[2]!, { costMicroUsd: 70_000, inputTokens: 1000, outputTokens: 900 });
     await expect(store.release(granted[0]!)).rejects.toThrow(/not in/);
     const rows = (await pool.query('SELECT id, status, cost_micro_usd::int cost, month FROM llm_usage WHERE id = ANY($1)', [granted.slice(0, 3)])).rows;
     const by = Object.fromEntries(rows.map((r) => [r.id, r]));
     expect(by[granted[0]!]).toMatchObject({ status: 'settled', cost: 60_000, month: '2026-11' });
     expect(by[granted[1]!]).toMatchObject({ status: 'released', cost: 0 });
-    expect(by[granted[2]!]).toMatchObject({ status: 'frozen_unknown' });
+    expect(by[granted[2]!]).toMatchObject({ status: 'frozen_unknown', cost: 70_000 });
     const after = (await pool.query('SELECT reserved_micro_usd::int r, spent_micro_usd::int s FROM llm_budget WHERE tenant_id = $1', [tenant])).rows[0];
     expect(after).toEqual({ r: 14 * 60_000, s: 60_000 });
   });

@@ -150,7 +150,7 @@ export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
       const cost = actualMicroUsd(u.inputTokens, u.outputTokens, price);
       if (cost > reserved) {
         // The stated upper bound did not hold: never truncate silently. Hold the reservation and stop using the record.
-        await deps.budget.freeze(r);
+        await deps.budget.freeze(r, { costMicroUsd: cost, inputTokens: u.inputTokens, outputTokens: u.outputTokens });
         await deps.prices.markUnbounded(rec.provider!, model, { reserved, cost, inputTokens: u.inputTokens, outputTokens: u.outputTokens, maxOutputTokens: req.maxOutputTokens });
         throw new LlmCallFailed('frozen_unknown', null, `cost ${cost} exceeded the reserved upper bound ${reserved}; model record suspended until re-verified`);
       }

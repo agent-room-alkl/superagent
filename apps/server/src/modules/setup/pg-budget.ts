@@ -4,7 +4,7 @@
  * left frozen for reconciliation. Prices for the gateway come from the verified-model record.
  */
 import type pg from 'pg';
-import { RESERVE_SQL, type BudgetStore, type ReservationMeta } from './budget.js';
+import { assertReservable, RESERVE_SQL, type BudgetStore, type ObservedUsage, type ReservationMeta } from './budget.js';
 import { validPricedModel, type PricedModel, type PriceBook } from './llm-gateway.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,6 +40,7 @@ export class PgBudgetStore implements BudgetStore {
   }
 
   async reserve(tenantId: string, month: string, amount: number, meta?: ReservationMeta): Promise<string | null> {
+    assertReservable(amount);
     return tx(this.pool, async (c) => {
       const ok = await c.query(RESERVE_SQL, [tenantId, month, amount]);
       if (!ok.rowCount) return null;
@@ -70,10 +71,14 @@ export class PgBudgetStore implements BudgetStore {
     });
   }
 
-  async freeze(id: string): Promise<void> {
+  /** The reservation keeps holding budget; what the provider reported (if anything) is kept for reconciliation. */
+  async freeze(id: string, observed?: ObservedUsage): Promise<void> {
     await tx(this.pool, async (c) => {
       await this.lock(c, id, ['reserved']);
-      await c.query("UPDATE llm_usage SET status = 'frozen_unknown' WHERE id = $1", [id]);
+      await c.query(
+        "UPDATE llm_usage SET status = 'frozen_unknown', cost_micro_usd = $2, input_tokens = $3, output_tokens = $4 WHERE id = $1",
+        [id, observed?.costMicroUsd ?? null, observed?.inputTokens ?? 0, observed?.outputTokens ?? 0],
+      );
     });
   }
 

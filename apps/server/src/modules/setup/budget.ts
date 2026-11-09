@@ -23,6 +23,17 @@ export function actualMicroUsd(inputTokens: number, outputTokens: number, price:
 
 export type ReservationStatus = 'reserved' | 'settled' | 'released' | 'frozen_unknown';
 
+export interface ObservedUsage {
+  costMicroUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Reservations must be positive safe integers: a zero/negative/fractional amount could release budget. */
+export function assertReservable(amountMicroUsd: number): void {
+  if (!Number.isSafeInteger(amountMicroUsd) || amountMicroUsd <= 0) throw new Error(`invalid reservation amount ${amountMicroUsd}`);
+}
+
 export interface ReservationMeta {
   provider: string;
   model: string;
@@ -38,8 +49,8 @@ export interface BudgetStore {
   settle(reservationId: string, actualMicroUsd: number, usage?: { inputTokens: number; outputTokens: number }): Promise<number>;
   /** Release a reservation when the provider confirmed nothing was billed. */
   release(reservationId: string): Promise<void>;
-  /** Keep the reservation frozen: outcome unknown, reconcile later. */
-  freeze(reservationId: string): Promise<void>;
+  /** Keep the reservation frozen: outcome unknown, reconcile later. `observed` records what the provider reported. */
+  freeze(reservationId: string, observed?: ObservedUsage): Promise<void>;
 }
 
 /**
@@ -72,6 +83,7 @@ export class InMemoryBudgetStore implements BudgetStore {
     return this.budgets.get(`${tenantId}/${month}`)?.cap ?? null;
   }
   async reserve(tenantId: string, month: string, amount: number): Promise<string | null> {
+    assertReservable(amount);
     const key = `${tenantId}/${month}`;
     const b = this.budgets.get(key);
     if (!b || b.spent + b.reserved + amount > b.cap) return null;
@@ -94,8 +106,10 @@ export class InMemoryBudgetStore implements BudgetStore {
     this.budgets.get(r.key)!.reserved -= r.amount;
     r.status = 'released';
   }
-  async freeze(id: string): Promise<void> {
+  readonly observed = new Map<string, ObservedUsage>();
+  async freeze(id: string, observed?: ObservedUsage): Promise<void> {
     this.mustBe(id, ['reserved']).status = 'frozen_unknown';
+    if (observed) this.observed.set(id, observed);
   }
   private mustBe(id: string, allowed: ReservationStatus[]) {
     const r = this.reservations.get(id);
