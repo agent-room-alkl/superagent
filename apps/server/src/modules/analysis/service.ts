@@ -2,6 +2,7 @@ import type { UserContext } from '@superagent/shared';
 import { evidenceValid, id, KnowledgeError, mayRead, mergeRecommendations, positionedChunks, signature, type Evidence, type Recommendation } from '../knowledge/domain.js';
 import type { KnowledgeRepository } from '../knowledge/repository.js';
 export interface AnalysisModel {
+  check?(tenantId: string): Promise<void>;
   /** Implementation MUST reserve budget before the call and freeze uncertain outcomes. No direct-provider fallback. */
   recommend(input: { tenantId: string; runId: string; evidence: Evidence[]; maxOutputTokens: number }): Promise<unknown>;
 }

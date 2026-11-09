@@ -114,6 +114,7 @@ export class KnowledgeService {
   async startAnalysis(ctx: UserContext) {
     requireManager(ctx);
     if (!this.deps.model || !this.deps.enqueue) throw new KnowledgeError('analysis_unavailable', '分析需要已配置并通过预算校验的模型及持久化工作队列。', 503);
+    await this.deps.model.check?.(ctx.tenantId);
     const run = await this.deps.repo.transact(ctx, s => {
       if (!s.source.items.some(i => mayRead(s, ctx, i))) throw new KnowledgeError('no_evidence', '无依据：先确认有权限的企业资料。', 409);
       if (s.analyses.some(r => r.actor.userId === ctx.userId && ['queued', 'running'].includes(r.status))) throw new KnowledgeError('analysis_active', '已有分析任务正在运行。', 409);
