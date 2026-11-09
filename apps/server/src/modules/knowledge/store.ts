@@ -56,6 +56,11 @@ export class KnowledgeStore {
     this.chunks = this.chunks.filter((c) => c.itemId !== itemId);
   }
 
+  /** Current child items, addressed as "<parentExternalId>/<...>" (attachments). */
+  childrenOf(connectionId: string, parentExternalId: string): Item[] {
+    return [...this.items.values()].filter((i) => i.connectionId === connectionId && i.current && i.externalId.startsWith(`${parentExternalId}/`));
+  }
+
   cite(itemId: string, citer: string): void {
     const s = this.citations.get(itemId) ?? new Set<string>();
     s.add(citer);

@@ -44,7 +44,15 @@ export async function syncConnection(store: KnowledgeStore, plugin: KnowledgeSou
       } else throw e;
     }
     for (const ref of listed.items) {
-      const r = await applyRef(store, plugin, cfg, ref);
+      let r: 'applied' | 'dup';
+      try {
+        r = await applyRef(store, plugin, cfg, ref);
+      } catch (e) {
+        // Item-level refusal (403 / 404 on one item while the listing succeeded): only that item is affected.
+        if (e instanceof SourceError && (e.kind === 'scope' || e.kind === 'not_found')) {
+          r = await applyRef(store, plugin, cfg, { ...ref, change: e.kind === 'scope' ? 'access_revoked' : 'deleted' });
+        } else throw e; // auth → whole connection; transient/throttled → abort without advancing the cursor
+      }
       if (r === 'dup') result.skippedDuplicates++;
       else result.applied++;
     }
@@ -84,21 +92,17 @@ function markMissingAsDeleted(store: KnowledgeStore, connectionId: string, prese
 
 async function applyRef(store: KnowledgeStore, plugin: KnowledgeSourcePlugin, cfg: ConnectionConfig, ref: SourceItemRef): Promise<'applied' | 'dup'> {
   const existing = store.currentItem(cfg.connectionId, ref.externalId);
-  if (ref.change === 'deleted') {
-    if (existing && existing.status !== 'deleted') {
-      existing.status = 'deleted';
-      store.flagCiters(existing.id, 'evidence deleted at source');
-      return 'applied';
+  if (ref.change === 'deleted' || ref.change === 'access_revoked') {
+    const status = ref.change === 'deleted' ? 'deleted' : 'access_revoked';
+    const reason = ref.change === 'deleted' ? 'evidence deleted at source' : 'evidence unavailable: access revoked';
+    // Child items (e.g. mail attachments "<messageId>/att/<id>") follow their parent.
+    const affected = [existing, ...store.childrenOf(cfg.connectionId, ref.externalId)].filter((i): i is Item => !!i && i.status !== status);
+    for (const it of affected) {
+      it.status = status;
+      store.dropChunks(it.id); // the item record (history) stays; its content leaves retrieval storage
+      store.flagCiters(it.id, reason);
     }
-    return 'dup';
-  }
-  if (ref.change === 'access_revoked') {
-    if (existing && existing.status !== 'access_revoked') {
-      existing.status = 'access_revoked';
-      store.flagCiters(existing.id, 'evidence unavailable: access revoked');
-      return 'applied';
-    }
-    return 'dup';
+    return affected.length ? 'applied' : 'dup';
   }
   // ACL first: the content of an item whose readers are unknown is never read or stored (PRD §3.2).
   const aclRes: AclResult = plugin.getAcl ? await plugin.getAcl(cfg, ref) : { status: 'unknown', reason: 'plugin does not report ACL' };
