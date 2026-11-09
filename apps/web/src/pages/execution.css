@@ -29,3 +29,9 @@
 @media (max-width: 800px) {
   .exec-grid { grid-template-columns: 1fr; }
 }
+.exec-toolbar { flex-wrap: wrap; }
+.exec-check { flex-direction: row !important; align-items: center; gap: var(--space-2xs); }
+.exec-drawer table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.exec-drawer th, .exec-drawer td { text-align: left; padding: var(--space-2xs) var(--space-xs); border-top: 1px solid var(--color-soft-rule); }
+.exec-drawer fieldset { border: 1px solid var(--color-soft-rule); display: flex; flex-direction: column; gap: var(--space-2xs); }
+.exec-drawer code { overflow-wrap: anywhere; }

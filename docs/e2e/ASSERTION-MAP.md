@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 96 |
-| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 66 |
-| pending | Feature not built yet; the owner task will add the E2E | 95 |
+| e2e | Covered by a Playwright test against the real app | 125 |
+| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 65 |
+| pending | Feature not built yet; the owner task will add the E2E | 67 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 87, T-45 8
+Pending by owner: T-41 59, T-45 8
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -18,46 +18,46 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 
 | # | Assertion | Status | Where / owner |
 |---|---|---|---|
-| 1 | Queue title expanded | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 1 | Queue title expanded | pending | T-41 — not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project) |
 | 2 | sample-tenant fixtures opt in | n/a | prototype demo fixtures; the product starts empty (covered by "unbuilt modules say who owns them" and per-feature empty states) |
 | 3 | No invented business tasks before opt in | n/a | prototype demo fixtures; the product starts empty (covered by "unbuilt modules say who owns them" and per-feature empty states) |
-| 4 | staff member A sees only five assigned work items | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 5 | staff member A does not see manager-only exception | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 6 | Write approval waits for data confirmation | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 7 | Invalid monetary input cannot be confirmed | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 8 | Data confirmation does not execute write | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 4 | staff member A sees only five assigned work items | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 5 | staff member A does not see manager-only exception | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 6 | Write approval waits for data confirmation | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 7 | Invalid monetary input cannot be confirmed | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 8 | Data confirmation does not execute write | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 9 | Approved action inherits confirmed data | e2e | apps/e2e/tests/mainline.spec.ts |
 | 10 | Approval is distinct from execution | e2e | apps/e2e/tests/mainline.spec.ts |
-| 11 | Unsaved changes cannot execute old approval | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 12 | Saved revision invalidates approval | unit | apps/server/test/execution.test.ts |
+| 11 | Unsaved changes cannot execute old approval | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 12 | Saved revision invalidates approval | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 13 | Unknown outcome retains single submission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 14 | Unknown outcome has no resubmit action | e2e | apps/e2e/tests/mainline.spec.ts |
 | 15 | Unknown readback does not retry | unit | apps/server/test/execution.test.ts |
 | 16 | Readback compares approved values | e2e | apps/e2e/tests/mainline.spec.ts |
-| 17 | Manual report requires evidence | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 18 | Manual evidence is not system verified | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 19 | Quality review grants no action authority | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 20 | Batch conflict cannot be selected | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 21 | Batch confirmation includes only selected clean row | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 22 | Batch exception is retained | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 23 | Batch can continue without repeating confirmed row | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 24 | Manager default includes action and waiting groups | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 25 | Queue shows grouped work and due dates | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 26 | Manager does not see staff member A finance data | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 27 | External wait stays attached to original case | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 28 | Receiving documents is not automatic case completion | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 29 | Branch recorder cannot fabricate insurance approval | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 30 | Recorded branch choice survives reopening | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 31 | Mail renderer shows recipient and attachment identity | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 32 | Mail shows original context and AI field changes | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 33 | proof-of-concept user cannot send | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 34 | manager B sees exceptions without taking all normal work | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 35 | Exception decision preserves evidence and verification boundary | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 36 | Project filter selects only relevant work | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 37 | Project filter also scopes batch contents | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
-| 38 | Upstream revision revokes downstream permission | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 17 | Manual report requires evidence | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 18 | Manual evidence is not system verified | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 19 | Quality review grants no action authority | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 20 | Batch conflict cannot be selected | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 21 | Batch confirmation includes only selected clean row | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 22 | Batch exception is retained | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 23 | Batch can continue without repeating confirmed row | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 24 | Manager default includes action and waiting groups | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 25 | Queue shows grouped work and due dates | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 26 | Manager does not see staff member A finance data | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 27 | External wait stays attached to original case | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 28 | Receiving documents is not automatic case completion | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 29 | Branch recorder cannot fabricate insurance approval | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 30 | Recorded branch choice survives reopening | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 31 | Mail renderer shows recipient and attachment identity | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 32 | Mail shows original context and AI field changes | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 33 | proof-of-concept user cannot send | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 34 | manager B sees exceptions without taking all normal work | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 35 | Exception decision preserves evidence and verification boundary | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 36 | Project filter selects only relevant work | e2e | apps/e2e/tests/work-inbox.spec.ts |
+| 37 | Project filter also scopes batch contents | pending | T-41 — not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project) |
+| 38 | Upstream revision revokes downstream permission | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
-| 40 | Manual note cannot erase mismatched system outcome | pending | T-41 — human work items (待我处理) — Grok has humanwork module locally, not yet pushed |
+| 40 | Manual note cannot erase mismatched system outcome | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 41 | Existing conversation still produces draft | pending | T-41 |
 | 42 | Existing task evidence boundary retained | pending | T-41 |
 | 43 | Human dialog styles do not leak to task drawer | n/a | prototype single-file CSS isolation; React components are scoped |
