@@ -73,6 +73,7 @@ export const llmUsage = pgTable('llm_usage', {
   reservedMicroUsd: bigint('reserved_micro_usd', { mode: 'number' }).notNull(),
   costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }),
   status: text('status').notNull(), // reserved | settled | released | frozen_unknown
+  month: text('month').notNull(), // budget month reserved against (migration 0003)
   at: createdAt(),
 });
 
