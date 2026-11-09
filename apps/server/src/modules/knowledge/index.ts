@@ -1,6 +1,21 @@
 import type { FastifyPluginAsync } from 'fastify';
-
-/** Owner: T-40-Codex. Placeholder mount point from the T-39 scaffold — replace freely. */
-export const knowledgeModule: FastifyPluginAsync = async (app) => {
-  app.get('/status', async () => ({ module: 'knowledge', implemented: false }));
+import { KnowledgeError } from './domain.js';
+import { KnowledgeService, type KnowledgeDeps } from './service.js';
+export const knowledgeModule: FastifyPluginAsync<{ deps?: KnowledgeDeps }> = async (app, opts) => {
+  const service = opts.deps ? new KnowledgeService(opts.deps) : null;
+  app.addHook('preHandler', async (_req, reply) => { if (!service) return reply.code(503).send({ error: 'knowledge_unavailable', message: '企业知识存储尚未配置。' }); });
+  app.setErrorHandler((err, _req, reply) => { if (err instanceof KnowledgeError) return reply.code(err.statusCode).send({ error: err.code, message: err.message }); const code = (err as { statusCode?: number }).statusCode; return reply.code(code && code < 500 ? code : 500).send({ error: 'knowledge_request_failed', message: '请求未完成，请稍后重试。' }); });
+  const body = (req: { body: unknown }) => { if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) throw new KnowledgeError('invalid_input', '请求结构无效。'); return req.body as Record<string, unknown>; };
+  app.get('/overview', req => service!.overview(req.user!));
+  app.post('/connections', (req, reply) => { reply.code(201); return service!.createConnection(req.user!, body(req)); });
+  app.post<{ Params: { id: string } }>('/connections/:id/confirm', req => service!.confirmConnection(req.user!, req.params.id));
+  app.post<{ Params: { id: string } }>('/connections/:id/sync', req => service!.sync(req.user!, req.params.id));
+  app.post('/uploads', req => service!.upload(req.user!, body(req)));
+  app.post('/files', { bodyLimit: 28 * 1024 * 1024 }, req => service!.uploadBinary(req.user!, body(req)));
+  app.post<{ Params: { id: string } }>('/items/:id/confirm', req => service!.confirm(req.user!, req.params.id, String(body(req).version ?? '')));
+  app.get<{ Querystring: { q?: string } }>('/search', req => service!.search(req.user!, req.query.q ?? ''));
+  app.post('/analyses', (req, reply) => { reply.code(202); return service!.startAnalysis(req.user!); });
+  app.post<{ Params: { id: string } }>('/recommendations/:id/lock', req => service!.editRecommendation(req.user!, req.params.id, body(req)));
+  app.post<{ Params: { id: string } }>('/recommendations/:id/delete', req => service!.editRecommendation(req.user!, req.params.id, {}, true));
+  app.post<{ Params: { id: string } }>('/plugins/:id', req => { const enabled = body(req).enabled; if (typeof enabled !== 'boolean') throw new KnowledgeError('invalid_input', '插件状态无效。'); return service!.togglePlugin(req.user!, req.params.id, enabled); });
 };
