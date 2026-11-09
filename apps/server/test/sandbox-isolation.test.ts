@@ -27,21 +27,24 @@ const ROLE = {
   const resources: any[] = Array.isArray(arm.resources) ? arm.resources : Object.values(arm.resources);
   const assignments = resources.filter((r) => r.type === 'Microsoft.Authorization/roleAssignments');
   const forSandbox = assignments.filter((r) => JSON.stringify(r.properties.principalId).includes('-sandbox-id'));
+  // Role ids may be referenced through template variables; resolve them so the check sees the real GUID.
+  const resolve = (expr: string) => expr.replace(/variables\('([^']+)'\)/g, (_m, k: string) => JSON.stringify(arm.variables?.[k] ?? k));
+  const roleOf = (r: any) => resolve(String(r.properties.roleDefinitionId));
 
   it('finds the sandbox role assignments', () => {
     expect(forSandbox.length).toBe(2);
   });
 
   it('grants the sandbox only AcrPull and Blob contributor on the screenshots container', () => {
-    const roles = forSandbox.map((r) => String(r.properties.roleDefinitionId));
+    const roles = forSandbox.map(roleOf);
     expect(roles.some((x) => x.includes(ROLE.acrPull))).toBe(true);
-    const blob = forSandbox.find((r) => String(r.properties.roleDefinitionId).includes(ROLE.blobContributor));
+    const blob = forSandbox.find((r) => roleOf(r).includes(ROLE.blobContributor));
     expect(String(blob.scope)).toContain('screenshots');
   });
 
   it('never grants the sandbox any Key Vault or database role', () => {
     for (const r of forSandbox) {
-      expect(String(r.properties.roleDefinitionId)).not.toContain(ROLE.kvSecretsOfficer);
+      expect(roleOf(r)).not.toContain(ROLE.kvSecretsOfficer);
       expect(String(r.scope ?? '')).not.toMatch(/Microsoft\.KeyVault|DBforPostgreSQL/);
     }
     const pgAdmins = resources.filter((r) => r.type === 'Microsoft.DBforPostgreSQL/flexibleServers/administrators');
