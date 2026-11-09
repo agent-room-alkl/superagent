@@ -132,7 +132,7 @@ describe('worker entry uses the same fail-closed bootstrap', () => {
     const rt = await createRuntime(prodEnv, { pool: () => pool, keyVault: async () => new InMemorySecretStore() });
     const ac = new AbortController();
     let ticks = 0;
-    await runWorker({ runtime: rt, signal: ac.signal, heartbeatMs: 1, log: () => undefined, ticks: [async (r) => { ticks++; expect(r.config.mode).toBe('production'); ac.abort(); }] });
+    await runWorker({ runtime: rt, signal: ac.signal, heartbeatMs: 1, log: () => undefined, ticks: [async (r) => { ticks++; expect(r.config.mode).toBe('production'); expect(r.llm).toBeDefined(); ac.abort(); }] });
     expect(seen[0]).toBe('SELECT 1');
     expect(ticks).toBe(1);
     expect(seen.at(-1)).toBe('end');
