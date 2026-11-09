@@ -75,8 +75,24 @@ jobs:
           grep -q 'tracker.invalid' sandbox-run.log
           echo "--- guard: refuses main-app settings ---"
           if docker run --rm -e APP_ROLE=browser -e KEY_VAULT_URL=https://kv.example -e RUN_SPEC="$SPEC" superagent-browser:ci; then echo "should have refused"; exit 1; fi
-      - name: Smoke test web role
+      - name: Web role fails closed without production settings
         run: |
-          docker run -d --name sa -p 8080:8080 -e APP_ROLE=web superagent:ci
-          for i in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && exit 0; sleep 1; done
-          docker logs sa; exit 1
+          set +e
+          docker run --rm -e APP_ROLE=web superagent:ci > refuse.log 2>&1; code=$?
+          cat refuse.log
+          test $code -ne 0 || { echo "should have refused to start"; exit 1; }
+          grep -q 'ENTRA_TENANT_ID' refuse.log && grep -q 'KEY_VAULT_URL' refuse.log && grep -q 'PLATFORM_TENANT_ID' refuse.log || { echo 'refusal must name the missing settings'; exit 1; }
+          docker run --rm -e APP_ROLE=web -e AUTH_MODE=dev superagent:ci > dev.log 2>&1; code=$?
+          test $code -ne 0 && grep -q 'AUTH_MODE=dev is not allowed in production' dev.log || { cat dev.log; echo "dev auth must be refused in production"; exit 1; }
+      - name: Smoke test web role (production wiring, unreachable dependencies)
+        run: |
+          # Placeholder hosts only: nothing here is a credential. The pool and Key Vault client connect lazily.
+          docker run -d --name sa -p 8080:8080 -e APP_ROLE=web \
+            -e ENTRA_TENANT_ID=00000000-0000-0000-0000-000000000001 -e ENTRA_CLIENT_ID=00000000-0000-0000-0000-000000000002 \
+            -e PLATFORM_TENANT_ID=00000000-0000-0000-0000-000000000003 -e KEY_VAULT_URL=https://kv.invalid/ \
+            -e DATABASE_URL=postgres://app@pg.invalid:5432/superagent -e BLOB_URL=https://blob.invalid/ -e DOC_INTEL_ENDPOINT=https://di.invalid/ superagent:ci
+          for i in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
+          curl -fsS http://localhost:8080/healthz || { docker logs sa; exit 1; }
+          test "$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' http://localhost:8080/readyz)" = 503
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-dev-user: u|owner|' http://localhost:8080/api/v1/setup/llm)" = 401
+          echo "healthz 200, readyz 503 (postgres unreachable), dev header rejected with 401"
