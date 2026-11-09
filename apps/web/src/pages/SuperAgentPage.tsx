@@ -3,6 +3,7 @@ import { SOP_NODE_KINDS, validateSopGraph, type SopGraph, type SopGraphContext, 
 import { api } from '../api';
 import { KIND_LABEL, SopGraphView } from '../components/SopGraphView';
 import { graphFromPack, knowledgeImpact, packFromRecommendation, unconfirmedItems, validationState, type KnowledgeEvidence, type SopPack } from './sop-workflow';
+import { ExecutionsPanel } from './ExecutionsPanel';
 import './SuperAgentPage.css';
 
 /** Contract agreed with the SOP runtime (T-41): /api/v1/sop. */
@@ -379,6 +380,8 @@ function SopWorkspace() {
             <button className="btn primary" type="button" disabled={!canPublish} onClick={() => void publish()}>发布</button>
             {!openDraft ? <p className="helper">先保存草稿，再校验和发布。</p> : null}
           </section>
+
+          <ExecutionsPanel sopId={sopId} publishedVersionId={published?.id ?? null} />
         </>
       ) : null}
       {msg ? <p className="helper" role="status">{msg}</p> : null}

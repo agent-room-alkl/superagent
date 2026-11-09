@@ -5,6 +5,9 @@ import { WorkInbox } from './work-items.js';
 
 export const inboxState = { current: new WorkInbox() };
 
+/** Listeners for decided items (the SOP executor resumes the run an approval belongs to). */
+export const workItemEvents: { decided: Array<(item: import('./work-items.js').WorkItem) => void> } = { decided: [] };
+
 const KINDS = new Set<WorkItemKind>([
   'data_check', 'action_approval', 'manual_execution', 'branch_choice', 'exception_ruling', 'supply_info', 'deliverable_review',
 ]);
@@ -51,7 +54,9 @@ export const humanworkModule: FastifyPluginAsync = async (app) => {
     const params = req.params as { id: string };
     const body = (req.body ?? {}) as { expectedVersion?: number };
     if (typeof body.expectedVersion !== 'number') return reply.code(400).send({ error: 'missing_version' });
-    return inboxState.current.decide(params.id, viewerFrom(req.headers, req.user).userId, body.expectedVersion);
+    const result = inboxState.current.decide(params.id, viewerFrom(req.headers, req.user).userId, body.expectedVersion);
+    if (result.ok) for (const listener of workItemEvents.decided) listener(result.item);
+    return result;
   });
 
   app.post('/:id/revise', async (req) => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './execution.css';
+import { authHeaders } from '../api';
 
 /**
  * Command room layout and copy from the accepted v12 prototype
@@ -98,7 +99,7 @@ export function CommandRoomPage() {
     async function pull() {
       const after = cursor.current;
       try {
-        const response = await fetch(`/api/v1/room/stream?roomId=room-1&after=${after}`);
+        const response = await fetch(`/api/v1/room/stream?roomId=room-1&after=${after}`, { headers: await authHeaders() });
         if (!response.ok || stop) return;
         const incoming = roomEventsFromSse(await response.text());
         if (!incoming.length) return;
@@ -130,7 +131,7 @@ export function CommandRoomPage() {
     let stop = false;
     async function pullTasks() {
       try {
-        const response = await fetch('/api/v1/room/tasks');
+        const response = await fetch('/api/v1/room/tasks', { headers: await authHeaders() });
         if (!response.ok || stop) return;
         const data = (await response.json()) as { tasks?: ApiTask[] };
         const tasks = (data.tasks ?? []).filter((task) => typeof task.id === 'string' && typeof task.title === 'string');
@@ -163,7 +164,7 @@ export function CommandRoomPage() {
     try {
       const response = await fetch('/api/v1/room/messages', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ roomId: 'room-1', projectId: 'p1', body, clientMessageId: id }),
       });
       if (!response.ok) return;
@@ -216,12 +217,7 @@ export function CommandRoomPage() {
     try {
       const response = await fetch(`/api/v1/room/tasks/${taskId}/report`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-user-id': reportAs,
-          'x-roles': 'employee',
-          'x-projects': 'p1',
-        },
+        headers: { 'content-type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ body, clientMessageId: id }),
       });
       if (!response.ok) {

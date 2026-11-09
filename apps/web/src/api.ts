@@ -15,3 +15,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<{ st
   const body = (await res.json().catch(() => ({}))) as T;
   return { status: res.status, body };
 }
+
+/** Authentication headers for calls that cannot use api() (e.g. text/event-stream). Never a client-chosen identity. */
+export async function authHeaders(): Promise<Record<string, string>> {
+  const token = await bearerToken();
+  if (token) return { authorization: `Bearer ${token}` };
+  return devUser ? { 'x-dev-user': devUser } : {};
+}
