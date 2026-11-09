@@ -80,3 +80,23 @@ GRANT superagent_app TO "sa-staging-app-id";
 az bicep build --file infra/main.bicep
 az deployment group what-if -g <rg> -f infra/main.bicep -p @infra/main.parameters.json
 ```
+
+## Approved mail and SharePoint sources
+
+Configure the optional GitHub environment variables `KNOWLEDGE_SOURCES_JSON` and `SOURCE_DATABASES_JSON` for the manual deploy workflow. Both infrastructure passes apply these values through a generated parameter file, so redeploys retain the configured registry. Empty variables intentionally configure no resources. Neither variable may contain credentials.
+
+`KNOWLEDGE_SOURCES_JSON` (Bicep parameter `knowledgeSourcesJson`) contains only deployment-approved metadata scopes. The web and worker receive the same registry. Example with placeholders:
+
+```json
+[{"id":"finance-mail","name":"Finance inbox","pluginId":"email","scope":{"mailbox":"finance@example.invalid","folder":"Inbox","receivedSince":"2026-01-01T00:00:00Z"},"audience":["<entra-user-object-id>"],"projectIds":["P-1"]}]
+```
+
+For SharePoint, use `pluginId: "sharepoint"` and `scope: {"driveId":"<approved-drive-id>","folderPath":"/Policies"}`. Missing, malformed, oversized or credential-bearing configuration is rejected. Dates may be narrowed in requests; mailbox, folder, drive, source audience and project grants cannot be expanded by a client. The registry is an application boundary; the Graph identity must also have the corresponding upstream permission. An owner role does not bypass source ACLs.
+
+The app managed identity uses Graph `.default`: grant read-only `Mail.Read` limited to approved mailboxes (Exchange application RBAC/access policy) and/or `Sites.Selected` with per-site read grants. These are administrator prerequisites; installing a plugin in the workbench does not grant Graph permissions or create a business tool. No mail send/write permission is requested.
+
+First install the source plugin, explicitly acknowledge the read-only scope, create and independently confirm the connection. Metadata preview exposes only ACL-permitted titles, versions and locators. Select and import those items, then review and confirm each imported version before analysis. Sync keeps that explicit selection; permission loss, plugin pause, schema/version changes and reauthorization withdraw usable references. New versions require confirmation again.
+
+Database sources continue to use `SOURCE_DATABASES_JSON` and independent SELECT-only identities. Current facts are never copied into knowledge. Their freshness token binds the source change signal to the current user, template, schema and approved scope. PostgreSQL uses `pg_current_snapshot()` conservatively: unrelated transactions may expire a result. Missing or changing signals cannot establish freshness. Requery to read current values.
+
+For simultaneous E2E worktrees set `E2E_PORT` to an unused unprivileged port. The browser fixture is test-only and explicitly models external sources, models and database data; it is not proof of live Azure or Graph access.

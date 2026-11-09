@@ -8,6 +8,8 @@ export interface DatabaseResource {
   inspect(): Promise<{ version: string; tables: Record<string, { column: string; type: string }[]> }>;
   verifyReadOnly(): Promise<boolean>;
   open(): Promise<{ client: DbClient; release(): void }>;
+  /** Conservative source change signal. Missing/unavailable signals can never establish freshness. */
+  factRevision?(): Promise<string | null>;
 }
 export interface StoredQueryTemplate extends QueryTemplate { connectionId: string; scopeSignature: string; schemaVersion: string }
 export class DatabaseGateway {
@@ -25,6 +27,19 @@ export class DatabaseGateway {
     this.plugin = { ...base, manifest: { ...base.manifest, id: 'database' } };
   }
   private resource(resourceId: unknown) { const r = typeof resourceId === 'string' ? this.resources.get(resourceId) : undefined; if (!r) throw new KnowledgeError('unknown_database', '未配置此只读数据库来源。', 404); return r; }
+  private assertTemplate(template: StoredQueryTemplate, effective: DbScope, schemaVersion: string) {
+    if (!template.approvedBy) throw new KnowledgeError('template_not_approved', '必须选择已经审批的查询模板。', 403);
+    if (template.scopeSignature !== hash(JSON.stringify(effective)) || template.schemaVersion !== schemaVersion) throw new KnowledgeError('template_stale', '数据库结构或范围已变化，请重新审批查询模板。', 409);
+    try { validateTemplate(template, effective); }
+    catch { throw new KnowledgeError('invalid_template', '查询必须为批准范围内的单条 SELECT，敏感列和参数必须遵守查询网关规则。', 422); }
+  }
+  private async sourceRevision(resource: DatabaseResource): Promise<string | null> {
+    try { const revision = await resource.factRevision?.(); return typeof revision === 'string' && revision.length > 0 ? revision : null; }
+    catch { return null; }
+  }
+  private boundRevision(ctx: UserContext, resource: DatabaseResource, template: StoredQueryTemplate, revision: string) {
+    return hash(JSON.stringify([ctx.tenantId, ctx.userId, resource.id, template.connectionId, template.id, template.scopeSignature, template.schemaVersion, revision]));
+  }
   permitted(ctx: UserContext, resource: DatabaseResource) { return resource.scope.audience.includes(ctx.userId) && resource.projectIds.every(p => ctx.projectScopes.includes(p)); }
   list(ctx: UserContext) { return [...this.resources.values()].filter(r => this.permitted(ctx, r)).map(r => ({ id: r.id, name: r.name, tables: r.scope.tables, maxRows: r.scope.maxRows })); }
   scope(ctx: UserContext, requested: Record<string, unknown>): DbScope & { resourceId: string; projectIds: string[] } {
@@ -45,10 +60,11 @@ export class DatabaseGateway {
   }
   async run(ctx: UserContext, scope: Record<string, unknown>, template: StoredQueryTemplate, args: unknown[]) {
     const effective = this.scope(ctx, scope), resource = this.resource(effective.resourceId), schema = await resource.inspect();
-    if (template.scopeSignature !== hash(JSON.stringify(effective)) || template.schemaVersion !== schema.version) throw new KnowledgeError('template_stale', '数据库结构或范围已变化，请重新审批查询模板。', 409);
+    this.assertTemplate(template, effective, schema.version);
     if (!Array.isArray(args) || args.length > 20 || args.some(v => v !== null && typeof v !== 'boolean' && !(typeof v === 'number' && Number.isFinite(v)) && !(typeof v === 'string' && v.length <= 4000))) throw new KnowledgeError('invalid_parameters', '查询参数无效。');
     if (args.length !== template.params.length) throw new KnowledgeError('invalid_parameters', '查询参数数量与已审批模板不符。');
     if (!await resource.verifyReadOnly()) throw new KnowledgeError('readonly_account_required', '数据库账号不满足只读要求。', 409);
+    const before = await this.sourceRevision(resource);
     const db = await resource.open();
     const pinned: DbClient = { query: async (sql, params) => {
       const result = await db.client.query(sql, params);
@@ -58,15 +74,28 @@ export class DatabaseGateway {
       }
       return result;
     } };
-    try {
-      const result = await runTemplate(pinned, template, args, effective, schema.version, 5000);
-      if (hash(JSON.stringify(this.scope(ctx, scope))) !== template.scopeSignature) throw new KnowledgeError('template_stale', '查询期间来源权限或范围变化，结果已撤回。', 409);
-      return result;
-    } finally { db.release(); }
+    let result: Awaited<ReturnType<typeof runTemplate>>;
+    try { result = await runTemplate(pinned, template, args, effective, schema.version, 5000); }
+    finally { db.release(); }
+    // Release the dedicated query client before consulting a revision provider that may use the same one-client pool.
+    const after = await this.sourceRevision(resource);
+    if (hash(JSON.stringify(this.scope(ctx, scope))) !== template.scopeSignature) throw new KnowledgeError('template_stale', '查询期间来源权限或范围变化，结果已撤回。', 409);
+    // A change overlapping execution makes this result's future freshness unverifiable, even if the query succeeded.
+    return { ...result, revision: before !== null && before === after ? this.boundRevision(ctx, resource, template, before) : null };
+  }
+
+  async freshness(ctx: UserContext, scope: Record<string, unknown>, template: StoredQueryTemplate, revision: unknown): Promise<{ fresh: boolean; reason?: string }> {
+    const effective = this.scope(ctx, scope), resource = this.resource(effective.resourceId), schema = await resource.inspect();
+    this.assertTemplate(template, effective, schema.version);
+    if (!await resource.verifyReadOnly()) throw new KnowledgeError('readonly_account_required', '数据库账号不满足只读要求。', 409);
+    const current = await this.sourceRevision(resource);
+    if (hash(JSON.stringify(this.scope(ctx, scope))) !== template.scopeSignature) throw new KnowledgeError('template_stale', '核对期间来源权限或范围变化，结果已撤回。', 409);
+    if (typeof revision !== 'string' || !revision || current === null) return { fresh: false, reason: 'revision_unavailable' };
+    return this.boundRevision(ctx, resource, template, current) === revision ? { fresh: true } : { fresh: false, reason: 'source_changed' };
   }
 }
 /** Actual PostgreSQL driver adapter. Row visibility is provided by DBA-owned filtered views, never a client predicate. */
-export function postgresResource(pool: Pool, config: Omit<DatabaseResource, 'inspect' | 'verifyReadOnly' | 'open'>): DatabaseResource {
+export function postgresResource(pool: Pool, config: Omit<DatabaseResource, 'inspect' | 'verifyReadOnly' | 'open' | 'factRevision'>): DatabaseResource {
   const allowed = Object.keys(config.scope.tables);
   const safe = /^[a-z_][a-z0-9_]*$/;
   if (!allowed.length || allowed.some(t => !safe.test(t)) || Object.values(config.scope.tables).some(t => !t.columns.length || t.columns.some(c => !safe.test(c)))) throw Error('Database views/columns require simple allow-listed identifiers');
@@ -90,5 +119,11 @@ export function postgresResource(pool: Pool, config: Omit<DatabaseResource, 'ins
       return result.rows[0]?.elevated === false;
     },
     async open() { const client = await pool.connect(); return { client: { query: async (sql, params) => { const result = await client.query(sql, params); return { rows: result.rows }; } }, release: () => client.release() }; },
+    async factRevision() {
+      // Database-wide snapshots intentionally expire results on unrelated transactions as well. Never expose transaction IDs.
+      const result = await pool.query<{ revision: string }>('SELECT pg_catalog.pg_current_snapshot()::text AS revision');
+      const revision = result.rows[0]?.revision;
+      return typeof revision === 'string' && revision.length > 0 ? hash(revision) : null;
+    },
   };
 }

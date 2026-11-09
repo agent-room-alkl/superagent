@@ -50,7 +50,9 @@ d('knowledge UI over real HTTP handlers', () => {
       const state = await deps.repo.read({ tenantId: 'ui-test', userId: 'alice', roles: ['owner'], projectScopes: [] });
       expect(state.recommendations[0]).toMatchObject({ name: '人工保留名称', humanLocked: true });
       expect(state.source.connections).toHaveLength(1); expect(state.analyses[0]!.status).toBe('completed');
+      await page.getByTestId('plugin-database').getByRole('button', { name: '安装只读数据库插件', exact: true }).click();
       await page.getByLabel('数据库连接名称',{exact:true}).fill('受控实时数据');
+      await page.getByLabel('我已核对数据库范围，并确认使用独立只读账号接入', {exact:true}).check();
       await page.getByRole('button',{name:'创建数据库连接草案',exact:true}).click();
       await page.getByRole('button',{name:'确认连接',exact:true}).click();
       const schemaResponse=page.waitForResponse(r=>r.url().includes('/connections/')&&r.url().endsWith('/sync'));

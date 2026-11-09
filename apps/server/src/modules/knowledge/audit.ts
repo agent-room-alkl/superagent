@@ -13,7 +13,8 @@ export function auditSnapshot(state: KnowledgeState): AuditSnapshot {
   for (const j of state.parseJobs) add(`parse:${j.id}`, 'parse_changed', [j.status,j.error], hash(j.version), { status:j.status });
   for (const r of state.recommendations) add(`recommendation:${r.id}`, 'recommendation_changed', [r.name,r.description,r.evidence,r.humanLocked,r.deleted,r.proposedChange], null, { kind:r.kind,humanLocked:r.humanLocked,deleted:r.deleted });
   for (const t of state.queryTemplates) add(`template:${t.id}`, 'query_template_approved', t, hash(t.schemaVersion), { connectionId:t.connectionId });
-  add('plugins','plugins_changed',state.disabledPlugins,null,{ disabled:state.disabledPlugins });
+  add('plugins','plugins_changed',[state.installedPlugins,state.disabledPlugins],null,{ installed:state.installedPlugins,disabled:state.disabledPlugins });
+  add('space','space_changed',state.spaceName,null,{});
   return { entries };
 }
 export function auditDiff(before: AuditSnapshot, after: AuditSnapshot): Omit<AuditEntry,'tenantId'|'actor'>[] {

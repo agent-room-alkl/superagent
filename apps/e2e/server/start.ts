@@ -8,6 +8,7 @@ import type { AddressInfo } from 'node:net';
 import { buildApp } from '../../server/src/app.js';
 import { InMemoryConfigRepo, StaticAllowlist } from '../../server/src/modules/setup/service.js';
 import { InMemorySecretStore } from '../../server/src/modules/setup/secrets.js';
+import { createKnowledgeFixture } from './knowledge-fixture.js';
 import { fakeSopRuntime } from './fake-sop.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
@@ -43,7 +44,9 @@ function startStubProvider(): Promise<string> {
 }
 
 const stub = await startStubProvider();
+const knowledge = createKnowledgeFixture();
 const app = await buildApp({
+  knowledgeDeps: knowledge.deps,
   serveWeb: true,
   auth: { mode: 'dev', platformTenantId: 'e2e' },
   setupDeps: {
@@ -55,5 +58,6 @@ const app = await buildApp({
 });
 // SOP runtime contract (T-41) — test double until the runtime module is merged.
 await app.register(fakeSopRuntime(), { prefix: '/api/v1/sop' });
+await knowledge.attach(app);
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT ?? 4173) });
 console.log(JSON.stringify({ msg: 'e2e server ready', stub }));

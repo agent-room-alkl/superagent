@@ -8,6 +8,7 @@ import type pg from 'pg';
 import { authConfigFromEnv, type AuthConfig } from './auth.js';
 import type { AppOptions, ReadinessCheck } from './app.js';
 import type { SetupDeps } from './modules/setup/service.js';
+import { parseSourceResources, type SourceResource } from './modules/knowledge/sources.js';
 import { parseSourceDatabaseConfig, type SourceDatabaseConfig } from './modules/knowledge/database-config.js';
 import { createLlmGateway, StaticPriceBook, type LlmGateway } from './modules/setup/llm-gateway.js';
 
@@ -25,6 +26,7 @@ export interface RuntimeConfig {
   blobUrl: string | null;
   docIntelEndpoint: string | null;
   sourceDatabases?: SourceDatabaseConfig[];
+  sourceResources?: SourceResource[];
 }
 
 export interface Runtime {
@@ -56,7 +58,8 @@ export function checkProductionEnv(env: NodeJS.ProcessEnv): string[] {
 export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factories?: Partial<Factories>): Promise<Runtime> {
   const auth = authConfigFromEnv(env); // throws for AUTH_MODE=dev in production
   const sourceDatabases = parseSourceDatabaseConfig(env.SOURCE_DATABASES_JSON);
-  if (auth.mode === 'dev') { const runtime = await devRuntime(auth); if (sourceDatabases.length) runtime.config.sourceDatabases = sourceDatabases; return runtime; }
+  const sourceResources = parseSourceResources(env.KNOWLEDGE_SOURCES_JSON);
+  if (auth.mode === 'dev') { const runtime = await devRuntime(auth); if (sourceResources.length) runtime.config.sourceResources = sourceResources; if (sourceDatabases.length) runtime.config.sourceDatabases = sourceDatabases; return runtime; }
 
   const missing = checkProductionEnv(env);
   if (missing.length) throw new BootstrapError(missing);
@@ -71,7 +74,7 @@ export async function createRuntime(env: NodeJS.ProcessEnv = process.env, factor
   return {
     pool,
     llm: createLlmGateway({ repo, secrets, budget: new PgBudgetStore(pool), prices: new PgPriceBook(pool) }),
-    config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT!, ...(sourceDatabases.length ? { sourceDatabases } : {}) },
+    config: { mode: 'production', platformTenantId: env.PLATFORM_TENANT_ID!, blobUrl: env.BLOB_URL!, docIntelEndpoint: env.DOC_INTEL_ENDPOINT!, ...(sourceDatabases.length ? { sourceDatabases } : {}), ...(sourceResources.length ? { sourceResources } : {}) },
     app: {
       auth: { ...auth, platformTenantId: env.PLATFORM_TENANT_ID! },
       setupDeps: { repo, secrets, allowlist: new PgAllowlist(pool) },

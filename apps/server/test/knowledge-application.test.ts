@@ -70,7 +70,8 @@ describe('knowledge application: real source store + transactions', () => {
   });
   it('unconfigured external connectors and analysis return actionable errors', async () => {
     const f = await confirmed();
-    await expect(f.service.createConnection(owner, { name: '数据库', pluginId: 'database' })).rejects.toMatchObject({ code: 'connector_not_configured', statusCode: 503 });
+    await f.service.installPlugin(owner, 'database');
+    await expect(f.service.createConnection(owner, { name: '数据库', pluginId: 'database', readOnlyAcknowledged: true })).rejects.toMatchObject({ code: 'connector_not_configured', statusCode: 503 });
     await expect(f.service.startAnalysis(owner)).rejects.toMatchObject({ code: 'analysis_unavailable', statusCode: 503 });
     await expect(f.service.createConnection(owner, { name: 'x', pluginId: 'local-file', scope: { password: 'placeholder' } })).rejects.toMatchObject({ code: 'secret_not_allowed' });
   });

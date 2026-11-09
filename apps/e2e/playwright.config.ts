@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+if (!Number.isInteger(PORT) || PORT < 1024 || PORT > 65535) throw Error('E2E_PORT must be an unprivileged TCP port');
 export const OWNER = 'e2e-owner|owner|';
 export const EMPLOYEE = 'e2e-employee|employee|P-1';
 
