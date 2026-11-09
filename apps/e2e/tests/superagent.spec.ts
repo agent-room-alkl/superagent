@@ -83,7 +83,7 @@ test('fix the draft (remove the tool, add a review), save, publish with an effec
 });
 
 test('editing after publish opens a new draft; the published version and its running instances are untouched', async ({ page, request }) => {
-  const v1 = ((await (await request.get(`/api/v1/sop/${SOP}/versions`)).json()) as { id: string; number: number }[]).find((v) => v.number === 1)!;
+  const v1 = ((await (await request.get(`/api/v1/sop/${SOP}/versions`)).json()) as { versions: { id: string; number: number }[] }).versions.find((v) => v.number === 1)!;
   await request.post(`/api/v1/sop/versions/${v1.id}/instances`);
   await page.goto('/#brain');
   await page.getByLabel('选择流程').selectOption(SOP);
@@ -105,4 +105,37 @@ test('ontology without configured knowledge storage says so instead of inventing
   await page.goto('/#brain');
   await page.getByRole('tab', { name: '本体关系' }).click();
   await expect(page.locator('main')).toContainText('企业知识存储尚未配置');
+});
+
+test('ontology renders objects, a relation and their evidence on the real page (desktop and phone width)', async ({ page }) => {
+  // Response in the shape the knowledge analysis returns (kind object / relation with relation {from,to,label}).
+  const evidence = (quote: string, line: number) => [{ sourceId: 's1', version: 'v1', start: 0, end: quote.length, locator: `采购制度.md#L${line}`, quote }];
+  await page.route('**/api/v1/knowledge/overview', (route) =>
+    route.fulfill({
+      json: {
+        recommendations: [
+          { id: 'r1', key: 'invoice', kind: 'object', name: '供应商发票', description: '供应商开具的付款凭证', evidence: evidence('供应商发票须附采购单号', 3), humanLocked: false, deleted: false },
+          { id: 'r2', key: 'po', kind: 'object', name: '采购单', description: '内部审批后的采购凭证', evidence: evidence('采购单经部门负责人审批', 7), humanLocked: false, deleted: false },
+          { id: 'r3', key: 'invoice-po', kind: 'relation', name: '发票匹配采购单', description: '', relation: { from: 'invoice', to: 'po', label: '须匹配' }, evidence: evidence('付款前发票须与采购单金额一致', 12), humanLocked: false, deleted: false },
+          { id: 'r4', key: 'ap-clerk', kind: 'employee', name: '应付专员', description: '不是本体对象', evidence: evidence('应付专员负责付款', 20), humanLocked: false, deleted: false },
+        ],
+      },
+    }),
+  );
+  await page.goto('/#brain');
+  await page.getByRole('tab', { name: '本体关系' }).click();
+  const objects = page.getByRole('region', { name: '对象与实体' });
+  await expect(objects.locator('[data-object]')).toHaveCount(2); // the employee recommendation is not an ontology object
+  await expect(objects.locator('[data-object="invoice"]')).toContainText('供应商发票');
+  await expect(objects.locator('[data-object="invoice"]')).toContainText('采购制度.md#L3');
+  await expect(objects.locator('[data-object="invoice"]')).toContainText('供应商发票须附采购单号');
+  const relation = page.getByRole('region', { name: '关系' }).locator('[data-relation="invoice-po"]');
+  await expect(relation).toContainText('供应商发票 —须匹配→ 采购单');
+  await expect(relation).toContainText('采购制度.md#L12');
+  await expect(relation).toContainText('付款前发票须与采购单金额一致');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(relation).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
 });

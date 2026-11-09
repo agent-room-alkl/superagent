@@ -54,6 +54,6 @@ const app = await buildApp({
   },
 });
 // SOP runtime contract (T-41) — test double until the runtime module is merged.
-await app.register(fakeSopRuntime(app, 'e2e-owner|owner|'), { prefix: '/api/v1/sop' });
+await app.register(fakeSopRuntime(), { prefix: '/api/v1/sop' });
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT ?? 4173) });
 console.log(JSON.stringify({ msg: 'e2e server ready', stub }));

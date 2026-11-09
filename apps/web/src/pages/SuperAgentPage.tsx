@@ -21,7 +21,7 @@ export interface SopVersionView {
 }
 interface SopSummary {
   sopId: string;
-  name?: string;
+  latest?: { id: string; number: number; status: SopVersionView['status'] };
 }
 interface ToolRow {
   toolId: string;
@@ -97,14 +97,14 @@ function SopWorkspace() {
   const [report, setReport] = useState<GateReport | null>(null);
 
   const loadList = useCallback(async () => {
-    const r = await api<SopSummary[]>('/api/v1/sop');
+    const r = await api<{ sops: SopSummary[] }>('/api/v1/sop');
     if (r.status !== 200) {
       setUnavailable(r.status === 404 ? 'SOP 运行时尚未接入（T-41），暂时只能查看。' : `无法读取流程（${r.status}）`);
       setSops([]);
       return;
     }
     setUnavailable('');
-    setSops(r.body);
+    setSops(Array.isArray(r.body.sops) ? r.body.sops : []);
   }, []);
 
   useEffect(() => {
@@ -114,8 +114,8 @@ function SopWorkspace() {
   }, [loadList]);
 
   const loadVersions = useCallback(async (id: string) => {
-    const r = await api<SopVersionView[]>(`/api/v1/sop/${encodeURIComponent(id)}/versions`);
-    const list = r.status === 200 ? [...r.body].sort((a, b) => b.number - a.number) : [];
+    const r = await api<{ versions: SopVersionView[] }>(`/api/v1/sop/${encodeURIComponent(id)}/versions`);
+    const list = r.status === 200 && Array.isArray(r.body.versions) ? [...r.body.versions].sort((a, b) => b.number - a.number) : [];
     setVersions(list);
     const editable = list.find((v) => v.status !== 'published') ?? list.find((v) => v.status === 'published');
     setDraft(structuredClone(editable?.definition.graph ?? { nodes: [], edges: [] }));
@@ -151,13 +151,14 @@ function SopWorkspace() {
 
   async function publish() {
     if (!openDraft) return;
-    const r = await api<SopVersionView & { error?: string; report?: GateReport }>(`/api/v1/sop/${encodeURIComponent(openDraft.id)}/publish`, {
+    // The runtime re-runs validateSopGraph on publish with this context, then its ten gates.
+    const r = await api<SopVersionView & { error?: string; report?: GateReport; issues?: { message: string }[] }>(`/api/v1/sop/${encodeURIComponent(openDraft.id)}/publish`, {
       method: 'POST',
-      body: JSON.stringify(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}),
+      body: JSON.stringify({ ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}), employees: ctx.employees, tools: ctx.tools }),
     });
     await loadVersions(sopId); // reload first: it resets the editor state
     setReport(r.body.report ?? null);
-    setMsg(r.status === 200 ? `v${r.body.number} 已发布；在途实例继续按原版本运行` : `未发布：${r.body.error ?? r.status}`);
+    setMsg(r.status === 200 ? `v${r.body.number} 已发布；在途实例继续按原版本运行` : `未发布：${r.body.issues?.map((i) => i.message).join('；') || r.body.error || r.status}`);
   }
 
   if (sops === null) return <p className="helper">读取中…</p>;
@@ -170,7 +171,7 @@ function SopWorkspace() {
           <select aria-label="选择流程" value={sopId} onChange={(e) => setSopId(e.target.value)}>
             <option value="">请选择</option>
             {sops.map((s) => (
-              <option key={s.sopId} value={s.sopId}>{s.name ?? s.sopId}</option>
+              <option key={s.sopId} value={s.sopId}>{s.sopId}{s.latest ? `（v${s.latest.number} ${STATUS_LABEL[s.latest.status]}）` : ''}</option>
             ))}
           </select>
         </label>
