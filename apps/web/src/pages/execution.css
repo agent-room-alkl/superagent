@@ -1,0 +1,31 @@
+.exec-room,
+.exec-inbox { display: flex; flex-direction: column; min-height: calc(100dvh - var(--header) - 48px); }
+.exec-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, .8fr); gap: var(--space-md); min-height: 0; flex: 1; }
+.exec-pane, .exec-drawer { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.exec-pane-head, .exec-toolbar { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm); }
+.exec-pane-head h2, .exec-group { margin: 0; font-size: 16px; }
+.exec-pane-head span, .exec-toolbar p, .exec-composer span, .exec-task span, .exec-message span { color: var(--color-muted); font-size: 13px; }
+.exec-scroll { overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: var(--space-sm); }
+.exec-message, .exec-task { border: 0; border-top: 1px solid var(--color-soft-rule); background: transparent; color: inherit; text-align: left; padding: var(--space-sm) 0; }
+.exec-message header, .exec-task { display: flex; flex-direction: column; gap: 2px; }
+.exec-message p, .exec-drawer p { margin: var(--space-2xs) 0 0; }
+.exec-composer { display: flex; flex-direction: column; gap: var(--space-xs); margin-top: var(--space-sm); }
+.exec-composer textarea, .exec-toolbar select {
+  width: 100%; min-height: var(--control); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-rule); background: var(--color-paper); color: var(--color-ink); padding: var(--space-xs) var(--space-sm);
+}
+.exec-composer textarea { min-height: 72px; resize: vertical; }
+.exec-composer-actions, .exec-action { display: flex; align-items: center; gap: var(--space-sm); }
+.exec-action, .exec-composer button, .exec-pane-head button {
+  min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--color-rule);
+  background: var(--color-well); color: var(--color-ink); padding: 0 var(--space-sm); text-decoration: none;
+}
+.exec-drawer dl { margin: 0; display: flex; flex-direction: column; gap: var(--space-sm); }
+.exec-drawer dt { color: var(--color-muted); font-size: 13px; }
+.exec-drawer dd { margin: 0; }
+.exec-toolbar { margin-bottom: var(--space-md); }
+.exec-toolbar label { display: flex; flex-direction: column; gap: var(--space-2xs); color: var(--color-muted); font-size: 13px; }
+.exec-group { margin-top: var(--space-sm); }
+@media (max-width: 800px) {
+  .exec-grid { grid-template-columns: 1fr; }
+}

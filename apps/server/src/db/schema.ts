@@ -2,6 +2,7 @@
  * Core schema skeleton (PRD §5.5). Owners extend their own tables in their module PRs.
  * Rule: secrets are never stored here — only Key Vault secret names/versions.
  */
+import { sql } from 'drizzle-orm';
 import { pgTable, text, uuid, timestamp, jsonb, integer, boolean, bigint, uniqueIndex, index } from 'drizzle-orm/pg-core';
 
 const id = () => uuid('id').primaryKey().defaultRandom();
@@ -158,8 +159,50 @@ export const tasks = pgTable('tasks', {
   attempt: integer('attempt').notNull().default(0),
   identitySnapshot: jsonb('identity_snapshot'),
   deadLetter: boolean('dead_letter').notNull().default(false),
+  kind: text('kind'),
+  payload: jsonb('payload'),
+  notBefore: timestamp('not_before', { withTimezone: true }),
   createdAt: createdAt(),
-}, (t) => [index('tasks_claim').on(t.status, t.leaseUntil)]);
+}, (t) => [
+  index('tasks_claim').on(t.status, t.leaseUntil),
+  uniqueIndex('tasks_open_work').on(
+    t.kind,
+    t.tenantId,
+    sql`(coalesce(${t.payload}->>'operationId', ''))`,
+    sql`(coalesce(${t.payload}->>'runId', ''))`,
+  ).where(sql`${t.deadLetter} = false AND ${t.status} IN ('assigned', 'running')`),
+]);
+
+// Command room rows (T-41): text ids match the room module; (room_id, client_message_id) is the dedup key.
+export const roomMessages = pgTable('room_messages', {
+  id: text('id').primaryKey(),
+  seq: integer('seq').notNull(),
+  tenantId: text('tenant_id').notNull(),
+  roomId: text('room_id').notNull(),
+  author: text('author').notNull(),
+  body: text('body').notNull(),
+  clientMessageId: text('client_message_id').notNull(),
+  mentions: jsonb('mentions').notNull(),
+  taskIds: jsonb('task_ids').notNull(),
+}, (t) => [uniqueIndex('room_messages_dedup').on(t.roomId, t.clientMessageId)]);
+
+export const roomTasks = pgTable('room_tasks', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  roomId: text('room_id').notNull(),
+  projectId: text('project_id'),
+  messageId: text('message_id').notNull(),
+  assigneeUserId: text('assignee_user_id').notNull(),
+  employeeId: text('employee_id').notNull(),
+  title: text('title').notNull(),
+  status: text('status').notNull(),
+  waitingReason: text('waiting_reason'),
+});
+
+export const roomMembers = pgTable('room_members', {
+  roomId: text('room_id').notNull(),
+  userId: text('user_id').notNull(),
+}, (t) => [uniqueIndex('room_members_pk').on(t.roomId, t.userId)]);
 
 export const humanWorkItems = pgTable('human_work_items', {
   id: id(),

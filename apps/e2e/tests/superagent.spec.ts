@@ -34,7 +34,7 @@ test('setup: an online employee, a placeholder tool and a first SOP draft', asyn
     ],
     edges: [{ from: 't', to: 'a' }, { from: 'a', to: 'e' }, { from: 'e', to: 'x' }],
   };
-  expect((await request.post('/api/v1/sop/drafts', { data: { sopId: SOP, definition: { requiredFields: ['title'], employeeStatus: 'active', graph } } })).status()).toBe(200);
+  expect((await request.post('/api/v1/sop/drafts', { data: { sopId: SOP, definition: { requiredFields: ['title', 'amount'], threshold: { field: 'amount', max: 1000 }, employeeStatus: 'active', graph } } })).status()).toBe(200);
 });
 
 test('the graph shows every node; an unimplemented tool and an unreviewed write block publishing', async ({ page }, info) => {
@@ -87,7 +87,7 @@ test('fix the draft (remove the tool, add a review), save, publish with an effec
 
 test('editing after publish opens a new draft; the published version and its running instances are untouched', async ({ page, request }) => {
   const v1 = ((await (await request.get(`/api/v1/sop/${SOP}/versions`)).json()) as { versions: { id: string; number: number }[] }).versions.find((v) => v.number === 1)!;
-  await request.post(`/api/v1/sop/versions/${v1.id}/instances`);
+  expect((await request.post(`/__e2e/sop/versions/${v1.id}/instances`)).ok()).toBe(true);
   await page.goto('/#brain');
   await page.getByLabel('选择流程').selectOption(SOP);
   await expect(page.locator('main')).toContainText('已发布 v1（编辑将新建草稿）');

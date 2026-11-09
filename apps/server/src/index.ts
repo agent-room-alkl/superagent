@@ -1,6 +1,8 @@
 import { APP_ROLES, type AppRole } from '@superagent/shared';
 import { buildApp } from './app.js';
-import { runWorker } from './worker.js';
+import { dispatchBound, runWorker } from './worker.js';
+import { bindRuntimeDb, runtimeState } from './modules/runtime/index.js';
+import { bindRoomStore, hydrateRoom } from './modules/room/index.js';
 import { createKnowledgeDeps, knowledgeReady } from './modules/knowledge/runtime.js';
 import { tickKnowledge } from './modules/knowledge/worker.js';
 
@@ -14,6 +16,14 @@ if (role === 'web') {
   const { createRuntime } = await import('./bootstrap.js');
   const runtime = await createRuntime(process.env); // throws BootstrapError naming missing settings → container exits
   const knowledge = createKnowledgeDeps(runtime);
+  if (runtime.pool) {
+    // T-41: command-room rows and the task queue live in the same PostgreSQL as everything else.
+    const pool = runtime.pool;
+    const db = { query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) };
+    bindRoomStore(db);
+    bindRuntimeDb(db);
+    await hydrateRoom();
+  }
   const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge,
     readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }], serveWeb: true, logger: true });
   app.addHook('onClose', async () => { await knowledge.close?.(); await runtime.close(); });
@@ -29,7 +39,15 @@ if (role === 'web') {
   if (!await knowledgeReady(knowledge)) { await knowledge.close?.(); await runtime.close(); throw Error('Knowledge migrations are required before starting the worker'); }
   let lastHeartbeat = 0;
   try { await runWorker({ runtime, signal: controller.signal, heartbeatMs: 1000,
-    ticks: [async () => { await tickKnowledge(knowledge, runtime.config.platformTenantId); }],
+    ticks: [
+      async () => { await tickKnowledge(knowledge, runtime.config.platformTenantId); },
+      // T-41 queue: one claim per tick for kinds with a registered handler; nothing claimed without one.
+      async () => {
+        if (!runtime.pool) return;
+        const pool = runtime.pool;
+        await dispatchBound({ query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) }, runtimeState.queue, process.env.WORKER_ID ?? 'worker');
+      },
+    ],
     log: entry => { if (entry.msg !== 'worker heartbeat' || Date.now() - lastHeartbeat >= 15_000) { console.log(JSON.stringify(entry)); lastHeartbeat = Date.now(); } },
   }); } finally { await knowledge.close?.(); }
 } else {
