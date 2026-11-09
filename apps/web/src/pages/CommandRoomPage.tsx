@@ -48,8 +48,32 @@ export function roomEventsFromSse(body: string): ApiMessage[] {
   });
 }
 
+export function roomDraftKey(key: string, shift: boolean): 'send' | 'newline' {
+  return key === 'Enter' && !shift ? 'send' : 'newline';
+}
+
 export function nextRoomCursor(messages: readonly ApiMessage[], after: number): number {
   return messages.reduce((max, message) => (Number.isFinite(message.seq) ? Math.max(max, message.seq) : max), after);
+}
+
+export interface RoomLine {
+  id: string;
+  actor: string;
+  kind: string;
+  body: string;
+}
+
+/** First successful poll replaces the sample, including an empty room. Later polls only append new ids. */
+export function applyRoomTranscript(current: readonly RoomLine[], incoming: readonly ApiMessage[], after: number): RoomLine[] {
+  const mapped = incoming.map((message) => ({
+    id: message.id,
+    actor: actorLabel(message.authorUserId),
+    kind: message.taskIds?.length ? '任务' : '消息',
+    body: message.body,
+  }));
+  if (after === 0) return mapped;
+  const seen = new Set(current.map((message) => message.id));
+  return [...current, ...mapped.filter((message) => !seen.has(message.id))];
 }
 
 interface ApiTask {
@@ -102,19 +126,9 @@ export function CommandRoomPage() {
         const response = await fetch(`/api/v1/room/stream?roomId=room-1&after=${after}`, { headers: await authHeaders() });
         if (!response.ok || stop) return;
         const incoming = roomEventsFromSse(await response.text());
-        if (!incoming.length) return;
-        const mapped = incoming.map((message) => ({
-          id: message.id,
-          actor: actorLabel(message.authorUserId),
-          kind: message.taskIds?.length ? '任务' : '消息',
-          body: message.body,
-        }));
+        if (!incoming.length && after !== 0) return;
         cursor.current = nextRoomCursor(incoming, after);
-        setMessages((current) => {
-          if (after === 0) return mapped;
-          const seen = new Set(current.map((message) => message.id));
-          return [...current, ...mapped.filter((message) => !seen.has(message.id))];
-        });
+        setMessages((current) => applyRoomTranscript(current, incoming, after));
       } catch {
         // Keep the prototype transcript when the API is not running.
       }
@@ -203,6 +217,7 @@ export function CommandRoomPage() {
   async function incomingReport() {
     const body = '补充：客户希望本周五前看到报价。';
     if (!taskId) {
+      if (liveTasks) return;
       setMessages((current) => [
         ...current,
         { id: `m${current.length + 1}`, actor: '销售员工', kind: '回报', body },
@@ -280,6 +295,11 @@ export function CommandRoomPage() {
               id="room-draft"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (roomDraftKey(event.key, event.shiftKey) !== 'send') return;
+                event.preventDefault();
+                void sendDraft();
+              }}
               placeholder="闲聊只会得到回复。要派活请 @数字员工。"
             />
             <div className="exec-composer-actions">
@@ -295,7 +315,9 @@ export function CommandRoomPage() {
             <span>由对话产生，链回原消息</span>
           </div>
           <div className="exec-scroll">
-            {(liveTasks ?? [{ id: 'local-task', title: taskTitle, status: 'reported', assigneeUserId: 'user-sales', waitingReason: null }]).map((task) => (
+            {(liveTasks ?? [{ id: 'local-task', title: taskTitle, status: 'reported', assigneeUserId: 'user-sales', waitingReason: null }]).length === 0 ? (
+              <p>当前没有由对话产生的任务。</p>
+            ) : (liveTasks ?? [{ id: 'local-task', title: taskTitle, status: 'reported', assigneeUserId: 'user-sales', waitingReason: null }]).map((task) => (
               <button type="button" className="exec-task" key={task.id} onClick={() => setOpenTaskId(task.id)}>
                 <strong>{task.title}</strong>
                 <span>{taskLine(task)}</span>
@@ -311,9 +333,9 @@ export function CommandRoomPage() {
             </div>
             <dl>
               <div><dt>概览</dt><dd>{(liveTasks ?? []).find((task) => task.id === openTaskId)?.title ?? taskTitle}</dd></div>
-              <div><dt>来源消息</dt><dd>@销售员工 整理询价草稿</dd></div>
+              <div><dt>来源消息</dt><dd>{openTaskId === 'local-task' ? '@销售员工 整理询价草稿' : ((liveTasks ?? []).find((task) => task.id === openTaskId)?.title ?? '这条任务由对话产生')}</dd></div>
               <div><dt>依据与权限</dt><dd>只使用该员工被授权的来源</dd></div>
-              <div><dt>执行记录</dt><dd>询价草稿已放在对话里</dd></div>
+              <div><dt>执行记录</dt><dd>{openTaskId === 'local-task' ? '询价草稿已放在对话里' : taskLine((liveTasks ?? []).find((task) => task.id === openTaskId) ?? { id: openTaskId, title: taskTitle, status: 'assigned', assigneeUserId: reportAs, waitingReason: null })}</dd></div>
             </dl>
           </aside>
         ) : null}

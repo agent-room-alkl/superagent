@@ -9,7 +9,7 @@ SET lease_owner = $1,
     lease_until = now() + ($2::int * interval '1 millisecond'),
     attempt = t.attempt + 1,
     status = 'running',
-    identity_snapshot = jsonb_build_object('workerId', $1::text, 'claimedAt', now())
+    identity_snapshot = jsonb_build_object('workerId', $1::text, 'claimedAt', now(), 'attempt', t.attempt + 1)
 WHERE t.id = (
   SELECT id
   FROM tasks
@@ -128,11 +128,11 @@ WITH updated AS (
     AND dead_letter = false
     AND lease_until > now()
     AND attempt >= $3
-  RETURNING id, tenant_id
+  RETURNING id, tenant_id, identity_snapshot
 )
 INSERT INTO human_work_items (id, tenant_id, kind, renderer, task_id, target, payload_version, status)
 SELECT gen_random_uuid(), tenant_id, 'exception_ruling', 'issue_list', id,
-       jsonb_build_object('reason', $4::text, 'source', 'dead_letter'), 1, 'open'
+       jsonb_build_object('reason', $4::text, 'source', 'dead_letter', 'identity', identity_snapshot), 1, 'open'
 FROM updated
 RETURNING task_id;
 `.trim();

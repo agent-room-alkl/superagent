@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { assigneeForReport, CommandRoomPage, nextRoomCursor, roomEventsFromSse, taskLine } from './CommandRoomPage';
+import { applyRoomTranscript, assigneeForReport, CommandRoomPage, nextRoomCursor, roomDraftKey, roomEventsFromSse, taskLine } from './CommandRoomPage';
 import { canDecide, decisionWhy, inboxFromServer, WorkInboxPage } from './WorkInboxPage';
 
 describe('execution pages reuse the v12 copy', () => {
@@ -32,6 +32,12 @@ describe('execution pages reuse the v12 copy', () => {
     expect(events.map((message) => message.id)).toEqual(['m4', 'm5']);
     expect(nextRoomCursor(events, 0)).toBe(4);
     expect(roomEventsFromSse('')).toEqual([]);
+    const sample = [{ id: 'm1', actor: '负责人', kind: '消息', body: '你好' }];
+    expect(applyRoomTranscript(sample, [], 0)).toEqual([]);
+    expect(applyRoomTranscript(sample, events, 0).map((line) => line.id)).toEqual(['m4', 'm5']);
+    expect(applyRoomTranscript(sample, events, 3).map((line) => line.id)).toEqual(['m1', 'm4', 'm5']);
+    expect(roomDraftKey('Enter', false)).toBe('send');
+    expect(roomDraftKey('Enter', true)).toBe('newline');
   });
 
   it('labels a server task by status and assignee', () => {
