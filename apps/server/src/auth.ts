@@ -41,6 +41,7 @@ export function createAuthenticate(cfg: AuthConfig): preHandlerHookHandler {
       const raw = req.headers['x-dev-user'];
       if (typeof raw !== 'string') return reply.code(401).send({ error: 'unauthenticated' });
       const [userId, roles = '', scopes = ''] = raw.split('|');
+      if (!userId?.trim()) return reply.code(401).send({ error: 'unauthenticated' }); // blank identity is no identity
       req.user = { tenantId: cfg.platformTenantId, userId: userId!, roles: toRoles(roles.split(',')), projectScopes: scopes ? scopes.split(',') : [] };
       return;
     }
