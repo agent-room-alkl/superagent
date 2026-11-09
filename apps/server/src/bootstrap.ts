@@ -90,7 +90,7 @@ async function devRuntime(auth: AuthConfig): Promise<Runtime> {
   console.warn(JSON.stringify({ msg: 'AUTH_MODE=dev: in-memory stores, x-dev-user header accepted. Never use outside local development.' }));
   return {
     pool: null,
-    // Dev: no budget is set until a developer calls setCap on this store, so calls are refused with budget_not_set.
+    // Dev: calls are refused (budget_not_set / price_unknown) until a cap is set in Setup and a priced model exists.
     llm: createLlmGateway({ repo, secrets, budget: new InMemoryBudgetStore(), prices: new StaticPriceBook({}) }),
     config: { mode: 'dev', platformTenantId: auth.platformTenantId, blobUrl: null, docIntelEndpoint: null },
     app: { auth, setupDeps: { repo, secrets, allowlist: new StaticAllowlist({}) }, readiness: [] },

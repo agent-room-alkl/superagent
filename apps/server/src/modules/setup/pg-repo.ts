@@ -28,6 +28,7 @@ export class PgConfigRepo implements ConfigRepo {
       primaryModel: row?.primary_model ?? null,
       economyModel: row?.economy_model ?? null,
       status: (row?.status as LlmConfigRecord['status']) ?? 'unconfigured',
+      monthlyCapMicroUsd: row?.monthly_cap_micro_usd == null ? null : Number(row.monthly_cap_micro_usd),
       history: h.rows.map((x) => ({ at: new Date(x.created_at).toISOString(), event: x.action, detail: x.detail ?? {} })),
     };
   }
@@ -38,13 +39,13 @@ export class PgConfigRepo implements ConfigRepo {
     try {
       await c.query('BEGIN');
       await c.query(
-        `INSERT INTO llm_config (tenant_id, provider, endpoint, key_vault_secret, key_vault_version, key_last4, primary_model, economy_model, status, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now())
+        `INSERT INTO llm_config (tenant_id, provider, endpoint, key_vault_secret, key_vault_version, key_last4, primary_model, economy_model, status, monthly_cap_micro_usd, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
          ON CONFLICT (tenant_id) DO UPDATE SET provider = EXCLUDED.provider, endpoint = EXCLUDED.endpoint,
            key_vault_secret = EXCLUDED.key_vault_secret, key_vault_version = EXCLUDED.key_vault_version,
            key_last4 = EXCLUDED.key_last4, primary_model = EXCLUDED.primary_model, economy_model = EXCLUDED.economy_model,
-           status = EXCLUDED.status, updated_at = now()`,
-        [rec.tenantId, rec.provider, rec.endpoint, rec.secret?.name ?? null, rec.secret?.version ?? null, rec.keyLast4, rec.primaryModel, rec.economyModel, rec.status],
+           status = EXCLUDED.status, monthly_cap_micro_usd = EXCLUDED.monthly_cap_micro_usd, updated_at = now()`,
+        [rec.tenantId, rec.provider, rec.endpoint, rec.secret?.name ?? null, rec.secret?.version ?? null, rec.keyLast4, rec.primaryModel, rec.economyModel, rec.status, rec.monthlyCapMicroUsd],
       );
       const n = await c.query('SELECT count(*)::int AS n FROM audit_log WHERE tenant_id = $1 AND object_type = $2 AND object_id = $3', [rec.tenantId, OBJECT_TYPE, rec.tenantId]);
       for (const h of rec.history.slice(n.rows[0].n)) {

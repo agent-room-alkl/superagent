@@ -7,6 +7,7 @@ interface LlmStatus {
   keyLast4: string | null;
   primaryModel: string | null;
   economyModel: string | null;
+  monthlyCapMicroUsd: number | null;
   reminder: string | null;
 }
 interface TestResponse {
@@ -37,6 +38,8 @@ export function SetupPage() {
   const [primary, setPrimary] = useState('');
   const [economy, setEconomy] = useState('');
   const [msg, setMsg] = useState('');
+  const [capUsd, setCapUsd] = useState('');
+  const [capMsg, setCapMsg] = useState('');
 
   const load = () => api<LlmStatus>('/api/v1/setup/llm').then((r) => setStatus(r.status === 200 ? r.body : null));
   useEffect(() => void load(), []);
@@ -64,6 +67,18 @@ export function SetupPage() {
     }
   }
 
+  async function onSaveCap(e: FormEvent) {
+    e.preventDefault();
+    const r = await api<LlmStatus & { message?: string }>('/api/v1/setup/llm/budget', { method: 'PUT', body: JSON.stringify({ monthlyCapUsd: Number(capUsd) }) });
+    setCapMsg(r.status === 200 ? '已保存，立即对本月生效' : `未保存：${r.body.message ?? '请求失败'}`);
+    if (r.status === 200) {
+      setCapUsd('');
+      await load();
+    }
+  }
+
+  const capText = status?.monthlyCapMicroUsd != null ? `US$${(status.monthlyCapMicroUsd / 1_000_000).toFixed(2)} / 月` : '未设置（模型调用会被拒绝）';
+
   return (
     <>
       <div className="page-head">
@@ -80,6 +95,18 @@ export function SetupPage() {
         </p>
         {status?.reminder ? <p className="warn">{status.reminder}</p> : null}
       </section>
+
+      <form className="panel stack" onSubmit={onSaveCap}>
+        <h2 className="h2">月度用量上限</h2>
+        <p>当前上限：{capText}</p>
+        <p className="helper">硬上限：每次调用前按最大可能费用预留，超出上限的调用不会发出。下调到低于本月已用额度时，新调用会被拒绝。</p>
+        <label className="field">
+          <span>新的上限（美元，最多两位小数）</span>
+          <input inputMode="decimal" value={capUsd} onChange={(e) => setCapUsd(e.target.value)} placeholder="例如 200" required />
+        </label>
+        <button className="btn" type="submit">保存上限</button>
+        {capMsg ? <p className="helper">{capMsg}</p> : null}
+      </form>
 
       <form className="panel stack" onSubmit={onTest}>
         <h2 className="h2">设置或更换 Key</h2>

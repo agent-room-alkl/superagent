@@ -54,8 +54,8 @@ export interface ReservationMeta {
 }
 
 export interface BudgetStore {
-  /** The month's hard cap, or null when no budget has been set (calls are then refused). */
-  capFor(tenantId: string, month: string): Promise<number | null>;
+  /** Opens (or re-caps) the month from the configured cap; Setup's monthlyCapMicroUsd is the source of truth. */
+  openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void>;
   /** Atomically reserve; returns a reservation id or null when the cap would be exceeded. */
   reserve(tenantId: string, month: string, amountMicroUsd: number, meta?: ReservationMeta): Promise<string | null>;
   /**
@@ -96,8 +96,8 @@ export class InMemoryBudgetStore implements BudgetStore {
   snapshot(tenantId: string, month: string) {
     return { ...(this.budgets.get(`${tenantId}/${month}`) ?? { cap: 0, reserved: 0, spent: 0 }) };
   }
-  async capFor(tenantId: string, month: string): Promise<number | null> {
-    return this.budgets.get(`${tenantId}/${month}`)?.cap ?? null;
+  async openMonth(tenantId: string, month: string, capMicroUsd: number): Promise<void> {
+    this.setCap(tenantId, month, capMicroUsd);
   }
   async reserve(tenantId: string, month: string, amount: number): Promise<string | null> {
     assertReservable(amount);

@@ -16,6 +16,18 @@ describe('app scaffold', () => {
     await app.close();
   });
 
+  it('publishes browser sign-in config without secrets (dev and entra)', async () => {
+    const dev = await buildApp();
+    expect((await dev.inject('/auth/config')).json()).toEqual({ mode: 'dev' });
+    await dev.close();
+    const entra = await buildApp({ auth: { mode: 'entra', tenantId: 'tid-1', clientId: 'cid-1', platformTenantId: 'p' } });
+    const r = await entra.inject('/auth/config');
+    expect(r.statusCode).toBe(200); // public: the browser needs it before sign-in
+    expect(r.json()).toEqual({ mode: 'entra', tenantId: 'tid-1', clientId: 'cid-1', scopes: ['api://cid-1/access_as_user'] });
+    expect((await entra.inject('/api/v1/setup/llm')).statusCode).toBe(401); // API still requires a token
+    await entra.close();
+  });
+
   it('treats a blank dev identity as unauthenticated, not as a user without roles', async () => {
     const app = await buildApp();
     for (const v of ['', '|owner|', '  |admin|']) expect((await app.inject({ url: '/api/v1/setup/llm', headers: { 'x-dev-user': v } })).statusCode).toBe(401);

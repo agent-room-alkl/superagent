@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { LlmProviderId } from '@superagent/shared';
-import { activateKey, InMemoryConfigRepo, publicView, revokeKey, selectableModels, StaticAllowlist, testKey, type SetupDeps } from './service.js';
+import { activateKey, InMemoryConfigRepo, MAX_MONTHLY_CAP_MICRO_USD, publicView, revokeKey, selectableModels, setMonthlyCap, StaticAllowlist, testKey, type SetupDeps } from './service.js';
 import { InMemorySecretStore } from './secrets.js';
 
 /**
@@ -53,4 +53,15 @@ export const setupModule: FastifyPluginAsync<SetupModuleOptions> = async (app, o
   );
 
   app.delete('/llm', async (req) => publicView(await revokeKey(tenantOf(req), deps)));
+
+  /** Monthly hard cap, entered in USD (up to 2 decimals). */
+  app.put<{ Body: { monthlyCapUsd: number } }>('/llm/budget', async (req, reply) => {
+    const usd = req.body?.monthlyCapUsd;
+    const micro = typeof usd === 'number' && Number.isFinite(usd) ? Math.round(usd * 1_000_000) : NaN;
+    if (!(micro > 0) || micro > MAX_MONTHLY_CAP_MICRO_USD || Math.abs(usd * 100 - Math.round(usd * 100)) > 1e-6) {
+      return reply.code(400).send({ error: 'invalid_cap', message: 'enter a positive amount in USD with at most 2 decimals, up to 1,000,000' });
+    }
+    const actor = (req as { user?: { userId?: string } }).user?.userId ?? 'unknown';
+    return publicView(await setMonthlyCap(tenantOf(req), micro, actor, deps));
+  });
 };
