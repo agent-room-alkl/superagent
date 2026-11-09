@@ -125,6 +125,40 @@ resource artifacts 'Microsoft.Storage/storageAccounts/blobServices/containers@20
   parent: blobSvc
   name: 'artifacts'
 }
+// Restricted screenshot retention for sandbox runs: private container, deleted automatically after 7 days.
+resource screenshots 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobSvc
+  name: 'screenshots'
+}
+resource screenshotLifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          name: 'expire-screenshots'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: { blobTypes: ['blockBlob'], prefixMatch: ['screenshots/'] }
+            actions: { baseBlob: { delete: { daysAfterModificationGreaterThan: 7 } } }
+          }
+        }
+      ]
+    }
+  }
+}
+// The sandbox identity may write only to the screenshots container — no Key Vault, no database, no other containers.
+resource sandboxScreenshotWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: screenshots
+  name: guid(screenshots.id, sandboxIdentity.id, 'blob-contributor')
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: sandboxIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 resource appBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: storage
   name: guid(storage.id, appIdentity.id, 'blob-contributor')
@@ -331,6 +365,7 @@ resource sandbox 'Microsoft.App/jobs@2024-03-01' = {
           env: [
             { name: 'APP_ROLE', value: 'browser' }
             { name: 'AZURE_CLIENT_ID', value: sandboxIdentity.properties.clientId }
+            { name: 'SCREENSHOT_BLOB_URL', value: storage.properties.primaryEndpoints.blob }
           ]
         }
       ]

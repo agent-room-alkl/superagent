@@ -33,6 +33,8 @@ jobs:
       - run: npm ci
       - run: npm run build -w @superagent/shared
       - run: npm run typecheck
+      - name: Compile Bicep for RBAC policy tests
+        run: az bicep build --file infra/main.bicep --outfile infra/main.json
       - run: npm test
       - run: npm run build
 

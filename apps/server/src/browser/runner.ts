@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { verifyArtifact, isAllowedUrl } from '../modules/sandbox/guards.js';
 import { validateProcedure, type Procedure } from '../modules/sandbox/replay.js';
+import { InMemoryScreenshotStore, type ScreenshotStore } from '../modules/sandbox/screenshots.js';
 
 export interface RunSpec {
   runId: string;
@@ -18,6 +19,11 @@ export interface RunSpec {
   timeoutMs?: number;
 }
 
+export interface RunOptions {
+  /** Restricted retention for every step screenshot (always used; defaults to an in-memory store). */
+  screenshots?: ScreenshotStore;
+}
+
 export interface RunResult {
   runId: string;
   ok: boolean;
@@ -27,7 +33,8 @@ export interface RunResult {
   error?: string;
 }
 
-export async function runProcedure(spec: RunSpec): Promise<RunResult> {
+export async function runProcedure(spec: RunSpec, opts: RunOptions = {}): Promise<RunResult> {
+  const store = opts.screenshots ?? new InMemoryScreenshotStore();
   verifyArtifact(spec.artifact, spec.releasedDigest); // throws on tampering — nothing runs
   const proc = JSON.parse(spec.artifact) as Procedure;
   validateProcedure(proc);
@@ -49,11 +56,13 @@ export async function runProcedure(spec: RunSpec): Promise<RunResult> {
   const outputs: Record<string, string> = {};
   const shots: string[] = [];
   const shot = async (n: number) => {
-    if (!spec.screenshotDir) return;
-    fs.mkdirSync(spec.screenshotDir, { recursive: true });
-    const f = path.join(spec.screenshotDir, `${spec.runId}-${String(n).padStart(3, '0')}.png`);
-    await page.screenshot({ path: f });
-    shots.push(f);
+    const png = await page.screenshot();
+    const rec = await store.put(spec.runId, n, png);
+    shots.push(rec.key);
+    if (spec.screenshotDir) {
+      fs.mkdirSync(spec.screenshotDir, { recursive: true });
+      fs.writeFileSync(path.join(spec.screenshotDir, `${spec.runId}-${String(n).padStart(3, '0')}.png`), png);
+    }
   };
 
   try {
@@ -100,10 +109,19 @@ export async function runProcedure(spec: RunSpec): Promise<RunResult> {
 }
 
 /** Entry for APP_ROLE=browser: spec arrives base64-encoded in RUN_SPEC; result is printed as one JSON line. */
+/** Defense in depth: the sandbox must never be configured with main-app secrets or database access. */
+export function assertSandboxEnvironment(env: NodeJS.ProcessEnv): void {
+  const forbidden = ['KEY_VAULT_URL', 'DATABASE_URL', 'PG_HOST', 'PG_USER', 'ENTRA_CLIENT_SECRET'].filter((k) => env[k]);
+  if (forbidden.length) throw new Error(`sandbox refuses to start with main-app settings: ${forbidden.join(', ')}`);
+}
+
 export async function runFromEnv(env = process.env): Promise<void> {
+  assertSandboxEnvironment(env);
   if (!env.RUN_SPEC) throw new Error('RUN_SPEC is not set');
   const spec = JSON.parse(Buffer.from(env.RUN_SPEC, 'base64').toString('utf8')) as RunSpec;
-  const result = await runProcedure({ ...spec, screenshotDir: spec.screenshotDir ?? '/tmp/shots' });
+  const { createBlobScreenshotStore } = await import('../modules/sandbox/screenshots.js');
+  const store = env.SCREENSHOT_BLOB_URL ? await createBlobScreenshotStore(env.SCREENSHOT_BLOB_URL) : new InMemoryScreenshotStore();
+  const result = await runProcedure(spec, { screenshots: store });
   console.log(JSON.stringify({ msg: 'run_result', ...result }));
   if (!result.ok) process.exitCode = 2;
 }
