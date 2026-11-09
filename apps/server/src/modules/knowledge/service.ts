@@ -70,10 +70,10 @@ export class KnowledgeService {
     const items = s.source.items.filter(i => this.allowed(s, ctx, i, false));
     const recs = s.recommendations.filter(r => !r.deleted).flatMap(r => {
       const valid = r.origin === 'manual' || r.evidence.length > 0 && r.evidence.every(e => this.valid(s, ctx, e));
-      const identityAllowed = r.evidence.length > 0 && r.evidence.every(e => {
+      const identityAllowed = r.humanLocked && r.evidence.length > 0 && r.evidence.every(e => {
         const old = s.source.items.find(i => i.id === e.sourceId);
         const current = old && s.source.items.find(i => i.current && i.connectionId === old.connectionId && i.externalId === old.externalId);
-        return !!current && this.allowed(s, ctx, current);
+        return !!current && this.allowed(s, ctx, current, false);
       });
       if (!valid && !identityAllowed) return [];
       return [{ ...r, stale: !valid, evidence: valid ? r.evidence : [], proposedChange: r.proposedChange?.evidence.every(e => this.valid(s, ctx, e)) ? r.proposedChange : undefined }];

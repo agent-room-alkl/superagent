@@ -85,6 +85,9 @@ function markMissingAsDeleted(store: KnowledgeStore, connectionId: string, prese
   for (const it of store.items.values()) {
     if (it.connectionId === connectionId && it.current && !present.has(it.externalId) && it.status !== 'deleted') {
       it.status = 'deleted';
+      it.contentHash = '';
+      it.confirmedVersion = null;
+      store.dropChunks(it.id);
       store.flagCiters(it.id, 'evidence deleted at source');
     }
   }
@@ -99,6 +102,8 @@ async function applyRef(store: KnowledgeStore, plugin: KnowledgeSourcePlugin, cf
     const affected = [existing, ...store.childrenOf(cfg.connectionId, ref.externalId)].filter((i): i is Item => !!i && i.status !== status);
     for (const it of affected) {
       it.status = status;
+      it.contentHash = '';
+      it.confirmedVersion = null;
       store.dropChunks(it.id); // the item record (history) stays; its content leaves retrieval storage
       store.flagCiters(it.id, reason);
     }

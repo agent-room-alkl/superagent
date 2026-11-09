@@ -100,3 +100,5 @@ First install the source plugin, explicitly acknowledge the read-only scope, cre
 Database sources continue to use `SOURCE_DATABASES_JSON` and independent SELECT-only identities. Current facts are never copied into knowledge. Their freshness token binds the source change signal to the current user, template, schema and approved scope. PostgreSQL uses `pg_current_snapshot()` conservatively: unrelated transactions may expire a result. Missing or changing signals cannot establish freshness. Requery to read current values.
 
 For simultaneous E2E worktrees set `E2E_PORT` to an unused unprivileged port. The browser fixture is test-only and explicitly models external sources, models and database data; it is not proof of live Azure or Graph access.
+
+Remote sources currently import email message bodies and supported text files. PDF, Office and image attachments or SharePoint files remain unsupported in the production remote connector path; use the local document upload queue for those files. Enabling non-text remote import requires durable blob-backed parse jobs with persisted Document Intelligence operation/lease state and uncertain-submission handling.

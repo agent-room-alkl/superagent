@@ -89,13 +89,26 @@ export function createSharePointPlugin(deps: GraphDeps, parser?: DocParser): Kno
       const s = scopeOf(cfg);
       const start = cursor ?? `${GRAPH}/drives/${enc(s.driveId)}/root/delta?$select=id,name,webUrl,cTag,eTag,file,folder,deleted,parentReference`;
       const { values, cursor: next } = await readDelta<DriveItem>(deps, cfg, start, DELTA_HEADERS);
+      if (cursor && values.some(it => it.folder || it.deleted && !it.file)) {
+        // A folder move/rename/deletion may omit its descendants from delta. Reconcile the complete snapshot instead
+        // of leaving old child documents inside the approved scope. Deleted facets do not reliably retain item kind.
+        // Full snapshots have no supplied cursor, so the sync engine's one-time relist cannot recurse here.
+        throw new SourceError('cursor_invalid', 'folder hierarchy changed; full source reconciliation required');
+      }
       const items: SourceItemRef[] = [];
       for (const it of values) {
         if (it.deleted) {
           items.push({ externalId: it.id, version: 'deleted', title: it.name ?? it.id, locator: it.webUrl ?? it.id, change: 'deleted' });
           continue;
         }
-        if (!it.file || !inFolder(it, s.folderPath)) continue;
+        if (!it.file) continue;
+        if (!inFolder(it, s.folderPath)) {
+          // Drive delta includes files moved out of the approved subtree. Skipping them would preserve old citations.
+          // Keep only the opaque item ID for withdrawal; outside-scope titles and URLs never enter preview metadata.
+          siteOf.delete(it.id);
+          items.push({ externalId: it.id, version: 'outside-scope', title: it.id, locator: it.id, change: 'access_revoked' });
+          continue;
+        }
         if (it.parentReference?.siteId) siteOf.set(it.id, it.parentReference.siteId);
         items.push({ externalId: it.id, version: it.cTag ?? it.eTag ?? '1', title: it.name ?? it.id, locator: it.webUrl ?? it.id, change: 'upsert' });
       }

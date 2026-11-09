@@ -101,10 +101,11 @@ test('editing after publish opens a new draft; the published version and its run
   await expect(page.getByRole('button', { name: '校验并发布' })).toBeDisabled();
 });
 
-test('ontology without configured knowledge storage says so instead of inventing objects', async ({ page }) => {
+test('ontology with configured knowledge but no readable objects stays empty', async ({ page }) => {
   await page.goto('/#brain');
   await page.getByRole('tab', { name: '本体关系' }).click();
-  await expect(page.locator('main')).toContainText('企业知识存储尚未配置');
+  await expect(page.locator('main')).toContainText('还没有经确认来源支持的对象。先在企业知识里确认来源并运行分析。');
+  await expect(page.locator('[data-object], [data-relation]')).toHaveCount(0);
 });
 
 test('ontology renders objects, a relation and their evidence on the real page (desktop and phone width)', async ({ page }) => {

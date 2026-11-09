@@ -8,6 +8,8 @@ export const EMPLOYEE = 'e2e-employee|employee|P-1';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
+  // Suites share mutable business-tool/SOP fixtures within one real application process.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
