@@ -89,6 +89,7 @@ export interface LlmGateway {
 
 export function createLlmGateway(deps: LlmGatewayDeps): LlmGateway {
   const timeoutMs = deps.timeoutMs ?? 120_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) throw new Error('timeoutMs must be an integer between 1 and 600000');
   const factory =
     deps.providerFactory ?? ((cfg) => createProvider(cfg, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })));
 
