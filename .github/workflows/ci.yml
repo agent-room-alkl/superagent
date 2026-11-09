@@ -64,6 +64,17 @@ jobs:
         run: docker build -t superagent:ci .
       - name: Build browser image (no push)
         run: docker build -f Dockerfile.browser -t superagent-browser:ci .
+      - name: Run the sandbox container once (same entrypoint the Container Apps Job uses)
+        run: |
+          (cd ci && python3 -m http.server 8099 --bind 127.0.0.1 >/dev/null 2>&1 &)
+          sleep 1
+          SPEC=$(node ci/make-run-spec.mjs http://127.0.0.1:8099/fixture.html)
+          docker run --rm --network host -e APP_ROLE=browser -e RUN_SPEC="$SPEC" superagent-browser:ci | tee sandbox-run.log
+          grep -q '"msg":"run_result"' sandbox-run.log
+          grep -q '"ok":true' sandbox-run.log
+          grep -q 'tracker.invalid' sandbox-run.log
+          echo "--- guard: refuses main-app settings ---"
+          if docker run --rm -e APP_ROLE=browser -e KEY_VAULT_URL=https://kv.example -e RUN_SPEC="$SPEC" superagent-browser:ci; then echo "should have refused"; exit 1; fi
       - name: Smoke test web role
         run: |
           docker run -d --name sa -p 8080:8080 -e APP_ROLE=web superagent:ci
