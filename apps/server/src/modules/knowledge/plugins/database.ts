@@ -59,7 +59,8 @@ export function validateTemplate(t: QueryTemplate, scope: DbScope): { maskedOutp
   if (/--|\/\*/.test(sql)) throw new QueryGatewayError('comments are not allowed in templates');
   if (/["`]/.test(sql)) throw new QueryGatewayError('quoted identifiers are not allowed');
   const body = sql.replace(/'(?:[^']|'')*'/g, "''"); // string literals are values, not identifiers
-  const tables = [...body.matchAll(/\b(?:from|join)\s+([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?([a-z_][a-z0-9_]*))?/gi)];
+  // An alias is never a keyword: "FROM a JOIN b" must register both a and b.
+  const tables = [...body.matchAll(/\b(?:from|join)\s+([a-z_][a-z0-9_]*)(?:\s+(?:as\s+)?(?!(?:join|inner|left|on|where|group|order|having)\b)([a-z_][a-z0-9_]*))?/gi)];
   if (!tables.length) throw new QueryGatewayError('no table referenced');
   const names = new Set<string>();
   for (const m of tables) {
@@ -81,9 +82,39 @@ export function validateTemplate(t: QueryTemplate, scope: DbScope): { maskedOutp
     if (KEYWORDS.has(word) || names.has(word) || cols.has(word)) continue;
     throw new QueryGatewayError(`identifier ${word} is not allow-listed`);
   }
+  checkQualifiedColumns(body, tables, scope, names, cols);
   if (/\*/.test(body.replace(/count\s*\(\s*\*\s*\)/gi, ''))) throw new QueryGatewayError('SELECT * is not allowed; list allow-listed columns');
   if ((body.match(/\$\d+/g) ?? []).some((p) => Number(p.slice(1)) > t.params.length)) throw new QueryGatewayError('undeclared parameter');
   return { maskedOutputs: sensitiveLineage(body, tables.map((m) => m[1]!.toLowerCase()), scope) };
+}
+
+/**
+ * Column allowlists are per table. A qualified column ("i.iban") must be allow-listed for the table its qualifier
+ * names, never borrowed from another referenced table's list. When more than one distinct table is referenced,
+ * every column must be qualified, so an unqualified name cannot resolve to a table where it is not allow-listed.
+ */
+function checkQualifiedColumns(body: string, tables: RegExpMatchArray[], scope: DbScope, names: Set<string>, cols: Set<string>): void {
+  const tableOf = new Map<string, string>();
+  for (const m of tables) {
+    const tbl = m[1]!.toLowerCase();
+    tableOf.set(tbl, tbl);
+    const alias = m[2]?.toLowerCase();
+    if (alias && !KEYWORDS.has(alias)) tableOf.set(alias, tbl);
+  }
+  const qualified = /(?<![a-z0-9_$.])([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)/gi;
+  for (const m of body.matchAll(qualified)) {
+    const q = m[1]!.toLowerCase();
+    const col = m[2]!.toLowerCase();
+    const tbl = tableOf.get(q);
+    if (!tbl) throw new QueryGatewayError(`unknown table or alias ${q}`);
+    if (!scope.tables[tbl]!.columns.some((c) => c.toLowerCase() === col)) throw new QueryGatewayError(`column ${col} is not allow-listed for ${tbl}`);
+  }
+  if (new Set(tables.map((m) => m[1]!.toLowerCase())).size < 2) return;
+  const rest = body.replace(qualified, ' ').replace(/\bas\s+[a-z_][a-z0-9_]*/gi, ' ');
+  for (const m of rest.matchAll(/(?<![a-z0-9_$])[a-z_][a-z0-9_]*(?!\s*\()/gi)) {
+    const w = m[0].toLowerCase();
+    if (cols.has(w) && !names.has(w)) throw new QueryGatewayError(`qualify ${w} with its table or alias when more than one table is referenced`);
+  }
 }
 
 /**
