@@ -145,7 +145,7 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     await expect(run.locator('[data-step="w"]')).toHaveAttribute('data-step-status', 'pending');
     expect(Object.keys(await json<Record<string, unknown>>(page.request.get('/__e2e/erp/ledger')))).toEqual(['INV-480']);
     await page.goto('/#work');
-    await expect(page.getByRole('button', { name: /补资料/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /补资料：缺少 amount（事件 INV-000）/ })).toBeVisible();
     await page.goto('/#brain');
     await page.getByLabel('选择流程').selectOption(SOP);
   });

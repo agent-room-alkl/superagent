@@ -115,8 +115,9 @@ export class WorkInbox {
     return [...this.items.values()].map((item) => this.view(item));
   }
 
-  list(viewer: Viewer, options?: { exceptionsOnly?: boolean; projectId?: string }): WorkItem[] {
+  list(viewer: Viewer, options?: { exceptionsOnly?: boolean; projectId?: string; tenantId?: string }): WorkItem[] {
     return [...this.items.values()]
+      .filter((item) => !options?.tenantId || item.tenantId === options.tenantId)
       .filter((item) => this.visible(item, viewer))
       .filter((item) => !options?.exceptionsOnly || item.kind === 'exception_ruling')
       .filter((item) => !options?.projectId || item.projectId === options.projectId)
@@ -151,6 +152,7 @@ export class WorkInbox {
   revise(id: string, patch: Record<string, unknown>): WorkItem {
     const item = this.require(id);
     item.payload = { ...item.payload, ...patch };
+    item.draft = null; // the staged edits are now the saved version
     item.payloadVersion += 1;
     item.payloadHash = payloadHash(item.payload);
     item.decision = null;
@@ -260,10 +262,24 @@ export class WorkInbox {
   private revokeDownstream(dataCheckId: string): void {
     for (const downstream of this.items.values()) {
       if (downstream.kind !== 'action_approval' || downstream.payload.dataCheckId !== dataCheckId) continue;
+      if (!downstream.decision) continue; // nothing was approved yet, so there is nothing to retire
       downstream.decision = null;
       downstream.status = 'withdrawn';
       downstream.actionStatus = null;
     }
+  }
+
+  /**
+   * Guard for every change made through the API: the item must be in the caller's tenant and visible to them
+   * (else not_found, so its existence does not leak), and the caller must be the assignee — or a reviewer ruling an
+   * exception. Owners see everything but do not act on someone else's item.
+   */
+  actor(id: string, viewer: Viewer, tenantId: string | undefined): { ok: true } | { ok: false; reason: 'work_item_not_found' | 'not_assignee' } {
+    const item = this.items.get(id);
+    if (!item || (tenantId !== undefined && item.tenantId !== tenantId) || !this.visible(item, viewer)) return { ok: false, reason: 'work_item_not_found' };
+    if (item.assigneeUserId === viewer.userId) return { ok: true };
+    if (item.kind === 'exception_ruling' && viewer.roles.includes('reviewer')) return { ok: true };
+    return { ok: false, reason: 'not_assignee' };
   }
 
   private visible(item: WorkItem, viewer: Viewer): boolean {

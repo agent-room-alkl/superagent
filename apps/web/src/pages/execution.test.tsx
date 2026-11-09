@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { applyRoomTranscript, assigneeForReport, CommandRoomPage, nextRoomCursor, roomDraftKey, roomEventsFromSse, taskLine } from './CommandRoomPage';
-import { canDecide, decisionWhy, inboxFromServer, WorkInboxPage } from './WorkInboxPage';
+import { canDecide, decisionWhy, GROUPS, inboxFromServer, KIND_LABEL, RENDERER_LABEL, WorkInboxPage } from './WorkInboxPage';
 
 describe('execution pages reuse the v12 copy', () => {
   it('keeps the command room title and subtitle on one head, with the shared transcript', () => {
@@ -83,14 +83,15 @@ describe('execution pages reuse the v12 copy', () => {
     expect(decisionWhy(undefined, '原来的说明')).toBe('原来的说明');
   });
 
-  it('lists the seven work-item kinds, four renderers, and the three inbox groups', () => {
+  it('starts with no sample items, and keeps the seven kinds, four renderers and three groups', () => {
     const html = renderToStaticMarkup(<WorkInboxPage />);
     expect(html).toContain('待我处理');
     expect(html).toContain('核对数据、作决定、亲自完成工作；每一步都有证据和下一位责任人。');
+    expect(html).toContain('正在读取');
+    expect(html).not.toContain('核对拟写入的报价金额'); // the old prototype sample is gone
     for (const label of ['需要我行动', '等待外部', '内部未完']) expect(html).toContain(label);
-    for (const kind of ['数据核对与修正', '精确动作批准', '人工执行并回填', '正常分支选择', '例外裁定', '补资料', '成果复核']) {
-      expect(html).toContain(kind);
-    }
-    for (const renderer of ['字段差异卡', '批量明细表', '邮件 / 文档预览', '问题清单']) expect(html).toContain(renderer);
+    expect(Object.values(KIND_LABEL)).toEqual(['数据核对与修正', '精确动作批准', '人工执行并回填', '正常分支选择', '例外裁定', '补资料', '成果复核']);
+    expect(Object.values(RENDERER_LABEL)).toEqual(['字段差异卡', '批量明细表', '邮件 / 文档预览', '问题清单']);
+    expect(GROUPS.map((g) => g.label)).toEqual(['需要我行动', '等待外部', '内部未完']);
   });
 });
