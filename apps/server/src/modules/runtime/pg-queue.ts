@@ -13,6 +13,7 @@ export interface ClaimedTaskRow {
   tenant_id?: string;
   payload?: WorkRef | null;
   max_attempts?: number;
+  identity_snapshot?: Record<string, unknown> | null;
 }
 
 /** One round-trip claim. The SKIP LOCKED subquery is the only thing that may take the row. */

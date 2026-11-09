@@ -43,6 +43,7 @@ it('a bound database is claimed only for a registered kind, and the handler runs
           kind: 'knowledge.parse',
           tenant_id: '11111111-1111-4111-8111-111111111111',
           payload: { tenantId: '11111111-1111-4111-8111-111111111111', itemId: 'item-1' },
+          identity_snapshot: { workerId: 'worker-a', claimedAt: '2026-11-09T00:00:00.000Z', attempt: 1 },
         } as T],
       };
     },
@@ -56,6 +57,7 @@ it('a bound database is claimed only for a registered kind, and the handler runs
   const claimed = await dispatchBound(db, queue, 'worker-a');
   expect(claimed?.id).toBe('pg-parse');
   expect(claimed?.payload).toEqual({ tenantId: '11111111-1111-4111-8111-111111111111', itemId: 'item-1' });
+  expect(claimed?.identitySnapshot).toEqual({ workerId: 'worker-a', claimedAt: '2026-11-09T00:00:00.000Z', attempt: 1 });
   expect(seen).toEqual(['pg-parse']);
   expect(calls[0]?.sql).toBe(CLAIM_TASK_KIND_SQL);
   expect(calls[0]?.params).toEqual(['worker-a', 60_000, 3, ['knowledge.parse']]);

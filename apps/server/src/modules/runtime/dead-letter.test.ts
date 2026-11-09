@@ -18,6 +18,7 @@ it('dead-letter opens one exception item and does not open another on a later cl
   assert.equal(visible[0]?.renderer, 'issue_list');
   assert.equal(visible[0]?.payload.taskId, 'task-a');
   assert.equal(visible[0]?.payload.reason, 'dead_letter:boom');
+  assert.equal((visible[0]?.payload.identity as { workerId?: string } | null)?.workerId, 'worker-a');
 
   assert.equal(queue.claim('worker-b', 20), null);
   assert.equal(inbox.list({ userId: 'user-ops', roles: ['employee'], projectScopes: ['proj-1'] }).length, 1);

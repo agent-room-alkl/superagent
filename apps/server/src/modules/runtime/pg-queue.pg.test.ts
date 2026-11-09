@@ -98,6 +98,10 @@ live('two workers claim different rows, and a locked row is skipped instead of w
     expect(new Set(ids).size).toBe(2);
     expect(ids).toEqual(expect.arrayContaining([older, newer]));
     expect([first, second, third].filter((row) => row === null)).toHaveLength(1);
+    for (const row of [first, second, third]) {
+      if (!row) continue;
+      expect(row.identity_snapshot).toMatchObject({ workerId: row.lease_owner, attempt: 1 });
+    }
 
     const locked = await insertTask(pool, 2_000);
     const holder = await pool.connect();
@@ -139,11 +143,12 @@ live('a failed claim retries once, then dead-letter opens a single exception ite
     const client = await pool.connect();
     try {
       await client.query(`SET search_path TO "${SCHEMA}"`);
-      const items = await client.query<{ kind: string; renderer: string; reason: string }>(
-        `SELECT kind, renderer, target->>'reason' AS reason FROM human_work_items WHERE task_id = $1`,
+      const items = await client.query<{ kind: string; renderer: string; reason: string; worker: string }>(
+        `SELECT kind, renderer, target->>'reason' AS reason, target->'identity'->>'workerId' AS worker
+         FROM human_work_items WHERE task_id = $1`,
         [taskId],
       );
-      expect(items.rows).toEqual([{ kind: 'exception_ruling', renderer: 'issue_list', reason: 'boom' }]);
+      expect(items.rows).toEqual([{ kind: 'exception_ruling', renderer: 'issue_list', reason: 'boom', worker: 'worker-a' }]);
       const task = await client.query<{ dead_letter: boolean; status: string }>(
         'SELECT dead_letter, status FROM tasks WHERE id = $1',
         [taskId],

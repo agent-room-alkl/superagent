@@ -68,6 +68,12 @@ export async function dispatchBound(db: Queryable, queue: TaskQueue, workerId: s
   return task;
 }
 
+function claimSnapshot(row: ClaimedTaskRow): Record<string, unknown> {
+  const stored = row.identity_snapshot;
+  if (stored && typeof stored === 'object') return { ...stored };
+  return { workerId: row.lease_owner, attempt: row.attempt };
+}
+
 function claimedWork(row: ClaimedTaskRow): QueueTask {
   return {
     id: row.id,
@@ -84,7 +90,7 @@ function claimedWork(row: ClaimedTaskRow): QueueTask {
     attempt: row.attempt,
     maxAttempts: row.max_attempts ?? 3,
     deadLetter: false,
-    identitySnapshot: null,
+    identitySnapshot: claimSnapshot(row),
     kind: row.kind ?? null,
     payload: row.payload ?? null,
     notBefore: null,

@@ -14,6 +14,7 @@ export function openDeadLetterItem(inbox: WorkInbox, task: QueueTask): WorkItem 
       source: 'dead_letter',
       reason: task.waitingReason,
       attempt: task.attempt,
+      identity: task.identitySnapshot,
     },
   });
 }
