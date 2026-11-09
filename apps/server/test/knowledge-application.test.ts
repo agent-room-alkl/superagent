@@ -36,9 +36,11 @@ describe('knowledge application: real source store + transactions', () => {
   });
   it('unknown ACL cannot be confirmed and removes old citations immediately', async () => {
     const f = await confirmed();
+    expect((await f.service.preview(owner, f.item.id, f.item.version)).chunks[1]).toMatchObject({ text: '付款前核对金额。', start: 4 });
     await f.repo.transact(owner, s => { s.source.items[0]!.acl = null; invalidateAnalyses(s); });
     await expect(f.service.confirm(owner, f.item.id, f.item.version)).rejects.toMatchObject({ code: 'source_denied' });
     expect((await f.service.search(owner, '付款')).hits).toEqual([]);
+    await expect(f.service.preview(owner, f.item.id, f.item.version)).rejects.toMatchObject({ code: 'not_found' });
   });
   it('changed upload withdraws approval, and retry never silently restores it', async () => {
     const f = await confirmed(); await f.service.upload(owner, { connectionId: f.conn.id, name: 'policy.md', text: '新付款规则' });

@@ -24,7 +24,7 @@ describe('durable document parsing', () => {
     await runParseJob(f.repo, f.deps, ctx, job.id); expect(f.counts()).toEqual({ starts: 1, polls: 1 });
     expect((await f.service.search(ctx, '扫描')).answer).toBe('无依据');
     const item = (await f.repo.read(ctx)).source.items[0]!; await f.service.confirm(ctx, item.id, item.version);
-    expect((await f.service.search(ctx, '扫描')).hits[0]).toMatchObject({ locator: 'p.2 L1', quote: '扫描规则' });
+    expect((await f.service.search(ctx, '扫描')).hits[0]).toMatchObject({ locator: 'scan.pdf p.2 L1', quote: '扫描规则' });
     await runParseJob(f.repo, f.deps, ctx, job.id); expect(f.counts()).toEqual({ starts: 1, polls: 1 });
   });
   it('running RetryAfter persists without failing, sleeping, or consuming duplicate starts', async () => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import './KnowledgePage.css';
+import { DatabaseSourcePanel } from './DatabaseSourcePanel';
 
 interface Evidence { sourceId: string; version: string; start: number; end: number; locator: string; quote: string }
 interface Plugin { id: string; name: string; enabled: boolean; configured: boolean; capabilities: string[] }
@@ -14,6 +15,7 @@ interface Overview {
   plugins: Plugin[]; connections: Connection[]; items: Item[];
   analyses: { id: string; status: string; stage: string }[]; recommendations: Recommendation[];
   parseJobs: { id: string; name: string; status: string; error: string | null }[];
+  databaseResources?: { id: string; name: string; tables: Record<string, { columns: string[]; sensitive?: string[] }>; maxRows: number }[];
 }
 interface SearchResult { answer: string; hits: Evidence[] }
 const ROOT = '/api/v1/knowledge';
@@ -45,6 +47,21 @@ function EvidenceList({ evidence }: { evidence: Evidence[] }) {
       <small>来源 {entry.sourceId}</small>
     </li>)}
   </ol> : <p className="knowledge-empty">没有可定位依据，不能据此生成或采纳建议。</p>;
+}
+function ItemPreview({ item }: { item: Item }) {
+  const [preview, setPreview] = useState<{ chunks: { text: string; locator: string }[]; truncated: boolean } | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  async function read() {
+    setLoading(true); setError('');
+    try { setPreview(await request(`/items/${encodeURIComponent(item.id)}/preview?version=${encodeURIComponent(item.version)}`)); }
+    catch (caught) { setPreview(null); setError(errorMessage(caught)); } finally { setLoading(false); }
+  }
+  return <details className="knowledge-item-preview"><summary onClick={() => { if (!preview && !loading) void read(); }}>查看当前版本原文与定位</summary>
+    {loading ? <p role="status">正在核对源权限并读取…</p> : null}
+    {error ? <p className="knowledge-alert" role="alert">{error}</p> : null}
+    {preview ? <>{preview.chunks.map((c, n) => <div key={n}><small>{c.locator}</small><blockquote>{c.text}</blockquote></div>)}{preview.truncated ? <p className="helper">预览达到 200,000 字符上限，请同时核对原始文件。</p> : null}</> : null}
+  </details>;
 }
 
 function RecommendationCard({ recommendation: r, disabled, onAction }: {
@@ -252,12 +269,13 @@ export function KnowledgePage() {
             <span className={`knowledge-badge ${job.status === 'completed' ? 'is-green' : job.status === 'outcome_unknown' || job.status === 'failed' ? 'is-warning' : ''}`}>{label(job.status)}</span>
           </li>)}</ul></div> : null}
           {overview.items.length ? <ul className="knowledge-source-list knowledge-items">{overview.items.map(item => <li key={item.id}>
-            <div><strong>{item.title}</strong><small>版本 {item.version} · {item.locator}</small><small>{label(item.status)} · {item.confirmed ? '当前版本已人工确认' : '尚未确认用于检索'}</small></div>
+            <div><strong>{item.title}</strong><small>版本 {item.version} · {item.locator}</small><small>{label(item.status)} · {item.confirmed ? '当前版本已人工确认' : '尚未确认用于检索'}</small><ItemPreview key={`${item.id}:${item.version}`} item={item} /></div>
             {item.confirmed ? <span className="knowledge-badge is-green">已确认</span> : !['deleted', 'revoked', 'parse_failed'].includes(item.status) ? <button className="btn" disabled={!!busy} title={`核对原始资料后确认版本 ${item.version}`} onClick={() => void action(`item:${item.id}`, `/items/${encodeURIComponent(item.id)}/confirm`, { version: item.version }, '当前资料版本已确认；是否可用仍由源权限决定。')}>确认此版本</button> : <span className="knowledge-badge">不可用</span>}
           </li>)}</ul> : <p className="knowledge-empty">还没有资料。上传后将在这里显示解析与确认状态。</p>}
         </section>
       </div>
 
+      <DatabaseSourcePanel resources={overview.databaseResources ?? []} connections={overview.connections} onRefresh={load} />
       <section className="panel knowledge-section" aria-labelledby="knowledge-search-heading">
         <div className="knowledge-section-head"><span className="knowledge-step">03</span><div><h2 id="knowledge-search-heading">有依据地查询</h2><p className="helper">权限未知、未确认、已撤销或过期版本不应进入结果。</p></div></div>
         <form className="knowledge-search-form" onSubmit={search}><label className="field"><span>查询企业资料</span><input required maxLength={200} value={query} onChange={event => setQuery(event.target.value)} placeholder="输入需要查证的问题或关键词" /></label><button className="btn primary" disabled={searching || !!busy || !query.trim()}>{searching ? '查询中…' : '查询依据'}</button></form>

@@ -1,0 +1,34 @@
+.database-source { margin-bottom: var(--space-lg); min-width: 0; }
+.database-source-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+.database-source-eyebrow { color: var(--color-accent); font-size: 10px; letter-spacing: .1em; }
+.database-source h2 { margin: 0; font-size: 18px; }
+.database-source h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.database-source-tag { color: var(--color-accent); font-size: 11px; border: 1px solid var(--color-rule); border-radius: 5px; padding: 3px 7px; white-space: nowrap; }
+.database-source-inset { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-soft-rule); }
+.database-source-form { display: grid; gap: var(--space-sm); min-width: 0; }
+.database-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); margin-top: var(--space-lg); align-items: start; }
+.database-source input, .database-source select { min-width: 0; width: 100%; }
+.database-source textarea { min-width: 0; width: 100%; padding: var(--space-sm); background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); color: var(--color-ink); font: inherit; line-height: 1.6; resize: vertical; }
+.database-source-empty { margin: var(--space-md) 0 0; padding: var(--space-md); border: 1px dashed var(--color-rule); border-radius: var(--radius-sm); color: var(--color-subtle); font-size: 13px; }
+.database-source-error, .database-source-notice { padding: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); margin: var(--space-md) 0; overflow-wrap: anywhere; }
+.database-source-error { color: var(--color-error); border-left: 3px solid var(--color-error); }
+.database-source-error .btn { display: block; margin-top: var(--space-xs); font-size: 12px; }
+.database-source-notice { color: var(--color-success); border-left: 3px solid var(--color-success); }
+.database-source-scope { border: 1px solid var(--color-soft-rule); border-radius: var(--radius-sm); padding: var(--space-sm); color: var(--color-muted); font-size: 12px; overflow-wrap: anywhere; }
+.database-source-scope p { margin: 0 0 var(--space-xs); color: var(--color-accent); }
+.database-source-scope ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); }
+.database-source-scope li { display: grid; gap: 2px; }
+.database-source-scope strong { color: var(--color-ink); font-size: 13px; }
+.database-source-scope small { color: var(--color-warning); font-size: 11px; }
+.database-source-template { min-width: 0; }
+.database-source-template pre { max-height: 220px; white-space: pre-wrap; overflow: auto; overflow-wrap: anywhere; margin: 0 0 var(--space-xs); padding: var(--space-sm); border: 1px solid var(--color-soft-rule); background: var(--color-paper); border-radius: var(--radius-sm); color: var(--color-muted); font-size: 12px; }
+.database-source-result { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: 1px solid var(--color-soft-rule); }
+.database-source-result dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs) var(--space-lg); margin: var(--space-md) 0; font-size: 12px; }
+.database-source-result dt { color: var(--color-subtle); }
+.database-source-result dd { margin: 0; overflow-wrap: anywhere; }
+.database-source-table-scroll { overflow: auto; max-height: 480px; margin-top: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-sm); }
+.database-source table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.database-source th { position: sticky; top: 0; background: var(--color-well); color: var(--color-accent); font-weight: 500; }
+.database-source th, .database-source td { padding: var(--space-xs) var(--space-sm); border-bottom: 1px solid var(--color-soft-rule); min-width: 100px; max-width: 340px; overflow-wrap: anywhere; vertical-align: top; }
+@media (max-width: 850px) { .database-source-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .database-source { padding: var(--space-md); } .database-source-result dl { grid-template-columns: 1fr; } }

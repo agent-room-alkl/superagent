@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { UserContext } from '@superagent/shared';
 import { KnowledgeStore, type Connection, type Item, type Chunk } from './store.js';
+import type { StoredQueryTemplate } from './database.js';
 export class KnowledgeError extends Error { constructor(public code: string, message: string, public statusCode = 400) { super(message); } }
 export interface Snapshot { connections: Connection[]; items: Item[]; chunks: Chunk[]; citations: [string, string[]][]; flagged: [string, string][] }
 export interface Evidence { sourceId: string; version: string; start: number; end: number; locator: string; quote: string }
@@ -20,9 +21,9 @@ export interface ParseJob {
 }
 export interface KnowledgeState {
   revision: number; source: Snapshot; connectionMeta: Record<string, ConnectionMeta>; confirmations: Record<string, Confirmation>;
-  analyses: AnalysisRun[]; recommendations: Recommendation[]; uploads: Upload[]; disabledPlugins: string[]; parseJobs: ParseJob[];
+  analyses: AnalysisRun[]; recommendations: Recommendation[]; uploads: Upload[]; disabledPlugins: string[]; parseJobs: ParseJob[]; queryTemplates: StoredQueryTemplate[];
 }
-export const emptyState = (): KnowledgeState => ({ revision: 0, source: { connections: [], items: [], chunks: [], citations: [], flagged: [] }, connectionMeta: {}, confirmations: {}, analyses: [], recommendations: [], uploads: [], disabledPlugins: [], parseJobs: [] });
+export const emptyState = (): KnowledgeState => ({ revision: 0, source: { connections: [], items: [], chunks: [], citations: [], flagged: [] }, connectionMeta: {}, confirmations: {}, analyses: [], recommendations: [], uploads: [], disabledPlugins: [], parseJobs: [], queryTemplates: [] });
 export const stamp = () => new Date().toISOString();
 export const id = () => randomUUID();
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');

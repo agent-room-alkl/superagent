@@ -79,7 +79,7 @@ export async function runParseJob(repo: KnowledgeRepository, deps: BinaryDeps, c
       const plugin: KnowledgeSourcePlugin = {
         manifest: { id: 'local-file', version: '1', name: '本地文件', permissions: [], capabilities: { incremental: true, attachments: false, liveQuery: false, acl: true } },
         testConnection: async () => ({ ok: true }), listItems: async () => ({ items: [{ externalId: j.name, version: j.version, title: j.name, locator: `upload://${j.name}`, change: 'upsert' }] }),
-        getAcl: async () => ({ status: 'known', entries: meta.audience.map(principal => ({ principal, access: 'read' })) }), readItem: async () => result.content,
+        getAcl: async () => ({ status: 'known', entries: meta.audience.map(principal => ({ principal, access: 'read' })) }), readItem: async () => ({ ...result.content, anchors: result.content.anchors.map(a => ({ ...a, locator: `${j.name} ${a.locator}` })) }),
       };
       const store = hydrate(s.source), sync = await syncConnection(store, plugin, j.connectionId);
       if (sync.error) throw new SourceError('fatal', 'Parsed source rejected.');
