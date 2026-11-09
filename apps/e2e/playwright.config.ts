@@ -1,0 +1,30 @@
+import { defineConfig, devices } from '@playwright/test';
+
+const PORT = 4173;
+export const OWNER = 'e2e-owner|owner|';
+export const EMPLOYEE = 'e2e-employee|employee|P-1';
+
+export default defineConfig({
+  testDir: './tests',
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: 0,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  use: {
+    baseURL: `http://127.0.0.1:${PORT}`,
+    extraHTTPHeaders: { 'x-dev-user': OWNER },
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+    { name: 'mobile', use: { ...devices['Pixel 5'] }, testMatch: /shell\.spec\.ts/ },
+  ],
+  webServer: {
+    command: 'npx tsx server/start.ts',
+    url: `http://127.0.0.1:${PORT}/healthz`,
+    reuseExistingServer: !process.env.CI,
+    env: { PORT: String(PORT), NODE_ENV: 'test' },
+    timeout: 60_000,
+  },
+});

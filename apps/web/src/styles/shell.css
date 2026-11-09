@@ -8,7 +8,7 @@
 .nav-item[aria-current="page"] { color: var(--color-accent); background: var(--color-well); }
 .content { padding: var(--space-lg); min-width: 0; }
 /* One-line page head (accepted in T-35). */
-.page-head { display: flex; align-items: baseline; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.page-head { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-lg); }
 .page-head h1 { margin: 0; font-size: 28px; }
 .page-head p { margin: 0; color: var(--color-muted); font-size: 14px; }
 .panel { background: var(--color-paper-2); border: 1px solid var(--color-soft-rule); border-radius: var(--radius); padding: var(--space-lg); }

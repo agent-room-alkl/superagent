@@ -1,0 +1,2169 @@
+{
+ "source": "prototype QA v9-v12 (qa-*.mjs ok() assertions, static sites; loop repetitions counted once)",
+ "rows": [
+  {
+   "id": "qa-human-work#1",
+   "suite": "qa-human-work",
+   "assertion": "Queue title expanded",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#2",
+   "suite": "qa-human-work",
+   "assertion": "sample-tenant fixtures opt in",
+   "status": "n/a",
+   "reason": "prototype demo fixtures; the product starts empty (covered by \"unbuilt modules say who owns them\" and per-feature empty states)"
+  },
+  {
+   "id": "qa-human-work#3",
+   "suite": "qa-human-work",
+   "assertion": "No invented business tasks before opt in",
+   "status": "n/a",
+   "reason": "prototype demo fixtures; the product starts empty (covered by \"unbuilt modules say who owns them\" and per-feature empty states)"
+  },
+  {
+   "id": "qa-human-work#4",
+   "suite": "qa-human-work",
+   "assertion": "staff member A sees only five assigned work items",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#5",
+   "suite": "qa-human-work",
+   "assertion": "staff member A does not see manager-only exception",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#6",
+   "suite": "qa-human-work",
+   "assertion": "Write approval waits for data confirmation",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#7",
+   "suite": "qa-human-work",
+   "assertion": "Invalid monetary input cannot be confirmed",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#8",
+   "suite": "qa-human-work",
+   "assertion": "Data confirmation does not execute write",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#9",
+   "suite": "qa-human-work",
+   "assertion": "Approved action inherits confirmed data",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#10",
+   "suite": "qa-human-work",
+   "assertion": "Approval is distinct from execution",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#11",
+   "suite": "qa-human-work",
+   "assertion": "Unsaved changes cannot execute old approval",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#12",
+   "suite": "qa-human-work",
+   "assertion": "Saved revision invalidates approval",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#13",
+   "suite": "qa-human-work",
+   "assertion": "Unknown outcome retains single submission",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#14",
+   "suite": "qa-human-work",
+   "assertion": "Unknown outcome has no resubmit action",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#15",
+   "suite": "qa-human-work",
+   "assertion": "Unknown readback does not retry",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#16",
+   "suite": "qa-human-work",
+   "assertion": "Readback compares approved values",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#17",
+   "suite": "qa-human-work",
+   "assertion": "Manual report requires evidence",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#18",
+   "suite": "qa-human-work",
+   "assertion": "Manual evidence is not system verified",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#19",
+   "suite": "qa-human-work",
+   "assertion": "Quality review grants no action authority",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#20",
+   "suite": "qa-human-work",
+   "assertion": "Batch conflict cannot be selected",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#21",
+   "suite": "qa-human-work",
+   "assertion": "Batch confirmation includes only selected clean row",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#22",
+   "suite": "qa-human-work",
+   "assertion": "Batch exception is retained",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#23",
+   "suite": "qa-human-work",
+   "assertion": "Batch can continue without repeating confirmed row",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#24",
+   "suite": "qa-human-work",
+   "assertion": "Manager default includes action and waiting groups",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#25",
+   "suite": "qa-human-work",
+   "assertion": "Queue shows grouped work and due dates",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#26",
+   "suite": "qa-human-work",
+   "assertion": "Manager does not see staff member A finance data",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#27",
+   "suite": "qa-human-work",
+   "assertion": "External wait stays attached to original case",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#28",
+   "suite": "qa-human-work",
+   "assertion": "Receiving documents is not automatic case completion",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#29",
+   "suite": "qa-human-work",
+   "assertion": "Branch recorder cannot fabricate insurance approval",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#30",
+   "suite": "qa-human-work",
+   "assertion": "Recorded branch choice survives reopening",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#31",
+   "suite": "qa-human-work",
+   "assertion": "Mail renderer shows recipient and attachment identity",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#32",
+   "suite": "qa-human-work",
+   "assertion": "Mail shows original context and AI field changes",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#33",
+   "suite": "qa-human-work",
+   "assertion": "proof-of-concept user cannot send",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#34",
+   "suite": "qa-human-work",
+   "assertion": "manager B sees exceptions without taking all normal work",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#35",
+   "suite": "qa-human-work",
+   "assertion": "Exception decision preserves evidence and verification boundary",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#36",
+   "suite": "qa-human-work",
+   "assertion": "Project filter selects only relevant work",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#37",
+   "suite": "qa-human-work",
+   "assertion": "Project filter also scopes batch contents",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#38",
+   "suite": "qa-human-work",
+   "assertion": "Upstream revision revokes downstream permission",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#39",
+   "suite": "qa-human-work",
+   "assertion": "Mismatched readback stops without resubmission",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#40",
+   "suite": "qa-human-work",
+   "assertion": "Manual note cannot erase mismatched system outcome",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+  },
+  {
+   "id": "qa-human-work#41",
+   "suite": "qa-human-work",
+   "assertion": "Existing conversation still produces draft",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-human-work#42",
+   "suite": "qa-human-work",
+   "assertion": "Existing task evidence boundary retained",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-human-work#43",
+   "suite": "qa-human-work",
+   "assertion": "Human dialog styles do not leak to task drawer",
+   "status": "n/a",
+   "reason": "prototype single-file CSS isolation; React components are scoped"
+  },
+  {
+   "id": "qa-human-work#44",
+   "suite": "qa-human-work",
+   "assertion": "No browser errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-conversation#1",
+   "suite": "qa-conversation",
+   "assertion": "Old one-goal form remains",
+   "status": "n/a",
+   "reason": "regression guard for an earlier prototype UI that the product never had"
+  },
+  {
+   "id": "qa-conversation#2",
+   "suite": "qa-conversation",
+   "assertion": "Manual fixed advance remains",
+   "status": "n/a",
+   "reason": "regression guard for an earlier prototype UI that the product never had"
+  },
+  {
+   "id": "qa-conversation#3",
+   "suite": "qa-conversation",
+   "assertion": "Chat boot creates arbitrary tasks",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#4",
+   "suite": "qa-conversation",
+   "assertion": "Greeting forced task",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#5",
+   "suite": "qa-conversation",
+   "assertion": "Availability question forced task",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#6",
+   "suite": "qa-conversation",
+   "assertion": "Discussion not clarified",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#7",
+   "suite": "qa-conversation",
+   "assertion": "Mention picker not open",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#8",
+   "suite": "qa-conversation",
+   "assertion": "Mention insertion wrong",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#9",
+   "suite": "qa-conversation",
+   "assertion": "Conversation did not create one task",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#10",
+   "suite": "qa-conversation",
+   "assertion": "Assignment/source/prompt snapshot absent",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#11",
+   "suite": "qa-conversation",
+   "assertion": "Employee did not report",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#12",
+   "suite": "qa-conversation",
+   "assertion": "Dispatch/report not visible",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#13",
+   "suite": "qa-conversation",
+   "assertion": "Completed unreviewed task disappeared",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#14",
+   "suite": "qa-conversation",
+   "assertion": "Task evidence unlinked",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#15",
+   "suite": "qa-conversation",
+   "assertion": "New sent message stayed in old history",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#16",
+   "suite": "qa-conversation",
+   "assertion": "Follow-up lost original context/capability",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#17",
+   "suite": "qa-conversation",
+   "assertion": "Missing tool fake-executed",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-41 (placeholders are never callable: ToolService.callable)"
+  },
+  {
+   "id": "qa-conversation#18",
+   "suite": "qa-conversation",
+   "assertion": "External action did not ask parameters",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#19",
+   "suite": "qa-conversation",
+   "assertion": "Cancel failed",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#20",
+   "suite": "qa-conversation",
+   "assertion": "Async replies erased draft",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#21",
+   "suite": "qa-conversation",
+   "assertion": "Readonly finance work incorrectly needs payment approval",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#22",
+   "suite": "qa-conversation",
+   "assertion": "Private draft leaked identity",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#23",
+   "suite": "qa-conversation",
+   "assertion": "Employee has private coordinator config",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#24",
+   "suite": "qa-conversation",
+   "assertion": "Other employee task leaked",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#25",
+   "suite": "qa-conversation",
+   "assertion": "Employee can assign another human agent",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#26",
+   "suite": "qa-conversation",
+   "assertion": "Employee own-scope work blocked",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#27",
+   "suite": "qa-conversation",
+   "assertion": "Mention menu leaks other employee",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#28",
+   "suite": "qa-conversation",
+   "assertion": "Owner draft not restored",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#29",
+   "suite": "qa-conversation",
+   "assertion": "Chat not principal scroll area",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#30",
+   "suite": "qa-conversation",
+   "assertion": "Offline file conversation fails",
+   "status": "n/a",
+   "reason": "prototype opened from file://; product is served over HTTPS"
+  },
+  {
+   "id": "qa-conversation#31",
+   "suite": "qa-conversation",
+   "assertion": "Shift+Enter unexpectedly sent",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-conversation#32",
+   "suite": "qa-conversation",
+   "assertion": "Enter did not send",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "command room conversation / dispatch"
+  },
+  {
+   "id": "qa-enablement#1",
+   "suite": "qa-enablement",
+   "assertion": "New company begins without invented knowledge",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#2",
+   "suite": "qa-enablement",
+   "assertion": "Recommendations gated before knowledge confirmation",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#3",
+   "suite": "qa-enablement",
+   "assertion": "Manual role is distinguished from document inference",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#4",
+   "suite": "qa-enablement",
+   "assertion": "Actual local text file is read",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#5",
+   "suite": "qa-enablement",
+   "assertion": "Imported but unconfirmed knowledge cannot generate recommendations",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#6",
+   "suite": "qa-enablement",
+   "assertion": "Four roles follow distinct evidence-bearing responsibilities",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#7",
+   "suite": "qa-enablement",
+   "assertion": "Every inferred role cites a source line",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#8",
+   "suite": "qa-enablement",
+   "assertion": "Tools proposed alongside roles before business execution",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#9",
+   "suite": "qa-enablement",
+   "assertion": "Missing tool starts as stable placeholder",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#10",
+   "suite": "qa-enablement",
+   "assertion": "Reanalysis preserves human edits and presents differences",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#11",
+   "suite": "qa-enablement",
+   "assertion": "Role creation grants no runtime or tools",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts (describe employees)",
+   "e2eOwner": "T-42"
+  },
+  {
+   "id": "qa-enablement#12",
+   "suite": "qa-enablement",
+   "assertion": "Tool acquisition requires agreed specification",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#13",
+   "suite": "qa-enablement",
+   "assertion": "Recording path requires explicit test/login preparation",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#14",
+   "suite": "qa-enablement",
+   "assertion": "Progress exposes exactly one current accessible step",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#15",
+   "suite": "qa-enablement",
+   "assertion": "Confirmed specification is marked complete",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#16",
+   "suite": "qa-enablement",
+   "assertion": "Completed specification defaults to summary instead of form",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#17",
+   "suite": "qa-enablement",
+   "assertion": "Recording candidate exposes parameters instead of fixed business data",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#18",
+   "suite": "qa-enablement",
+   "assertion": "Recorded steps are not automatically released",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#19",
+   "suite": "qa-enablement",
+   "assertion": "Closing tool drawer refreshes underlying lifecycle status",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#20",
+   "suite": "qa-enablement",
+   "assertion": "Failed tests block release",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#21",
+   "suite": "qa-enablement",
+   "assertion": "Current progress explains test blocker",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#22",
+   "suite": "qa-enablement",
+   "assertion": "Test pass alone is not release authority",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#23",
+   "suite": "qa-enablement",
+   "assertion": "Test pass advances current stage to release",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#24",
+   "suite": "qa-enablement",
+   "assertion": "Fixed release is distinct from installation",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#25",
+   "suite": "qa-enablement",
+   "assertion": "Released tool still requires execution environment deployment",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#26",
+   "suite": "qa-enablement",
+   "assertion": "Failed environment check blocks installation",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#27",
+   "suite": "qa-enablement",
+   "assertion": "Original business request created only explicitly",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#28",
+   "suite": "qa-enablement",
+   "assertion": "Installed tool remains unavailable while target agent offline",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#29",
+   "suite": "qa-enablement",
+   "assertion": "Completed deployment shows healthy timestamp summary without checkbox form",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#30",
+   "suite": "qa-enablement",
+   "assertion": "Redeploy form opens only after explicit action",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#31",
+   "suite": "qa-enablement",
+   "assertion": "Recording route reaches available only after per-employee check",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#32",
+   "suite": "qa-enablement",
+   "assertion": "Completed personal binding shows summary instead of empty inputs",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#33",
+   "suite": "qa-enablement",
+   "assertion": "Redeployment failure returns progress to deployment even after installation",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#34",
+   "suite": "qa-enablement",
+   "assertion": "Tool availability does not bypass SOP confirmation",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#35",
+   "suite": "qa-enablement",
+   "assertion": "Unimplemented tool nodes are explicitly blocked",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#36",
+   "suite": "qa-enablement",
+   "assertion": "Manual fallback requires explicit owner choice",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#37",
+   "suite": "qa-enablement",
+   "assertion": "Paused original request does not auto-resume",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#38",
+   "suite": "qa-enablement",
+   "assertion": "Same original request resumes without duplicate or fabricated execution",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "original-request resume and SOP gates live in the runtime"
+  },
+  {
+   "id": "qa-enablement#39",
+   "suite": "qa-enablement",
+   "assertion": "Offline developer cannot be assigned",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#40",
+   "suite": "qa-enablement",
+   "assertion": "Developer and consuming employee are separately recorded",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#41",
+   "suite": "qa-enablement",
+   "assertion": "Assigned developer route reaches independently released availability",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#42",
+   "suite": "qa-enablement",
+   "assertion": "Provided script imported as candidate without executing",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#43",
+   "suite": "qa-enablement",
+   "assertion": "Human supplied route passes same lifecycle",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#44",
+   "suite": "qa-enablement",
+   "assertion": "Existing tool route still validates and configures per employee",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#45",
+   "suite": "qa-enablement",
+   "assertion": "Enabled installation has explicit saved binding state",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#46",
+   "suite": "qa-enablement",
+   "assertion": "Account binding changes invalidate availability",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#47",
+   "suite": "qa-enablement",
+   "assertion": "Unsaved contract changes cannot use previous test approval",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#48",
+   "suite": "qa-enablement",
+   "assertion": "Saved contract revision invalidates candidate and tests",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#49",
+   "suite": "qa-enablement",
+   "assertion": "Tool list exposes same compact lifecycle progress",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts"
+  },
+  {
+   "id": "qa-enablement#50",
+   "suite": "qa-enablement",
+   "assertion": "Reanalysis preserves explicit role deletion instead of recreating it",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "analysis/recommendation UI; source layer covered in apps/server/test/knowledge.test.ts"
+  },
+  {
+   "id": "qa-enablement#51",
+   "suite": "qa-enablement",
+   "assertion": "Unused unimplemented tool can be explicitly cancelled without deleting published versions",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts",
+   "e2eOwner": "T-42 tool card UI (follow-up E2E in tools.spec.ts as the card gains actions)"
+  },
+  {
+   "id": "qa-enablement#52",
+   "suite": "qa-enablement",
+   "assertion": "No browser errors or imported script execution",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-enablement-guide#1",
+   "suite": "qa-enablement-guide",
+   "assertion": "one title",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-enablement-guide#2",
+   "suite": "qa-enablement-guide",
+   "assertion": "all embedded images decode",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-enablement-guide#3",
+   "suite": "qa-enablement-guide",
+   "assertion": "index enters knowledge-first workspace",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-enablement-guide#4",
+   "suite": "qa-enablement-guide",
+   "assertion": "index cannot recommend before source confirmation",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-enablement-guide#5",
+   "suite": "qa-enablement-guide",
+   "assertion": "index starts with empty enterprise knowledge and roles",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-enablement-guide#6",
+   "suite": "qa-enablement-guide",
+   "assertion": "no browser errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-outcomes#1",
+   "suite": "qa-outcomes",
+   "assertion": "Primary navigation changed",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/shell.spec.ts"
+  },
+  {
+   "id": "qa-outcomes#2",
+   "suite": "qa-outcomes",
+   "assertion": "Empty summary invents work",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#3",
+   "suite": "qa-outcomes",
+   "assertion": "Greeting forced business form/task",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#4",
+   "suite": "qa-outcomes",
+   "assertion": "Async employee report replaced composer",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#5",
+   "suite": "qa-outcomes",
+   "assertion": "Draft incorrectly marked human-accepted",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#6",
+   "suite": "qa-outcomes",
+   "assertion": "Draft boundary missing",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#7",
+   "suite": "qa-outcomes",
+   "assertion": "Execution identity untraceable",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#8",
+   "suite": "qa-outcomes",
+   "assertion": "Raw implementation JSON in result",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#9",
+   "suite": "qa-outcomes",
+   "assertion": "Verified result cannot be reviewed",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#10",
+   "suite": "qa-outcomes",
+   "assertion": "Malformed evidence passed",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#11",
+   "suite": "qa-outcomes",
+   "assertion": "Failed evidence can be accepted",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#12",
+   "suite": "qa-outcomes",
+   "assertion": "Human result acceptance missing",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#13",
+   "suite": "qa-outcomes",
+   "assertion": "Missing information fake-executed",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#14",
+   "suite": "qa-outcomes",
+   "assertion": "Empty supplement accepted",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#15",
+   "suite": "qa-outcomes",
+   "assertion": "Supplement restarted/replaced task",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#16",
+   "suite": "qa-outcomes",
+   "assertion": "Revoked tool still usable",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#17",
+   "suite": "qa-outcomes",
+   "assertion": "Blocker has no responsible person",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#18",
+   "suite": "qa-outcomes",
+   "assertion": "Authorized original task failed to resume",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#19",
+   "suite": "qa-outcomes",
+   "assertion": "Tool gap missing",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#20",
+   "suite": "qa-outcomes",
+   "assertion": "Unreleased tool treated as reusable",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#21",
+   "suite": "qa-outcomes",
+   "assertion": "Independent verification record absent",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#22",
+   "suite": "qa-outcomes",
+   "assertion": "Release bypasses review",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#23",
+   "suite": "qa-outcomes",
+   "assertion": "Capability delivery lost original task or did not resume",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#24",
+   "suite": "qa-outcomes",
+   "assertion": "Executing version differs from approved version",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#25",
+   "suite": "qa-outcomes",
+   "assertion": "Tool release leaked to other employee",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 / T-41 (execution path)"
+  },
+  {
+   "id": "qa-outcomes#26",
+   "suite": "qa-outcomes",
+   "assertion": "Summary leaks other owner",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#27",
+   "suite": "qa-outcomes",
+   "assertion": "Employee navigation expanded",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "employee navigation (simulated view) ships with the command room"
+  },
+  {
+   "id": "qa-outcomes#28",
+   "suite": "qa-outcomes",
+   "assertion": "Write rehearsal auto-approved",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#29",
+   "suite": "qa-outcomes",
+   "assertion": "Approval does not bind parameters",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#30",
+   "suite": "qa-outcomes",
+   "assertion": "Timeout marked complete/retried",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#31",
+   "suite": "qa-outcomes",
+   "assertion": "Unknown write can be accepted",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#32",
+   "suite": "qa-outcomes",
+   "assertion": "Unknown readback retried write",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#33",
+   "suite": "qa-outcomes",
+   "assertion": "Mismatched write accepted or repeated",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#34",
+   "suite": "qa-outcomes",
+   "assertion": "Mismatched result review enabled",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#35",
+   "suite": "qa-outcomes",
+   "assertion": "Corrected external data could not be reread without a second write",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#36",
+   "suite": "qa-outcomes",
+   "assertion": "Matching readback did not verify original request",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#37",
+   "suite": "qa-outcomes",
+   "assertion": "Changed contract retains old action approval/acceptance",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#38",
+   "suite": "qa-outcomes",
+   "assertion": "Contract revision repeats write",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#39",
+   "suite": "qa-outcomes",
+   "assertion": "Offline rehearsal discarded original task",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#40",
+   "suite": "qa-outcomes",
+   "assertion": "Manual reconnect failed to resume original task",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#41",
+   "suite": "qa-outcomes",
+   "assertion": "Existing client incorrectly promises remote start",
+   "status": "n/a",
+   "reason": "prototype copy about the desktop client; no such client in the product"
+  },
+  {
+   "id": "qa-outcomes#42",
+   "suite": "qa-outcomes",
+   "assertion": "Manual pause bypassed during readback",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#43",
+   "suite": "qa-outcomes",
+   "assertion": "Paused readback repeated/finished external write",
+   "status": "pending",
+   "owner": "T-45",
+   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+  },
+  {
+   "id": "qa-outcomes#44",
+   "suite": "qa-outcomes",
+   "assertion": "Async report erased SOP input",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#45",
+   "suite": "qa-outcomes",
+   "assertion": "Async report replaced or lost workflow draft",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#46",
+   "suite": "qa-outcomes",
+   "assertion": "Unvalidated draft can be published",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#47",
+   "suite": "qa-outcomes",
+   "assertion": "Baseline validation missing regression cases",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#48",
+   "suite": "qa-outcomes",
+   "assertion": "Valid draft cannot publish",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#49",
+   "suite": "qa-outcomes",
+   "assertion": "Validated confirmed draft not published",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#50",
+   "suite": "qa-outcomes",
+   "assertion": "Stale validation published",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#51",
+   "suite": "qa-outcomes",
+   "assertion": "Stale validation not explained",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#52",
+   "suite": "qa-outcomes",
+   "assertion": "Revalidated revision not published",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#53",
+   "suite": "qa-outcomes",
+   "assertion": "Publishing rewrote old instance",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#54",
+   "suite": "qa-outcomes",
+   "assertion": "Pack replaced draft without explicit confirmation",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#55",
+   "suite": "qa-outcomes",
+   "assertion": "Pack auto-confirmed rule/trigger",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#56",
+   "suite": "qa-outcomes",
+   "assertion": "Pack modified published workflow",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#57",
+   "suite": "qa-outcomes",
+   "assertion": "Unconfirmed package can publish",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#58",
+   "suite": "qa-outcomes",
+   "assertion": "Confirmed package cannot validate",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#59",
+   "suite": "qa-outcomes",
+   "assertion": "Knowledge change has no impact/context",
+   "status": "pending",
+   "owner": "T-48",
+   "note": "SOP draft/validate/publish UI (runtime side T-41)"
+  },
+  {
+   "id": "qa-outcomes#60",
+   "suite": "qa-outcomes",
+   "assertion": "Summary not linked to room",
+   "status": "pending",
+   "owner": "T-41",
+   "note": ""
+  },
+  {
+   "id": "qa-outcomes#61",
+   "suite": "qa-outcomes",
+   "assertion": "File origin outcome interactions broken",
+   "status": "n/a",
+   "reason": "prototype opened from file://; product is served over HTTPS"
+  },
+  {
+   "id": "qa-database-knowledge#1",
+   "suite": "qa-database-knowledge",
+   "assertion": "Documents and databases share enterprise knowledge entry",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#2",
+   "suite": "qa-database-knowledge",
+   "assertion": "Data source requires explicit read-only policy acknowledgement",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#3",
+   "suite": "qa-database-knowledge",
+   "assertion": "Connection string cannot be pasted into credential reference",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+  },
+  {
+   "id": "qa-database-knowledge#4",
+   "suite": "qa-database-knowledge",
+   "assertion": "Database source can start without any uploaded file",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#5",
+   "suite": "qa-database-knowledge",
+   "assertion": "Unconfirmed database cannot feed recommendations",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#6",
+   "suite": "qa-database-knowledge",
+   "assertion": "Confirming source forms logical enterprise knowledge space",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#7",
+   "suite": "qa-database-knowledge",
+   "assertion": "Knowledge space can be named without copying database",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#8",
+   "suite": "qa-database-knowledge",
+   "assertion": "Confirmed metadata can support role candidates",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#9",
+   "suite": "qa-database-knowledge",
+   "assertion": "Database evidence names tables/columns and schema version",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#10",
+   "suite": "qa-database-knowledge",
+   "assertion": "Schema does not become a published SOP",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#11",
+   "suite": "qa-database-knowledge",
+   "assertion": "Database metadata recommends read-only query placeholder without inventing mail workflow",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#12",
+   "suite": "qa-database-knowledge",
+   "assertion": "No current values invented from schema",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#13",
+   "suite": "qa-database-knowledge",
+   "assertion": "Out-of-scope project is refused",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#14",
+   "suite": "qa-database-knowledge",
+   "assertion": "Per-source row limit cannot be exceeded",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#15",
+   "suite": "qa-database-knowledge",
+   "assertion": "Query obeys requested and approved row count",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#16",
+   "suite": "qa-database-knowledge",
+   "assertion": "Projection excludes unapproved column",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#17",
+   "suite": "qa-database-knowledge",
+   "assertion": "Sensitive sample value is masked and other project absent",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#18",
+   "suite": "qa-database-knowledge",
+   "assertion": "Facts include source, time and synthetic status",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#19",
+   "suite": "qa-database-knowledge",
+   "assertion": "Live values and untrusted row text do not enter metadata knowledge",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#20",
+   "suite": "qa-database-knowledge",
+   "assertion": "Row update expires fact result without changing metadata analysis",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#21",
+   "suite": "qa-database-knowledge",
+   "assertion": "Next query reads new synthetic value",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#22",
+   "suite": "qa-database-knowledge",
+   "assertion": "Data change does not silently rewrite schema rules or team",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#23",
+   "suite": "qa-database-knowledge",
+   "assertion": "Timeout does not relabel cached result as fresh",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts (read-only DB gateway)",
+   "e2eOwner": "T-40 data-source UI"
+  },
+  {
+   "id": "qa-database-knowledge#24",
+   "suite": "qa-database-knowledge",
+   "assertion": "Reads and denials leave audit metadata",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#25",
+   "suite": "qa-database-knowledge",
+   "assertion": "Unavailable source cannot be queried",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#26",
+   "suite": "qa-database-knowledge",
+   "assertion": "Parameterized Lot lookup stays inside approved project",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#27",
+   "suite": "qa-database-knowledge",
+   "assertion": "Database column names do not split words",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "table rendering of facts in the knowledge UI"
+  },
+  {
+   "id": "qa-database-knowledge#28",
+   "suite": "qa-database-knowledge",
+   "assertion": "Last fact column is reachable through local horizontal scroll",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "table rendering of facts in the knowledge UI"
+  },
+  {
+   "id": "qa-database-knowledge#29",
+   "suite": "qa-database-knowledge",
+   "assertion": "Read-only database generation is fifth acquisition route",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 db_query route + T-40"
+  },
+  {
+   "id": "qa-database-knowledge#30",
+   "suite": "qa-database-knowledge",
+   "assertion": "Database capability cannot be changed to write in UI",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+  },
+  {
+   "id": "qa-database-knowledge#31",
+   "suite": "qa-database-knowledge",
+   "assertion": "Saving write effect is refused even if DOM is manipulated",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "server-side refusal exists (only SELECT templates); UI form validation pending"
+  },
+  {
+   "id": "qa-database-knowledge#32",
+   "suite": "qa-database-knowledge",
+   "assertion": "Generation produces controlled template candidate",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 db_query route + T-40"
+  },
+  {
+   "id": "qa-database-knowledge#33",
+   "suite": "qa-database-knowledge",
+   "assertion": "Personal project options stay inside source permission",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#34",
+   "suite": "qa-database-knowledge",
+   "assertion": "Forged personal scope cannot expand source permission",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#35",
+   "suite": "qa-database-knowledge",
+   "assertion": "Schema change withdraws source confirmation and invalidates old analysis",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#36",
+   "suite": "qa-database-knowledge",
+   "assertion": "Metadata reanalysis preserves human role edits",
+   "status": "pending",
+   "owner": "T-40",
+   "note": ""
+  },
+  {
+   "id": "qa-database-knowledge#37",
+   "suite": "qa-database-knowledge",
+   "assertion": "Reanalysis keeps stable query-tool identity",
+   "status": "unit",
+   "ref": "apps/server/test/tools.test.ts",
+   "e2eOwner": "T-42 db_query route + T-40"
+  },
+  {
+   "id": "qa-database-knowledge#38",
+   "suite": "qa-database-knowledge",
+   "assertion": "No browser errors or real SQL execution",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-database-guide#1",
+   "suite": "qa-database-guide",
+   "assertion": "one title",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-database-guide#2",
+   "suite": "qa-database-guide",
+   "assertion": "four real screenshots embedded",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-database-guide#3",
+   "suite": "qa-database-guide",
+   "assertion": "primary entry includes database source",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-database-guide#4",
+   "suite": "qa-database-guide",
+   "assertion": "primary empty source gate retained",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-database-guide#5",
+   "suite": "qa-database-guide",
+   "assertion": "no errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-source-plugins#1",
+   "suite": "qa-source-plugins",
+   "assertion": "Four knowledge-source manifests visible",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#2",
+   "suite": "qa-source-plugins",
+   "assertion": "Local single-import built in, remote plugin not installed",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#3",
+   "suite": "qa-source-plugins",
+   "assertion": "Catalog install has no implied connection or source",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#4",
+   "suite": "qa-source-plugins",
+   "assertion": "Local file text actually read",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts",
+   "e2eOwner": "T-40 upload UI"
+  },
+  {
+   "id": "qa-source-plugins#5",
+   "suite": "qa-source-plugins",
+   "assertion": "Local upload has plugin connection item provenance",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts",
+   "e2eOwner": "T-40 upload UI"
+  },
+  {
+   "id": "qa-source-plugins#6",
+   "suite": "qa-source-plugins",
+   "assertion": "Import does not imply source confirmation",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#7",
+   "suite": "qa-source-plugins",
+   "assertion": "Mail plugin installation creates no connection or source",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#8",
+   "suite": "qa-source-plugins",
+   "assertion": "Knowledge install never requests Mail.Send",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 connection UI"
+  },
+  {
+   "id": "qa-source-plugins#9",
+   "suite": "qa-source-plugins",
+   "assertion": "Connection requires explicit read-only scope",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#10",
+   "suite": "qa-source-plugins",
+   "assertion": "Invalid mail date scope rejected",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 connection UI"
+  },
+  {
+   "id": "qa-source-plugins#11",
+   "suite": "qa-source-plugins",
+   "assertion": "Preview shows mailbox folder and date scope",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#12",
+   "suite": "qa-source-plugins",
+   "assertion": "Unknown ACL and out-of-scope entries blocked",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#13",
+   "suite": "qa-source-plugins",
+   "assertion": "Unknown ACL does not display body",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#14",
+   "suite": "qa-source-plugins",
+   "assertion": "Forged preview selection cannot bypass ACL",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#15",
+   "suite": "qa-source-plugins",
+   "assertion": "Body and attachment imported with separate stable item ids",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 connection UI"
+  },
+  {
+   "id": "qa-source-plugins#16",
+   "suite": "qa-source-plugins",
+   "assertion": "Imported mail independently awaits confirmation with references and versions",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#17",
+   "suite": "qa-source-plugins",
+   "assertion": "Confirmed mixed knowledge creates evidence-based candidates",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#18",
+   "suite": "qa-source-plugins",
+   "assertion": "Mail recommendation evidence preserves original locator",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 connection UI"
+  },
+  {
+   "id": "qa-source-plugins#19",
+   "suite": "qa-source-plugins",
+   "assertion": "Delta update increments source version and invalidates analysis",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#20",
+   "suite": "qa-source-plugins",
+   "assertion": "Delta does not overwrite human role edit",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#21",
+   "suite": "qa-source-plugins",
+   "assertion": "Reanalysis preserves human edits",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#22",
+   "suite": "qa-source-plugins",
+   "assertion": "Failed sync keeps cursor and blocks cached source use",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#23",
+   "suite": "qa-source-plugins",
+   "assertion": "Recovery requires source confirmation again",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#24",
+   "suite": "qa-source-plugins",
+   "assertion": "Revocation clears cached text and prevents reference",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#25",
+   "suite": "qa-source-plugins",
+   "assertion": "Forged source confirmation cannot override revoked ACL",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#26",
+   "suite": "qa-source-plugins",
+   "assertion": "SharePoint preview preserves site library folder scope",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 connection UI"
+  },
+  {
+   "id": "qa-source-plugins#27",
+   "suite": "qa-source-plugins",
+   "assertion": "Source deletion retains tombstone but removes cached text",
+   "status": "unit",
+   "ref": "apps/server/test/knowledge.test.ts / apps/server/test/knowledge-m365.test.ts",
+   "e2eOwner": "T-40 knowledge UI"
+  },
+  {
+   "id": "qa-source-plugins#28",
+   "suite": "qa-source-plugins",
+   "assertion": "Paused knowledge plugin blocks its source references",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#29",
+   "suite": "qa-source-plugins",
+   "assertion": "Database plugin leads to existing scoped read-only configuration",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#30",
+   "suite": "qa-source-plugins",
+   "assertion": "Installing knowledge plugins did not install employee business tools",
+   "status": "pending",
+   "owner": "T-40",
+   "note": "plugin catalogue / connection / confirmation UI and analysis"
+  },
+  {
+   "id": "qa-source-plugins#31",
+   "suite": "qa-source-plugins",
+   "assertion": "No browser errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-room-header#1",
+   "suite": "qa-room-header",
+   "assertion": "Desktop heading and subtitle vertically centered in same row",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/shell.spec.ts"
+  },
+  {
+   "id": "qa-room-header#2",
+   "suite": "qa-room-header",
+   "assertion": "Employee header uses same single row",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "employee view of the room header is built with the command room"
+  },
+  {
+   "id": "qa-room-header#3",
+   "suite": "qa-room-header",
+   "assertion": "Employee subtitle retained",
+   "status": "pending",
+   "owner": "T-41",
+   "note": "employee view of the room header is built with the command room"
+  },
+  {
+   "id": "qa-room-header#4",
+   "suite": "qa-room-header",
+   "assertion": "No browser errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  },
+  {
+   "id": "qa-source-guide#1",
+   "suite": "qa-source-guide",
+   "assertion": "Five embedded real screenshots",
+   "status": "n/a",
+   "reason": "static proposal/guide page of the prototype package (screenshots, titles); not a product feature"
+  },
+  {
+   "id": "qa-source-guide#2",
+   "suite": "qa-source-guide",
+   "assertion": "No browser errors",
+   "status": "e2e",
+   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+  }
+ ]
+}

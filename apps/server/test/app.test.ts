@@ -16,6 +16,12 @@ describe('app scaffold', () => {
     await app.close();
   });
 
+  it('treats a blank dev identity as unauthenticated, not as a user without roles', async () => {
+    const app = await buildApp();
+    for (const v of ['', '|owner|', '  |admin|']) expect((await app.inject({ url: '/api/v1/setup/llm', headers: { 'x-dev-user': v } })).statusCode).toBe(401);
+    await app.close();
+  });
+
   it('restricts Setup to admin/owner on the server side', async () => {
     const app = await buildApp();
     expect((await app.inject({ url: '/api/v1/setup/llm', headers: employee })).statusCode).toBe(403);
