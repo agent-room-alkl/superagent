@@ -212,6 +212,45 @@ describe('sync semantics (PRD §3.2)', () => {
     }
   });
 
+  it('item-level 403 revokes only that item, 404 deletes it; the connection stays confirmed', async () => {
+    src.put('a.md', 'v1', 'a');
+    src.put('b.md', 'v1', 'b');
+    src.put('c.md', 'v1', 'c');
+    src.steps.push(() => ({ items: [src.ref('a.md'), src.ref('b.md'), src.ref('c.md')], nextCursor: 'k1' }));
+    await syncConnection(store, src, 'c1');
+    src.put('b.md', 'v2', 'b2');
+    src.put('c.md', 'v2', 'c2');
+    const read = src.readItem.bind(src);
+    src.readItem = async (cfg, ref) => {
+      if (ref.externalId === 'b.md') throw new SourceError('scope', '403 on this file');
+      if (ref.externalId === 'c.md') throw new SourceError('not_found', '404 on this file');
+      return read(cfg, ref);
+    };
+    src.steps.push(() => ({ items: [src.ref('b.md'), src.ref('c.md')], nextCursor: 'k2' }));
+    const r = await syncConnection(store, src, 'c1');
+    expect(r.cursorAdvanced).toBe(true);
+    expect(store.connections.get('c1')!.status).toBe('confirmed');
+    expect(store.currentItem('c1', 'b.md')!.status).toBe('access_revoked');
+    expect(store.currentItem('c1', 'c.md')!.status).toBe('deleted');
+    expect(usableIds()).toEqual(['a.md']);
+    expect(new Set(store.chunks.map((c) => c.itemId)).size).toBe(1);
+  });
+
+  it('deleting or revoking a parent cascades to its child items and drops their content', async () => {
+    src.put('m1', 'v1', 'mail body');
+    src.put('m1/att/a1', 'v1', 'attachment text');
+    src.put('m2', 'v1', 'other');
+    src.steps.push(() => ({ items: [src.ref('m1'), src.ref('m1/att/a1'), src.ref('m2')], nextCursor: 'k1' }));
+    await syncConnection(store, src, 'c1');
+    store.cite(store.currentItem('c1', 'm1/att/a1')!.id, 'sop:terms');
+    src.steps.push(() => ({ items: [src.ref('m1', 'deleted')], nextCursor: 'k2' }));
+    await syncConnection(store, src, 'c1');
+    expect(store.currentItem('c1', 'm1/att/a1')!.status).toBe('deleted');
+    expect(store.flagged.get('sop:terms')).toMatch(/deleted/);
+    expect(usableIds()).toEqual(['m2']);
+    expect(store.chunks.map((c) => c.text)).toEqual(['other']);
+  });
+
   it('an unconfirmed connection contributes nothing to retrieval', async () => {
     store.connections.get('c1')!.status = 'pending_confirmation';
     src.put('a.md', 'v1', 'a');
