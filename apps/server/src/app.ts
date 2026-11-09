@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { modules } from './modules/index.js';
 import { createAuthenticate, requireRole, type AuthConfig } from './auth.js';
 import type { SetupDeps } from './modules/setup/service.js';
+import type { KnowledgeDeps } from './modules/knowledge/service.js';
 
 export interface ReadinessCheck {
   name: string;
@@ -18,6 +19,7 @@ export interface AppOptions {
   logger?: boolean;
   auth?: AuthConfig;
   setupDeps?: SetupDeps;
+  knowledgeDeps?: KnowledgeDeps;
   readiness?: ReadinessCheck[];
 }
 
@@ -37,6 +39,10 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     return reply.code(ok ? 200 : 503).send({ ok, role: process.env.APP_ROLE ?? 'web', checks: results });
   });
 
+  // Fail closed: production must come through bootstrap.ts with explicit Entra auth and real stores.
+  const production = process.env.NODE_ENV === 'production';
+  if (production && (!opts.auth || opts.auth.mode === 'dev')) throw new Error('production requires explicit Entra auth (use createRuntime in bootstrap.ts)');
+  if (production && !opts.setupDeps) throw new Error('production requires persistent Setup dependencies (use createRuntime in bootstrap.ts)');
   const auth = opts.auth ?? { mode: 'dev' as const, platformTenantId: 'default' };
   const authenticate = createAuthenticate(auth);
 
@@ -46,7 +52,8 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     for (const m of modules) {
       await api.register(async (scoped) => {
         if (m.roles) scoped.addHook('preHandler', requireRole(...m.roles));
-        await scoped.register(m.plugin, { ...(m.prefix === 'setup' && opts.setupDeps ? { deps: opts.setupDeps } : {}), tenantOf: (req: any) => req.user?.tenantId ?? 'default' });
+        const deps = m.prefix === 'setup' ? opts.setupDeps : m.prefix === 'knowledge' ? opts.knowledgeDeps : undefined;
+        await scoped.register(m.plugin, { ...(deps ? { deps } : {}), tenantOf: (req: any) => req.user?.tenantId ?? 'default' });
       }, { prefix: `/api/v1/${m.prefix}` });
     }
   });

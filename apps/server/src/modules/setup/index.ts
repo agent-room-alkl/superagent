@@ -15,6 +15,7 @@ export interface SetupModuleOptions {
 const PROVIDERS: LlmProviderId[] = ['anthropic', 'openai', 'azure-openai'];
 
 export const setupModule: FastifyPluginAsync<SetupModuleOptions> = async (app, opts) => {
+  if (!opts.deps && process.env.NODE_ENV === 'production') throw new Error('Setup has no persistent dependencies in production');
   const deps: SetupDeps = opts.deps ?? {
     repo: new InMemoryConfigRepo(),
     secrets: new InMemorySecretStore(),

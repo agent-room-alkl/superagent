@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { SetupPage } from './pages/SetupPage';
 import { Placeholder } from './pages/Placeholder';
 import { ToolsPage } from './pages/ToolsPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 
 type NavItem = { id: string; label: string; owner: string };
 
@@ -65,7 +66,7 @@ export function App() {
           ))}
         </nav>
         <main className="content">
-          {current.id === 'settings' ? <SetupPage /> : current.id === 'tools' ? <ToolsPage /> : <Placeholder title={current.label} owner={current.owner} />}
+          {current.id === 'settings' ? <SetupPage /> : current.id === 'tools' ? <ToolsPage /> : current.id === 'knowledge' ? <KnowledgePage /> : <Placeholder title={current.label} owner={current.owner} />}
         </main>
       </div>
     </>

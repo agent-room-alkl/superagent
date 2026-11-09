@@ -69,6 +69,18 @@ describe('knowledge application: real source store + transactions', () => {
     await expect(f.service.confirm(employee, f.item.id, f.item.version)).rejects.toMatchObject({ code: 'forbidden' });
     expect((await f.service.search(employee, '付款')).hits).toHaveLength(1);
   });
+  it('lost project scope prevents connection mutations and hides pending proposal evidence', async () => {
+    const f = await confirmed(); const e = evidence(await f.repo.read(owner));
+    await f.repo.transact(owner, s => {
+      s.recommendations.push({ id: 'r', key: 'r', kind: 'employee', name: '人工名称', description: '人工描述', humanLocked: true, deleted: false, evidence: [e], proposedChange: { name: '待审修改', description: '待审描述', evidence: [{ ...e, sourceId: 'revoked-source' }] } });
+    });
+    expect((await f.service.overview(owner)).recommendations[0]!.proposedChange).toBeUndefined();
+    await f.repo.transact(owner, s => { s.connectionMeta[f.conn.id]!.projectIds = ['project-a']; });
+    const lost = { ...owner, projectScopes: [] };
+    await expect(f.service.confirmConnection(lost, f.conn.id)).rejects.toMatchObject({ code: 'not_found' });
+    await expect(f.service.sync(lost, f.conn.id)).rejects.toMatchObject({ code: 'not_found' });
+    await expect(f.service.upload(lost, { connectionId: f.conn.id, name: 'x.md', text: 'x' })).rejects.toMatchObject({ code: 'not_found' });
+  });
   it('HTTP routes fail closed without dependencies, and validate requests with dependencies', async () => {
     const app = Fastify(); app.addHook('preHandler', async req => { req.user = owner; });
     await app.register(knowledgeModule, { prefix: '/knowledge' }); expect((await app.inject('/knowledge/overview')).statusCode).toBe(503); await app.close();
@@ -114,13 +126,20 @@ describe('analysis stage worker', () => {
     const model = { recommend: async () => { calls++; return []; } }; const service = new KnowledgeService({ repo: f.repo, model, enqueue: async (_ctx, run) => { queued = run; } });
     await service.startAnalysis(owner); await Promise.all([runAnalysis(f.repo, model, owner, queued), runAnalysis(f.repo, model, owner, queued)]); expect(calls).toBe(1);
   });
+  it('an expired lease during a model call becomes unknown without a second billable request', async () => {
+    const f = await confirmed(); let queued = '', calls = 0;
+    const model = { recommend: async () => { calls++; return []; } }, service = new KnowledgeService({ repo: f.repo, model, enqueue: async (_ctx, run) => { queued = run; } });
+    await service.startAnalysis(owner);
+    await f.repo.transact(owner, s => { Object.assign(s.analyses[0]!, { status: 'running', stage: 'recommend', leaseUntil: Date.now() - 1 }); });
+    await runAnalysis(f.repo, model, owner, queued); expect(calls).toBe(0); expect((await f.repo.read(owner)).analyses[0]!.status).toBe('outcome_unknown');
+  });
 });
 const dbUrl = process.env.DATABASE_URL;
 (dbUrl ? describe : describe.skip)('PostgreSQL persistence and search projection', () => {
   const pool = new Pool({ connectionString: dbUrl }); afterAll(() => pool.end());
   it('persists across instances, atomically invalidates ACL, supports FTS/trigram and escapes LIKE', async () => {
     await migrate(pool, undefined, () => undefined);
-    await pool.query(await readFile(new URL('../src/modules/knowledge/migration.sql', import.meta.url), 'utf8'));
+    await pool.query(await readFile(new URL('../migrations/0002_knowledge.sql', import.meta.url), 'utf8'));
     const ctx = { ...owner, tenantId: `test-${Date.now()}` }, repo = new PgKnowledgeRepository(pool), service = new KnowledgeService({ repo });
     const conn = await service.createConnection(ctx, { name: 'PG test', pluginId: 'local-file' }); await service.confirmConnection(ctx, conn.id); await service.upload(ctx, { connectionId: conn.id, name: 'pg.md', text: '付款 approval policy' });
     const item = (await repo.read(ctx)).source.items[0]!; await service.confirm(ctx, item.id, item.version);
