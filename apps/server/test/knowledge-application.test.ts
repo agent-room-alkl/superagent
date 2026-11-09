@@ -116,6 +116,22 @@ describe('analysis stage worker', () => {
     await service.startAnalysis(owner); await runAnalysis(f.repo, model, owner, queued);
     const state = await f.repo.read(owner); expect(state.analyses[0]!.status).toBe('stale'); expect(state.recommendations).toEqual([]);
   });
+  it('changed versions preserve human content, withdraw old quotes and require explicit proposal adoption', async () => {
+    const f = await confirmed(); let queued = '';
+    const model = { recommend: async () => proposal(evidence(await f.repo.read(owner)), '模型名称') }, service = new KnowledgeService({ repo:f.repo,model,enqueue:async(_ctx,run)=>{queued=run;} });
+    await service.startAnalysis(owner); await runAnalysis(f.repo,model,owner,queued);
+    const rec = (await f.repo.read(owner)).recommendations[0]!;
+    await service.editRecommendation(owner,rec.id,{name:'人工保留',description:'人工职责'});
+    await service.upload(owner,{connectionId:f.conn.id,name:'policy.md',text:'规则\n\n付款前复核金额与审批。'});
+    const current = (await f.repo.read(owner)).source.items.find(i=>i.current)!; await service.confirm(owner,current.id,current.version);
+    await service.startAnalysis(owner); await runAnalysis(f.repo,model,owner,queued);
+    const visible = (await service.overview(owner)).recommendations[0]!;
+    expect(visible).toMatchObject({name:'人工保留',humanLocked:true,stale:true,evidence:[],proposedChange:{name:'模型名称'}});
+    await service.adoptRecommendation(owner,rec.id);
+    expect((await service.overview(owner)).recommendations[0]).toMatchObject({name:'模型名称',humanLocked:true,stale:false});
+    await f.repo.transact(owner,s=>{s.source.items.find(i=>i.current)!.acl=null;invalidateAnalyses(s);});
+    expect((await service.overview(owner)).recommendations).toEqual([]);
+  });
   it('rejects invented quotes and arbitrary model fields rather than publishing tools', async () => {
     const f = await confirmed(); let queued = '';
     const model = { recommend: async () => proposal({ ...evidence(await f.repo.read(owner)), quote: 'invented' }) };

@@ -8,7 +8,7 @@ interface Plugin { id: string; name: string; enabled: boolean; configured: boole
 interface Connection { id: string; name: string; pluginId: string; status: string }
 interface Item { id: string; title: string; version: string; status: string; confirmed: boolean; locator: string }
 interface Recommendation {
-  id: string; kind: string; name: string; description: string; humanLocked: boolean; deleted: boolean;
+  id: string; kind: string; name: string; description: string; humanLocked: boolean; deleted: boolean; stale?: boolean;
   proposedChange?: { name: string; description: string; evidence?: Evidence[] }; evidence: Evidence[];
 }
 interface Overview {
@@ -80,6 +80,7 @@ function RecommendationCard({ recommendation: r, disabled, onAction }: {
       <span className="knowledge-kind">{label(r.kind)}草案</span>
       <span className={`knowledge-badge ${r.humanLocked ? 'is-gold' : ''}`}>{r.humanLocked ? '人工锁定' : '建议 · 待核对'}</span>
     </div>
+    {r.stale ? <p className="knowledge-alert">依据版本已变化，旧引用已撤回。人工内容保留，请核对新建议后决定是否采纳。</p> : null}
     <form onSubmit={save} className="knowledge-form">
       <label className="field"><span>名称</span><input required maxLength={160} value={name} onChange={event => setName(event.target.value)} /></label>
       <label className="field"><span>说明</span><textarea required maxLength={4000} rows={3} value={description} onChange={event => setDescription(event.target.value)} /></label>
@@ -92,6 +93,7 @@ function RecommendationCard({ recommendation: r, disabled, onAction }: {
       <strong>分析提出了修改，尚未覆盖人工内容</strong>
       <p>{r.proposedChange.name}</p><p>{r.proposedChange.description}</p>
       {r.proposedChange.evidence ? <EvidenceList evidence={r.proposedChange.evidence} /> : null}
+      <button className="btn" type="button" disabled={disabled} onClick={() => void onAction(`adopt:${r.id}`, `/recommendations/${encodeURIComponent(r.id)}/adopt`, {}, '修改已由人工采纳并锁定。')}>核对后采纳这次修改</button>
     </div> : null}
     <details><summary>查看依据 · {r.evidence.length} 处</summary><EvidenceList evidence={r.evidence} /></details>
   </article>;

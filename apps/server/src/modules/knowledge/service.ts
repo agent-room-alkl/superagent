@@ -61,7 +61,16 @@ export class KnowledgeService {
   async overview(ctx: UserContext) {
     const s = await this.deps.repo.read(ctx);
     const items = s.source.items.filter(i => this.allowed(s, ctx, i, false));
-    const recs = s.recommendations.filter(r => !r.deleted && r.evidence.every(e => this.valid(s, ctx, e))).map(r => ({ ...r, proposedChange: r.proposedChange?.evidence.every(e => this.valid(s, ctx, e)) ? r.proposedChange : undefined }));
+    const recs = s.recommendations.filter(r => !r.deleted).flatMap(r => {
+      const valid = r.evidence.every(e => this.valid(s, ctx, e));
+      const identityAllowed = r.evidence.length > 0 && r.evidence.every(e => {
+        const old = s.source.items.find(i => i.id === e.sourceId);
+        const current = old && s.source.items.find(i => i.current && i.connectionId === old.connectionId && i.externalId === old.externalId);
+        return !!current && this.allowed(s, ctx, current);
+      });
+      if (!valid && !identityAllowed) return [];
+      return [{ ...r, stale: !valid, evidence: valid ? r.evidence : [], proposedChange: r.proposedChange?.evidence.every(e => this.valid(s, ctx, e)) ? r.proposedChange : undefined }];
+    });
     return {
       plugins: MANIFESTS.map(m => ({ ...m, enabled: !s.disabledPlugins.includes(m.id), configured: m.id === 'local-file' || (m.id === 'database' && !!this.deps.database?.list(ctx).length) || !!this.deps.plugins?.[m.id] })),
       databaseResources: this.deps.database?.list(ctx) ?? [],
@@ -158,10 +167,17 @@ export class KnowledgeService {
   async editRecommendation(ctx: UserContext, recId: string, input: Record<string, unknown>, remove = false) {
     requireManager(ctx);
     return this.deps.repo.transact(ctx, s => {
-      const r = s.recommendations.find(r => r.id === recId && !r.deleted && r.evidence.every(e => this.valid(s, ctx, e)));
+      const r = s.recommendations.find(r => r.id === recId && !r.deleted && (remove || r.evidence.every(e => this.valid(s, ctx, e))));
       if (!r) throw new KnowledgeError('not_found', '当前有效建议不存在。', 404);
       if (remove) r.deleted = true; else { r.name = bounded(input.name, 160, '名称'); r.description = bounded(input.description, 4000, '说明'); r.humanLocked = true; }
       return { id: r.id, deleted: r.deleted, humanLocked: r.humanLocked };
+    });
+  }
+  async adoptRecommendation(ctx: UserContext, recId: string) {
+    requireManager(ctx); return this.deps.repo.transact(ctx, s => {
+      const r = s.recommendations.find(r => r.id === recId && !r.deleted), proposal = r?.proposedChange;
+      if (!r || !proposal?.evidence.length || !proposal.evidence.every(e => this.valid(s, ctx, e))) throw new KnowledgeError('proposal_unavailable', '修改草案的依据已变化，请重新分析并核对。', 409);
+      Object.assign(r, proposal, { humanLocked: true }); delete r.proposedChange; return { id: r.id, humanLocked: true };
     });
   }
   async togglePlugin(ctx: UserContext, pluginId: string, enabled: boolean) {
