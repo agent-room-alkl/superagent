@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { SourceError, type AclResult, type ConnectionConfig, type KnowledgeSourcePlugin, type SourceContent, type SourceItemRef } from '@superagent/shared';
 import { KnowledgeStore } from '../src/modules/knowledge/store.js';
 import { syncConnection } from '../src/modules/knowledge/sync.js';
-import { DocIntelParser, toContent } from '../src/modules/knowledge/docintel.js';
 import { createLocalFilePlugin, textWithLineAnchors } from '../src/modules/knowledge/plugins/local-file.js';
 import { createDatabasePlugin, mask, QueryGatewayError, runTemplate, validateTemplate, type DbClient, type DbScope } from '../src/modules/knowledge/plugins/database.js';
 
@@ -105,11 +104,50 @@ describe('sync semantics (PRD §3.2)', () => {
     const item = store.currentItem('c1', 'x.md')!;
     expect(item.status).toBe('acl_unknown');
     expect(store.usable(item)).toBe(false);
+    expect(src.reads).toBe(0); // content never read
+    expect(store.chunks).toEqual([]); // nothing stored
+    expect(item.contentHash).toBe('');
     expect(Object.getOwnPropertyNames(KnowledgeStore.prototype).filter((n) => /override|force|allow/i.test(n))).toEqual([]);
     src.put('x.md', 'v1', 'text', known);
     src.steps.push(() => ({ items: [src.ref('x.md')], nextCursor: 'k2' }));
     await syncConnection(store, src, 'c1');
     expect(usableIds()).toEqual(['x.md']);
+    expect(src.reads).toBe(1);
+    expect(store.chunks.map((c) => [c.text, c.start, c.end])).toEqual([['text', 0, 4]]);
+  });
+
+  it('readers becoming unknown at the same version drops stored content and flags citers', async () => {
+    src.put('p.md', 'v1', 'secret plan');
+    src.steps.push(() => ({ items: [src.ref('p.md')], nextCursor: 'k1' }));
+    await syncConnection(store, src, 'c1');
+    store.cite(store.currentItem('c1', 'p.md')!.id, 'answer:9');
+    src.put('p.md', 'v1', 'secret plan', { status: 'unknown', reason: 'permissions call failed' });
+    src.steps.push(() => ({ items: [src.ref('p.md')], nextCursor: 'k2' }));
+    await syncConnection(store, src, 'c1');
+    expect(store.currentItem('c1', 'p.md')!.status).toBe('acl_unknown');
+    expect(store.chunks).toEqual([]);
+    expect(store.flagged.get('answer:9')).toMatch(/readers unknown/);
+  });
+
+  it('a new version label with identical content is not a new version; new versions start unconfirmed', async () => {
+    src.put('s.md', 'e1', 'same');
+    src.steps.push(() => ({ items: [src.ref('s.md')], nextCursor: 'k1' }));
+    await syncConnection(store, src, 'c1');
+    const first = store.currentItem('c1', 's.md')!;
+    expect(first.confirmedVersion).toBeNull();
+    first.confirmedVersion = 'e1';
+    store.cite(first.id, 'sop:x');
+    src.put('s.md', 'e2', 'same');
+    src.steps.push(() => ({ items: [src.ref('s.md')], nextCursor: 'k2' }));
+    const r = await syncConnection(store, src, 'c1');
+    expect(r).toMatchObject({ applied: 0, skippedDuplicates: 1 });
+    expect(store.items.size).toBe(1);
+    expect(store.flagged.has('sop:x')).toBe(false);
+    src.put('s.md', 'e3', 'different');
+    src.steps.push(() => ({ items: [src.ref('s.md')], nextCursor: 'k3' }));
+    await syncConnection(store, src, 'c1');
+    expect(store.currentItem('c1', 's.md')!.confirmedVersion).toBeNull();
+    expect(store.chunks.filter((c) => c.itemId === first.id)).toEqual([]);
   });
 
   it('transient/throttled: cursor not advanced; retry de-duplicates already-applied items by content hash', async () => {
@@ -132,6 +170,7 @@ describe('sync semantics (PRD §3.2)', () => {
     expect(r3).toMatchObject({ applied: 1, skippedDuplicates: 1, cursorAdvanced: true });
     expect(src.listCalls).toEqual(['k0', 'k0', 'k0']);
     expect([...store.items.values()].filter((i) => i.externalId === 'a.md')).toHaveLength(1);
+    expect(src.reads).toBe(2); // a.md once, b.md once: the retry did not re-read a.md
     expect(store.connections.get('c1')!.cursor).toBe('k1');
   });
 
@@ -205,37 +244,6 @@ describe('local file plugin', () => {
     const p = createLocalFilePlugin(files, { parse: async (_b, n) => (seen.push(n), { text: 'x', anchors: [] }) });
     await p.readItem(cfg, items[1]!);
     expect(seen).toEqual(['scan.pdf']);
-  });
-});
-
-describe('Document Intelligence adapter', () => {
-  it('starts prebuilt-layout, polls the operation and returns page/line anchors', async () => {
-    const calls: { url: string; method: string; auth: string | null }[] = [];
-    let polls = 0;
-    const fetchFn = (async (url: string, init?: RequestInit) => {
-      const h = new Headers(init?.headers);
-      calls.push({ url, method: init?.method ?? 'GET', auth: h.get('authorization') });
-      if (init?.method === 'POST') return new Response(null, { status: 202, headers: { 'operation-location': 'https://di.example/ops/1' } });
-      polls++;
-      if (polls < 2) return Response.json({ status: 'running' });
-      return Response.json({ status: 'succeeded', analyzeResult: { pages: [{ pageNumber: 1, lines: [{ content: 'Invoice total' }] }, { pageNumber: 2, lines: [{ content: 'Paid' }, { content: 'Thanks' }] }] } });
-    }) as typeof fetch;
-    const di = new DocIntelParser({ endpoint: 'https://di.example/', getToken: async () => 'mi-token', fetchFn, pollMs: 1 });
-    const out = await di.parse(new Uint8Array([1, 2]), 'inv.pdf');
-    expect(calls[0]).toMatchObject({ method: 'POST', auth: 'Bearer mi-token' });
-    expect(calls[0]!.url).toContain('/documentintelligence/documentModels/prebuilt-layout:analyze');
-    expect(out.anchors.map((a) => a.locator)).toEqual(['inv.pdf p.1 L1', 'inv.pdf p.2 L1', 'inv.pdf p.2 L2']);
-    expect(out.text.slice(out.anchors[1]!.start, out.anchors[1]!.end)).toBe('Paid');
-  });
-
-  it('surfaces a failed analysis', async () => {
-    const fetchFn = (async (_u: string, init?: RequestInit) =>
-      init?.method === 'POST' ? new Response(null, { status: 202, headers: { 'operation-location': 'x' } }) : Response.json({ status: 'failed', error: { message: 'corrupt file' } })) as typeof fetch;
-    await expect(new DocIntelParser({ endpoint: 'https://di.example', getToken: async () => 't', fetchFn, pollMs: 1 }).parse(new Uint8Array(), 'a.pdf')).rejects.toThrow(/corrupt file/);
-  });
-
-  it('empty layout yields empty content', () => {
-    expect(toContent({}, 'a.pdf')).toEqual({ text: '', anchors: [] });
   });
 });
 

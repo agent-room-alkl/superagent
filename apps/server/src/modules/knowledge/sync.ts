@@ -3,13 +3,15 @@
  *   upsert          → new version parsed; old version superseded; citers flagged "evidence changed"
  *   deleted         → item removed from use; history kept
  *   access_revoked  → removed from retrieval immediately; citers flagged "evidence unavailable"
- *   ACL unknown     → listed but unusable; only a later known ACL restores it (no manual override)
- *   transient/throttled → cursor not advanced; retry; already-applied items de-duplicated by content hash
+ *   ACL unknown     → listed but unusable and its content is never read or stored; only a later known ACL
+ *                     restores it (no manual override)
+ *   transient/throttled → cursor not advanced; retry; items already parsed at that version are not re-read and
+ *                     a new version label with identical content (same hash) is not a new version
  *   cursor_invalid  → full re-list and reconcile by externalId + content hash; then new cursor
  *   auth/scope      → connection needs re-auth; every item suspended from retrieval and citation
  */
 import { createHash } from 'node:crypto';
-import { SourceError, type ConnectionConfig, type KnowledgeSourcePlugin, type SourceItemRef } from '@superagent/shared';
+import { SourceError, type AclResult, type ConnectionConfig, type KnowledgeSourcePlugin, type SourceContent, type SourceItemRef } from '@superagent/shared';
 import type { Chunk, Item, KnowledgeStore } from './store.js';
 
 export interface SyncResult {
@@ -98,30 +100,72 @@ async function applyRef(store: KnowledgeStore, plugin: KnowledgeSourcePlugin, cf
     }
     return 'dup';
   }
-  const content = await plugin.readItem(cfg, ref);
-  const contentHash = hash(content.text);
-  const aclRes = plugin.getAcl ? await plugin.getAcl(cfg, ref) : { status: 'unknown' as const, reason: 'plugin does not report ACL' };
+  // ACL first: the content of an item whose readers are unknown is never read or stored (PRD §3.2).
+  const aclRes: AclResult = plugin.getAcl ? await plugin.getAcl(cfg, ref) : { status: 'unknown', reason: 'plugin does not report ACL' };
   const acl = aclRes.status === 'known' ? aclRes.entries : null;
-  if (existing && existing.contentHash === contentHash && existing.version === ref.version) {
-    // Same content (e.g. retry after a transient failure). ACL may have become known or changed.
+  const sameVersion = !!existing && existing.version === ref.version;
+
+  if (!acl) {
+    if (existing && sameVersion) {
+      const changed = existing.status !== 'acl_unknown';
+      existing.acl = null;
+      existing.status = 'acl_unknown';
+      existing.contentHash = '';
+      store.dropChunks(existing.id);
+      if (changed) store.flagCiters(existing.id, 'evidence unavailable: readers unknown');
+      return changed ? 'applied' : 'dup';
+    }
+    if (existing) supersede(store, existing);
+    store.items.set(itemId(cfg, ref), newItem(cfg, ref, '', null, 'acl_unknown'));
+    return 'applied';
+  }
+
+  if (existing && sameVersion && existing.contentHash) {
+    // Already parsed at this version (retry after a failure, or a sharing change): refresh readers, no re-read.
     existing.acl = acl;
-    if (existing.status === 'acl_unknown' && acl) existing.status = 'parsed';
-    if (existing.status === 'parsed' && !acl) existing.status = 'acl_unknown';
-    if (existing.status === 'suspended' || existing.status === 'access_revoked') existing.status = acl ? 'parsed' : 'acl_unknown';
+    if (existing.status !== 'parsed') existing.status = 'parsed';
     return 'dup';
   }
-  const id = `${cfg.connectionId}:${ref.externalId}:${ref.version}`;
-  if (existing) {
-    existing.current = false;
-    existing.status = 'superseded';
-    store.flagCiters(existing.id, 'evidence changed: new version');
+
+  const content = await plugin.readItem(cfg, ref);
+  const contentHash = hash(content.text);
+  if (existing && (sameVersion || existing.contentHash === contentHash)) {
+    // Same version whose readers just became known, or a new version label with identical content.
+    const fresh = !existing.contentHash;
+    existing.version = ref.version;
+    existing.acl = acl;
+    existing.status = 'parsed';
+    if (fresh) {
+      existing.contentHash = contentHash;
+      writeChunks(store, existing.id, content, ref);
+      return 'applied';
+    }
+    return 'dup';
   }
-  const item: Item = { id, connectionId: cfg.connectionId, externalId: ref.externalId, version: ref.version, title: ref.title, locator: ref.locator, contentHash, acl, status: acl ? 'parsed' : 'acl_unknown', current: true };
-  store.items.set(id, item);
-  store.chunks = store.chunks.filter((c) => c.itemId !== id);
-  const chunks: Chunk[] = content.anchors.length
-    ? content.anchors.map((a) => ({ itemId: id, text: content.text.slice(a.start, a.end), locator: a.locator }))
-    : [{ itemId: id, text: content.text, locator: ref.locator }];
-  store.chunks.push(...chunks);
+  if (existing) supersede(store, existing);
+  const id = itemId(cfg, ref);
+  store.items.set(id, newItem(cfg, ref, contentHash, acl, 'parsed'));
+  writeChunks(store, id, content, ref);
   return 'applied';
+}
+
+const itemId = (cfg: ConnectionConfig, ref: SourceItemRef) => `${cfg.connectionId}:${ref.externalId}:${ref.version}`;
+
+function newItem(cfg: ConnectionConfig, ref: SourceItemRef, contentHash: string, acl: Item['acl'], status: Item['status']): Item {
+  return { id: itemId(cfg, ref), connectionId: cfg.connectionId, externalId: ref.externalId, version: ref.version, title: ref.title, locator: ref.locator, contentHash, acl, status, current: true, confirmedVersion: null };
+}
+
+function supersede(store: KnowledgeStore, existing: Item) {
+  existing.current = false;
+  existing.status = 'superseded';
+  store.dropChunks(existing.id);
+  store.flagCiters(existing.id, 'evidence changed: new version');
+}
+
+function writeChunks(store: KnowledgeStore, id: string, content: SourceContent, ref: SourceItemRef) {
+  store.dropChunks(id);
+  const chunks: Chunk[] = content.anchors.length
+    ? content.anchors.map((a) => ({ itemId: id, text: content.text.slice(a.start, a.end), locator: a.locator, start: a.start, end: a.end }))
+    : [{ itemId: id, text: content.text, locator: ref.locator, start: 0, end: content.text.length }];
+  store.chunks.push(...chunks);
 }
