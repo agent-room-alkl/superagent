@@ -49,8 +49,9 @@ jobs:
       - run: npm ci
       - run: npm run build -w @superagent/shared
       - run: npx playwright install --with-deps chromium
+      - run: npm run build -w @superagent/web
       - name: Real-browser replay tests (egress blocking, read-back, digest check)
-        run: npx vitest run test/browser.e2e.test.ts
+        run: npx vitest run test/browser.e2e.test.ts test/knowledge.e2e.test.ts
         working-directory: apps/server
         env:
           RUN_BROWSER_TESTS: '1'
@@ -90,7 +91,7 @@ jobs:
           docker run -d --name sa -p 8080:8080 -e APP_ROLE=web \
             -e ENTRA_TENANT_ID=00000000-0000-0000-0000-000000000001 -e ENTRA_CLIENT_ID=00000000-0000-0000-0000-000000000002 \
             -e PLATFORM_TENANT_ID=00000000-0000-0000-0000-000000000003 -e KEY_VAULT_URL=https://kv.invalid/ \
-            -e DATABASE_URL=postgres://app@pg.invalid:5432/superagent -e BLOB_URL=https://blob.invalid/ -e DOC_INTEL_ENDPOINT=https://di.invalid/ superagent:ci
+            -e DATABASE_URL=postgres://app@pg.invalid:5432/superagent -e BLOB_URL=https://blob.invalid/ -e DOC_INTEL_ENDPOINT=https://ci-placeholder.cognitiveservices.azure.com/ superagent:ci
           for i in $(seq 1 20); do curl -fsS http://localhost:8080/healthz && break; sleep 1; done
           curl -fsS http://localhost:8080/healthz || { docker logs sa; exit 1; }
           test "$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' http://localhost:8080/readyz)" = 503

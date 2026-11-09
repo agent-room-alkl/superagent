@@ -12,7 +12,7 @@ const TYPES: Record<string, string> = { pdf: 'application/pdf', png: 'image/png'
 const MAX_BYTES = 20 * 1024 * 1024;
 export class AzureBinaryStore implements BinaryStore {
   private container;
-  constructor(blobUrl: string) { this.container = new BlobServiceClient(blobUrl, new DefaultAzureCredential()).getContainerClient('knowledge'); }
+  constructor(blobUrl: string) { this.container = new BlobServiceClient(blobUrl, new DefaultAzureCredential()).getContainerClient('sources'); }
   async put(ref: string, bytes: Uint8Array, mimeType: string) {
     try { await this.container.getBlockBlobClient(ref).uploadData(bytes, { conditions: { ifNoneMatch: '*' }, blobHTTPHeaders: { blobContentType: mimeType }, abortSignal: AbortSignal.timeout(30_000) }); }
     catch (e) { if ((e as { statusCode?: number }).statusCode !== 409 && (e as { statusCode?: number }).statusCode !== 412) throw e; }
@@ -26,9 +26,9 @@ export class AzureBinaryStore implements BinaryStore {
 }
 export async function queueBinaryUpload(repo: KnowledgeRepository, deps: BinaryDeps, ctx: UserContext, input: Record<string, unknown>) {
   const { connectionId, name, base64 } = input;
-  if (typeof connectionId !== 'string' || typeof name !== 'string' || !name || name.length > 180 || /[\\/\x00-\x1f]/.test(name) || typeof base64 !== 'string' || base64.length > Math.ceil(MAX_BYTES / 3) * 4 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) throw new KnowledgeError('invalid_file', '文件编码、大小或文件名无效。');
+  if (typeof connectionId !== 'string' || typeof name !== 'string' || !name || name.length > 180 || /[\\/\x00-\x1f]/.test(name) || typeof base64 !== 'string' || base64.length > Math.ceil(MAX_BYTES / 3) * 4 || base64.length % 4 !== 0) throw new KnowledgeError('invalid_file', '文件编码、大小或文件名无效。');
   const mimeType = TYPES[name.split('.').pop()!.toLowerCase()]; if (!mimeType) throw new KnowledgeError('unsupported_file', '不支持此文件类型。');
-  const bytes = Buffer.from(base64, 'base64'); if (!bytes.length || bytes.length > MAX_BYTES) throw new KnowledgeError('invalid_file', '文件为空或超过 20MB。');
+  const bytes = Buffer.from(base64, 'base64'); if (!bytes.length || bytes.length > MAX_BYTES || bytes.toString('base64') !== base64) throw new KnowledgeError('invalid_file', '文件编码无效、为空或超过 20MB。');
   const version = createHash('sha256').update(bytes).digest('hex');
   const state = await repo.read(ctx), conn = state.source.connections.find(c => c.id === connectionId), meta = state.connectionMeta[connectionId];
   if (!conn || conn.pluginId !== 'local-file' || conn.status !== 'confirmed' || !meta?.audience.includes(ctx.userId) || !meta.projectIds.every(p => ctx.projectScopes.includes(p))) throw new KnowledgeError('source_denied', '先确认当前有权限的本地文件连接。', 403);
@@ -39,6 +39,7 @@ export async function queueBinaryUpload(repo: KnowledgeRepository, deps: BinaryD
     if (current?.status !== 'confirmed' || s.disabledPlugins.includes('local-file') || !currentMeta?.audience.includes(ctx.userId) || !currentMeta.projectIds.every(p => ctx.projectScopes.includes(p))) throw new KnowledgeError('source_denied', '来源连接已变更。', 403);
     const duplicate = s.parseJobs.find(j => j.connectionId === connectionId && j.name === name && j.version === version && !['failed', 'outcome_unknown'].includes(j.status));
     if (duplicate) return { id: duplicate.id, status: duplicate.status };
+    if (s.parseJobs.length >= 500) throw new KnowledgeError('parse_job_limit', '文档解析任务达到试点上限。', 409);
     // Earlier pending revisions must not overwrite a later upload when Azure completes them out of order.
     for (const old of s.parseJobs.filter(j => j.connectionId === connectionId && j.name === name && ['queued', 'running'].includes(j.status))) { old.status = 'failed'; old.error = 'superseded'; }
     for (const item of s.source.items.filter(i => i.connectionId === connectionId && i.externalId === name)) delete s.confirmations[item.id];

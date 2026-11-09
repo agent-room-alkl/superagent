@@ -40,13 +40,13 @@ export class KnowledgeService {
   async overview(ctx: UserContext) {
     const s = await this.deps.repo.read(ctx);
     const items = s.source.items.filter(i => mayRead(s, ctx, i, false));
-    const recs = s.recommendations.filter(r => !r.deleted && r.evidence.every(e => evidenceValid(s, ctx, e)));
+    const recs = s.recommendations.filter(r => !r.deleted && r.evidence.every(e => evidenceValid(s, ctx, e))).map(r => ({ ...r, proposedChange: r.proposedChange?.evidence.every(e => evidenceValid(s, ctx, e)) ? r.proposedChange : undefined }));
     return {
       plugins: MANIFESTS.map(m => ({ ...m, enabled: !s.disabledPlugins.includes(m.id), configured: m.id === 'local-file' || !!this.deps.plugins?.[m.id] })),
       connections: s.source.connections.filter(c => s.connectionMeta[c.id]?.audience.includes(ctx.userId) && s.connectionMeta[c.id]!.projectIds.every(p => ctx.projectScopes.includes(p))).map(c => ({ id: c.id, name: s.connectionMeta[c.id]!.name, pluginId: c.pluginId, status: c.status })),
       items: items.map(i => ({ id: hash(i.id), title: i.title, version: i.version, status: i.status, confirmed: mayRead(s, ctx, i), locator: i.locator })),
       analyses: s.analyses.filter(r => r.actor.userId === ctx.userId).map(({ actor: _, ...run }) => run), recommendations: recs,
-      parseJobs: s.parseJobs.filter(j => j.actor.userId === ctx.userId).map(j => ({ id: j.id, name: j.name, status: j.status, error: j.error })),
+      parseJobs: s.parseJobs.filter(j => j.actor.userId === ctx.userId && s.connectionMeta[j.connectionId]?.audience.includes(ctx.userId) && s.connectionMeta[j.connectionId]!.projectIds.every(p => ctx.projectScopes.includes(p))).map(j => ({ id: j.id, name: j.name, status: j.status, error: j.error })),
     };
   }
   async createConnection(ctx: UserContext, input: Record<string, unknown>) {
@@ -67,7 +67,7 @@ export class KnowledgeService {
     requireManager(ctx);
     return this.deps.repo.transact(ctx, async s => {
       const conn = s.source.connections.find(c => c.id === connectionId);
-      if (!conn || !s.connectionMeta[connectionId]?.audience.includes(ctx.userId)) throw new KnowledgeError('not_found', '来源连接不存在。', 404);
+      if (!conn || !s.connectionMeta[connectionId]?.audience.includes(ctx.userId) || !s.connectionMeta[connectionId]!.projectIds.every(p => ctx.projectScopes.includes(p))) throw new KnowledgeError('not_found', '来源连接不存在。', 404);
       const test = await this.plugin(s, conn.pluginId).testConnection({ connectionId, scope: conn.scope, credentialRef: conn.credentialRef });
       if (!test.ok) throw new KnowledgeError('connection_test_failed', '来源连接测试未通过。', 409);
       conn.status = 'confirmed'; conn.confirmedBy = ctx.userId; invalidateAnalyses(s); return { id: conn.id, status: conn.status };
@@ -77,7 +77,7 @@ export class KnowledgeService {
     requireManager(ctx);
     return this.deps.repo.transact(ctx, async s => {
       const conn = s.source.connections.find(c => c.id === connectionId);
-      if (!conn || !s.connectionMeta[connectionId]?.audience.includes(ctx.userId)) throw new KnowledgeError('not_found', '来源连接不存在。', 404);
+      if (!conn || !s.connectionMeta[connectionId]?.audience.includes(ctx.userId) || !s.connectionMeta[connectionId]!.projectIds.every(p => ctx.projectScopes.includes(p))) throw new KnowledgeError('not_found', '来源连接不存在。', 404);
       if (conn.status !== 'confirmed') throw new KnowledgeError('connection_unconfirmed', '先测试并确认连接范围。', 409);
       const store = hydrate(s.source), result = await syncConnection(store, this.plugin(s, conn.pluginId), connectionId);
       s.source = snapshot(store);
@@ -90,7 +90,7 @@ export class KnowledgeService {
     if (!/\.(txt|md|markdown|csv)$/i.test(name) || /[\\/\x00-\x1f]/.test(name)) throw new KnowledgeError('unsupported_file', '此入口支持 TXT、Markdown 和 CSV 文件。');
     await this.deps.repo.transact(ctx, s => {
       const conn = s.source.connections.find(c => c.id === connectionId), meta = s.connectionMeta[connectionId];
-      if (!conn || conn.pluginId !== 'local-file' || !meta?.audience.includes(ctx.userId)) throw new KnowledgeError('not_found', '本地文件连接不存在。', 404);
+      if (!conn || conn.pluginId !== 'local-file' || !meta?.audience.includes(ctx.userId) || !meta.projectIds.every(p => ctx.projectScopes.includes(p))) throw new KnowledgeError('not_found', '本地文件连接不存在。', 404);
       s.uploads = s.uploads.filter(u => u.connectionId !== connectionId || u.name !== name);
       if (s.uploads.length >= 200) throw new KnowledgeError('corpus_limit', '试点资料数已达到上限。', 409);
       s.uploads.push({ connectionId, name, text, version: hash(text), audience: meta.audience });

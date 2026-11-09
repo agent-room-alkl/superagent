@@ -1,6 +1,8 @@
 import { APP_ROLES, type AppRole } from '@superagent/shared';
 import { buildApp } from './app.js';
 import { runWorker } from './worker.js';
+import { createKnowledgeDeps } from './modules/knowledge/runtime.js';
+import { runKnowledgeWorker } from './modules/knowledge/worker.js';
 
 const role = (process.env.APP_ROLE ?? 'web') as AppRole;
 if (!APP_ROLES.includes(role)) {
@@ -11,12 +13,18 @@ if (!APP_ROLES.includes(role)) {
 if (role === 'web') {
   const { createRuntime } = await import('./bootstrap.js');
   const runtime = await createRuntime(process.env); // throws BootstrapError naming missing settings → container exits
-  const app = await buildApp({ ...runtime.app, serveWeb: true, logger: true });
+  const app = await buildApp({ ...runtime.app, knowledgeDeps: createKnowledgeDeps(runtime), serveWeb: true, logger: true });
   app.addHook('onClose', () => runtime.close());
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });
 } else if (role === 'worker') {
-  await runWorker();
+  const { createRuntime } = await import('./bootstrap.js');
+  const runtime = await createRuntime(process.env);
+  const controller = new AbortController();
+  process.once('SIGTERM', () => controller.abort());
+  process.once('SIGINT', () => controller.abort());
+  try { await Promise.all([runWorker(controller.signal), runKnowledgeWorker(createKnowledgeDeps(runtime), runtime.config.platformTenantId, controller.signal)]); }
+  finally { await runtime.close(); }
 } else {
   // APP_ROLE=browser: one sandbox run per Job execution (browser image variant, Dockerfile.browser).
   const { runFromEnv } = await import('./browser/runner.js');
