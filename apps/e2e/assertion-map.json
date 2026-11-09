@@ -67,17 +67,15 @@
    "id": "qa-human-work#9",
    "suite": "qa-human-work",
    "assertion": "Approved action inherits confirmed data",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#10",
    "suite": "qa-human-work",
    "assertion": "Approval is distinct from execution",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#11",
@@ -91,41 +89,38 @@
    "id": "qa-human-work#12",
    "suite": "qa-human-work",
    "assertion": "Saved revision invalidates approval",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "unit",
+   "ref": "apps/server/test/execution.test.ts",
+   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
   },
   {
    "id": "qa-human-work#13",
    "suite": "qa-human-work",
    "assertion": "Unknown outcome retains single submission",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#14",
    "suite": "qa-human-work",
    "assertion": "Unknown outcome has no resubmit action",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#15",
    "suite": "qa-human-work",
    "assertion": "Unknown readback does not retry",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "unit",
+   "ref": "apps/server/test/execution.test.ts",
+   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
   },
   {
    "id": "qa-human-work#16",
    "suite": "qa-human-work",
    "assertion": "Readback compares approved values",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#17",
@@ -307,9 +302,8 @@
    "id": "qa-human-work#39",
    "suite": "qa-human-work",
    "assertion": "Mismatched readback stops without resubmission",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "human work items (待我处理) — Grok has humanwork module locally, not yet pushed"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-human-work#40",
@@ -1111,9 +1105,8 @@
    "id": "qa-outcomes#7",
    "suite": "qa-outcomes",
    "assertion": "Execution identity untraceable",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#8",
@@ -1159,9 +1152,8 @@
    "id": "qa-outcomes#13",
    "suite": "qa-outcomes",
    "assertion": "Missing information fake-executed",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#14",
@@ -1287,49 +1279,46 @@
    "id": "qa-outcomes#29",
    "suite": "qa-outcomes",
    "assertion": "Approval does not bind parameters",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "unit",
+   "ref": "apps/server/test/execution.test.ts",
+   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
   },
   {
    "id": "qa-outcomes#30",
    "suite": "qa-outcomes",
    "assertion": "Timeout marked complete/retried",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "unit",
+   "ref": "apps/server/test/execution.test.ts",
+   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
   },
   {
    "id": "qa-outcomes#31",
    "suite": "qa-outcomes",
    "assertion": "Unknown write can be accepted",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#32",
    "suite": "qa-outcomes",
    "assertion": "Unknown readback retried write",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "unit",
+   "ref": "apps/server/test/execution.test.ts",
+   "e2eOwner": "T-47 (timeout / revised-approval paths need a fault-injecting connector in E2E)"
   },
   {
    "id": "qa-outcomes#33",
    "suite": "qa-outcomes",
    "assertion": "Mismatched write accepted or repeated",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#34",
    "suite": "qa-outcomes",
    "assertion": "Mismatched result review enabled",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#35",
@@ -1343,9 +1332,8 @@
    "id": "qa-outcomes#36",
    "suite": "qa-outcomes",
    "assertion": "Matching readback did not verify original request",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts"
   },
   {
    "id": "qa-outcomes#37",

@@ -128,8 +128,26 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     await page.getByLabel('选择流程').selectOption(SOP);
     const run = page.getByRole('region', { name: '运行记录' }).locator('li[data-run]').filter({ hasText: 'INV-480' });
     await expect(run.locator('[data-run-status]')).toHaveText('已完成');
+    await expect(run).toContainText('事件 INV-480 · v1'); // which event, which published version
     await expect(run.locator('[data-step="w"]')).toContainText('已写入并回读一致（ERP-INV-480）');
     await expect(run.locator('[data-step="w"] .readback')).toContainText('"amount":480');
+  });
+
+  await test.step('missing required input: blocked and asks for it, nothing runs or is written', async () => {
+    const runs = page.getByRole('region', { name: '运行记录' });
+    await runs.getByLabel('事件编号').fill('INV-000');
+    await runs.getByLabel('输入数据').fill(JSON.stringify({ invoiceNo: 'INV-000' }));
+    await runs.getByRole('button', { name: '按已发布版本触发' }).click();
+    await expect(page.getByLabel('触发结果')).toContainText('已阻塞');
+    const run = runs.locator('li[data-run]').filter({ hasText: 'INV-000' });
+    await expect(run.locator('[data-run-status]')).toHaveText('已阻塞');
+    await expect(run.locator('[data-step="t"]')).toContainText('缺少必填字段：amount');
+    await expect(run.locator('[data-step="w"]')).toHaveAttribute('data-step-status', 'pending');
+    expect(Object.keys(await json<Record<string, unknown>>(page.request.get('/__e2e/erp/ledger')))).toEqual(['INV-480']);
+    await page.goto('/#work');
+    await expect(page.getByRole('button', { name: /补资料/ })).toBeVisible();
+    await page.goto('/#brain');
+    await page.getByLabel('选择流程').selectOption(SOP);
   });
 
   await test.step('read-back mismatch: frozen, exception opened, no second write and no resubmission', async () => {
