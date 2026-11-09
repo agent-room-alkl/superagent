@@ -16,16 +16,22 @@ if (role === 'web') {
   const { createRuntime } = await import('./bootstrap.js');
   const runtime = await createRuntime(process.env); // throws BootstrapError naming missing settings → container exits
   const knowledge = createKnowledgeDeps(runtime);
+  let roomHydrated = !runtime.pool;
   if (runtime.pool) {
     // T-41: command-room rows and the task queue live in the same PostgreSQL as everything else.
     const pool = runtime.pool;
     const db = { query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) };
     bindRoomStore(db);
     bindRuntimeDb(db);
-    await hydrateRoom();
+    // Never crash the web role on an unreachable database: retry in the background and stay not-ready until done.
+    const hydrate = () => hydrateRoom().then(() => { roomHydrated = true; }, (e: unknown) => {
+      console.log(JSON.stringify({ msg: 'room hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
+      setTimeout(hydrate, 5000).unref();
+    });
+    void hydrate();
   }
   const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge,
-    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }], serveWeb: true, logger: true });
+    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'room', check: async () => roomHydrated }], serveWeb: true, logger: true });
   app.addHook('onClose', async () => { await knowledge.close?.(); await runtime.close(); });
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });
