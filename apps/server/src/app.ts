@@ -64,7 +64,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     for (const m of modules) {
       await api.register(async (scoped) => {
         if (m.roles) scoped.addHook('preHandler', requireRole(...m.roles));
-        const deps = m.prefix === 'setup' ? opts.setupDeps : m.prefix === 'knowledge' ? opts.knowledgeDeps : undefined;
+        const deps = m.prefix === 'setup' ? opts.setupDeps : m.prefix === 'knowledge' ? opts.knowledgeDeps : m.prefix === 'work-items' ? opts.longWorkDeps : undefined;
         await scoped.register(m.plugin, { ...(deps ? { deps } : {}), tenantOf: (req: any) => req.user?.tenantId ?? 'default' });
       }, { prefix: `/api/v1/${m.prefix}` });
     }

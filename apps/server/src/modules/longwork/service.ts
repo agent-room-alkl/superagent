@@ -28,6 +28,14 @@ export function validateSource(s: MailSource) {
 export class LongWork {
   constructor(readonly store: Store, private now: () => number = Date.now) {}
   snapshot(tenant: string) { return this.store.change(tenant, s => s); }
+  close(tenant: string, id: string, projectId: string, assignee: string) {
+    return this.store.change(tenant, s => {
+      const i = s.items.find(i => i.id === id && i.projectId === projectId); if (!i) throw Error('not_found');
+      if (i.assignee !== assignee) throw Error('forbidden');
+      if (s.exceptions.some(e => !e.resolvedTo && e.candidates.includes(id))) throw Error('unresolved_exception_conflict');
+      i.phase = 'closed'; this.cancelPending(s.actions, i.id); return i;
+    });
+  }
 
   async ingest(source: MailSource, mail: Incoming) {
     validateSource(source);
@@ -49,6 +57,7 @@ export class LongWork {
       if (candidates.length === 1) {
         const item = candidates[0]!;
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
+        this.cancelPending(state.actions, item.id);
         return { item, merged: true };
       }
       const due = objectDue(source.dueRule, source.fields);
@@ -67,6 +76,11 @@ export class LongWork {
       payload, hash: payloadHash(payload), status: 'pending', approval: null };
     actions.push(action); return action.id;
   }
+  private cancelPending(actions: Action[], batchId: string) {
+    for (const a of actions) if (a.batchId === batchId && ['pending', 'approved'].includes(a.status)) {
+      a.status = 'failed'; a.evidence = 'Cancelled before submission: the item no longer needs this request';
+    }
+  }
 
   resolve(tenant: string, exceptionId: string, itemId: string, projectId: string) {
     return this.store.change(tenant, s => {
@@ -78,6 +92,7 @@ export class LongWork {
         const a = s.actions.find(a => a.batchId === exceptionId)!;
         const mail = a.payload.mail as unknown as Incoming;
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
+        this.cancelPending(s.actions, item.id);
         e.resolvedTo = itemId; a.status = 'succeeded'; a.evidence = 'Reviewer matched incoming data; no external action executed';
       }
       return item;
@@ -193,6 +208,7 @@ export class LongWork {
       }
       for (const c of s.collections) if (c.status === 'open' && Date.parse(c.deadline) <= now) {
         c.status = 'summarized'; c.missing = c.recipients.filter(p => !Object.prototype.hasOwnProperty.call(c.replies, p));
+        this.cancelPending(s.actions, `collection:${c.id}`);
       }
       return { items: s.items, collections: s.collections };
     });

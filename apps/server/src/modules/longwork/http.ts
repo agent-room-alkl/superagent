@@ -35,9 +35,11 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
     const p = project(req, req.body.projectId);
     const e = (await deps!.work.snapshot(req.user!.tenantId)).exceptions.find(e => e.id === req.params.id && e.projectId === p);
     if (!e) throw Error('not_found');
-    if (!manager(req) && e.assignee !== req.user!.userId) throw Error('forbidden');
+    if (e.assignee !== req.user!.userId) throw Error('forbidden');
     return deps!.work.resolve(req.user!.tenantId, req.params.id, req.body.itemId, p);
   });
+  app.post<{ Params: { id: string }; Body: { projectId: string } }>('/items/:id/close', async req =>
+    deps!.work.close(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.user!.userId));
   app.post<{ Body: DateRule }>('/date-rules', async req => {
     if (!manager(req)) throw Error('forbidden'); return deps!.work.saveRule(req.user!.tenantId, req.body);
   });

@@ -33,7 +33,8 @@ Receipt identity is `(tenant, source, event, SOP)`. Mail body text is retained a
 item only when source, SOP, project, object, person and thread match exactly. Multiple candidates create a durable
 `exception_ruling` work item for the configured reviewer, with no automatic choice. Reviewers resolve it through
 the long-item API; resolving twice to the same item is idempotent. These work items are exposed by the long-item
-API; the existing WorkInboxPage does not yet display this separate queue.
+API and projected into the unified `/api/v1/work-items` list. WorkInboxPage lets the assigned reviewer select the
+original case; owners can inspect another person's exception but cannot decide it on their behalf.
 
 The first mail creates the long-running item associated with the configured SOP, rather than running the SOP's
 general-purpose tool graph. This delivery does not add a new general-purpose SOP executor. Reminders advance
@@ -78,7 +79,10 @@ Graph HTTP and business-tool tests use labeled synthetic adapters. They do not p
 has granted consent or that a real email/business write occurred. Existing prototype assertion mappings are not
 reclassified: the eight pending T-45 outcome-page assertions need their own UI integration and browser proof.
 The tenant aggregate is intentionally serialized; large mailboxes/high-volume tenants require partitioning and
-retention work before scaling. Longwork exceptions and SOP graph execution are integration follow-ups, as above.
+retention work before scaling. The unified inbox also shows assigned waiting cases, original mail, replies and their
+stable case id. Only the assignee can close a case, and an unresolved matching exception blocks closing. Replies,
+closure and collection deadlines cancel pending/approved reminder intents before submission; already uncertain or
+in-flight actions retain their recovery state. General SOP graph execution remains an integration follow-up.
 
 Official protocol references:
 

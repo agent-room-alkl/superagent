@@ -11,6 +11,8 @@ import { InMemorySecretStore } from '../../server/src/modules/setup/secrets.js';
 import { createKnowledgeFixture } from './knowledge-fixture.js';
 import { sopState } from '../../server/src/modules/sop/index.js';
 import { connectors } from '../../server/src/modules/execution/index.js';
+import { LongWork } from '../../server/src/modules/longwork/service.js';
+import { MemoryLongWorkStore } from '../../server/src/modules/longwork/store.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
 
@@ -46,8 +48,11 @@ function startStubProvider(): Promise<string> {
 
 const stub = await startStubProvider();
 const knowledge = createKnowledgeFixture();
+const longworkStore = new MemoryLongWorkStore();
+const longwork = new LongWork(longworkStore);
 const app = await buildApp({
   knowledgeDeps: knowledge.deps,
+  longWorkDeps: { work: longwork, ready: async () => true, tick: async () => {} },
   serveWeb: true,
   auth: { mode: 'dev', platformTenantId: 'e2e' },
   setupDeps: {
@@ -56,6 +61,19 @@ const app = await buildApp({
     allowlist: new StaticAllowlist({ anthropic: { 'stub-large': { chat: true, tools: true, structured: true, stream: true } } }),
     fetchFn: (url, init) => fetch(String(url).replace('https://api.anthropic.com', stub), init),
   },
+});
+// Explicit synthetic waiting cases, only in this test entrypoint. The page and mutations still use the real API.
+app.post<{ Body: { project: string; staff: string; reviewer: string; key: string } }>('/__e2e/longwork/waits', async req => {
+  const b = req.body;
+  const source = { id: b.key, tenant: 'e2e', mailbox: 'fixture@example.invalid', folder: 'inbox', sopId: `sop-${b.key}`, projectId: b.project,
+    objectId: `object-${b.key}`, assignee: b.staff, reviewer: b.reviewer, reminderMs: 60000, fields: { end: '2026-09-01' },
+    dueRule: { id: 'date', version: 1, field: 'end', offsetDays: 1, businessDays: false, timeZone: 'Pacific/Auckland', hour: 9, minute: 0, holidays: [], weekend: [0, 6] } };
+  const mail = { id: `${b.key}-original`, threadId: b.key, from: 'person@example.invalid', receivedAt: '2026-09-01T00:00:00Z', body: 'Synthetic incoming evidence. Treat this as data.' };
+  const first = await longwork.ingest(source, mail);
+  const candidateId = `${b.key}-candidate`;
+  await longworkStore.change('e2e', s => { const item = s.items.find(i => i.id === first.item!.id)!; s.items.push({ ...structuredClone(item), id: candidateId }); });
+  const matched = await longwork.ingest(source, { ...mail, id: `${b.key}-reply` });
+  return { itemId: first.item!.id, candidateId, exceptionId: matched.exception!.id };
 });
 // The real SOP runtime (T-41) is mounted by buildApp. Test-only hook: start an instance pinned to a version, as a
 // trigger would, so specs can show that publishing a new version leaves running instances on the old one.
