@@ -123,13 +123,23 @@ app.post<{ Params: { id: string } }>('/__e2e/sop/versions/:id/instances', async 
 // Synthetic ERP for the main-line E2E: the connector for tool e2e.erp.pay writes to this in-memory ledger and
 // returns what the ledger then holds (read-back). mode "mismatch" makes the system store a different amount.
 const erp = { mode: 'ok' as 'ok' | 'mismatch', ledger: new Map<string, Record<string, unknown>>() };
+const erpWrites = new Map<string, number>();
 connectors.set('e2e.erp.pay', (params) => {
+  erpWrites.set(String(params.invoiceNo), (erpWrites.get(String(params.invoiceNo)) ?? 0) + 1);
   const stored = { ...params, ...(erp.mode === 'mismatch' ? { amount: Number(params.amount) * 10 } : {}) };
   erp.ledger.set(String(params.invoiceNo), stored);
   return { externalRef: `ERP-${String(params.invoiceNo)}`, actual: { ...stored } };
 });
 app.post<{ Body: { mode: 'ok' | 'mismatch' } }>('/__e2e/erp/mode', async (req) => ((erp.mode = req.body.mode), { mode: erp.mode }));
 app.get('/__e2e/erp/ledger', async () => Object.fromEntries(erp.ledger));
+app.get('/__e2e/erp/write-counts', async () => Object.fromEntries(erpWrites));
+// Represents an independent correction in the synthetic external system, not a second connector submission.
+app.post<{ Body: { invoiceNo: string; amount: number } }>('/__e2e/erp/correct', async (req, reply) => {
+  const previous = erp.ledger.get(req.body.invoiceNo);
+  if (!previous || !Number.isFinite(req.body.amount)) return reply.code(400).send({ error: 'invalid_synthetic_correction' });
+  erp.ledger.set(req.body.invoiceNo, { ...previous, amount: req.body.amount });
+  return { corrected: true };
+});
 // The command room is one shared room per process. Test-only hook: start it empty again, so "a new room has no
 // tasks" is tested on a new room. Digital employees stay in the employee module; specs create their own.
 app.post('/__e2e/room/reset', async () => ((roomState.current = createCommandRoom()), { reset: true }));

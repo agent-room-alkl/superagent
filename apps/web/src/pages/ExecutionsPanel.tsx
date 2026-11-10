@@ -18,6 +18,7 @@ export interface ExecutionView {
   status: 'running' | 'waiting_human' | 'completed' | 'blocked' | 'outcome_unknown';
   steps: Step[];
   exceptionItemId: string | null;
+  canReconcile?: boolean;
 }
 
 const RUN_LABEL: Record<ExecutionView['status'], string> = { running: '运行中', waiting_human: '等待人工', completed: '已完成', blocked: '已阻塞', outcome_unknown: '结果未知（已冻结）' };
@@ -28,6 +29,8 @@ export function ExecutionsPanel({ sopId, publishedVersionId }: { sopId: string; 
   const [eventId, setEventId] = useState('');
   const [input, setInput] = useState('{\n  \n}');
   const [msg, setMsg] = useState('');
+  const [checking, setChecking] = useState<string | null>(null);
+  const [reconcileMessages, setReconcileMessages] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const r = await api<{ executions?: ExecutionView[] }>(`/api/v1/executions?sopId=${encodeURIComponent(sopId)}`);
@@ -47,6 +50,23 @@ export function ExecutionsPanel({ sopId, publishedVersionId }: { sopId: string; 
     const r = await api<ExecutionView & { message?: string }>('/api/v1/executions', { method: 'POST', body: JSON.stringify({ versionId: publishedVersionId, eventId: eventId.trim(), input: data }) });
     setMsg(r.status === 201 ? `已触发运行 ${r.body.id}：${RUN_LABEL[r.body.status]}` : `未触发：${r.body.message ?? r.status}`);
     await load();
+  }
+
+  async function reconcile(run: ExecutionView) {
+    if (!run.canReconcile || checking) return;
+    setChecking(run.id);
+    try {
+      const response = await api<ExecutionView>(`/api/v1/executions/${encodeURIComponent(run.id)}/reconcile`, { method: 'POST', body: '{}' });
+      const message = response.status === 200
+        ? response.body.status === 'completed' ? '回读已匹配原批准内容；没有再次提交外部动作。' : '已核对原执行，结果仍待确认；没有再次提交外部动作。'
+        : response.status === 403 ? '当前员工、工具或连接不允许回读；未调用外部系统。'
+        : response.status === 404 ? '找不到可核对的原执行，或当前身份没有访问权限。'
+        : '只读核对暂不可用；没有重新提交外部动作。';
+      setReconcileMessages(previous => ({ ...previous, [run.id]: message }));
+      await load();
+    } catch {
+      setReconcileMessages(previous => ({ ...previous, [run.id]: '连接中断，核对结果尚未确认；请刷新原执行记录，没有重新提交写入。' }));
+    } finally { setChecking(null); }
   }
 
   return (
@@ -72,6 +92,12 @@ export function ExecutionsPanel({ sopId, publishedVersionId }: { sopId: string; 
           <li key={r.id} data-run={r.id}>
             <strong>{r.id}</strong> · 事件 {r.eventId} · v{r.versionNumber} · <span data-run-status={r.status}>{RUN_LABEL[r.status]}</span>
             {r.exceptionItemId ? <> · <a href="#work">例外事项 {r.exceptionItemId}</a></> : null}
+            {r.status === 'outcome_unknown' ? <div className="stack">
+              <p className="helper">仅回读原动作的外部结果，保留同一执行和批准；不会重新发送。回读前会重新核对员工状态、工具和账号权限。</p>
+              <button className="btn" type="button" disabled={!r.canReconcile || checking !== null} onClick={() => void reconcile(r)}>{checking === r.id ? '正在只读核对…' : '只回读核对外部结果'}</button>
+              {!r.canReconcile ? <p className="helper">当前身份的只读核对入口不可用。</p> : null}
+            </div> : null}
+            {reconcileMessages[r.id] ? <p role="status" aria-label="回读核对结果">{reconcileMessages[r.id]}</p> : null}
             <ol className="run-steps">
               {r.steps.map((s) => (
                 <li key={s.nodeId} data-step={s.nodeId} data-step-status={s.status}>
