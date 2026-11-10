@@ -250,4 +250,36 @@ describe('SOP executor main line', () => {
     expect(blocked.steps.find((s) => s.nodeId === 'r')!.detail).toContain('尚未落盘');
     expect(calls).toEqual([]);
   });
+
+  it('runs an already claimed instance once, and persists that run before the tool call', async () => {
+    const order: string[] = [];
+    const run = await ex.runClaimed(
+      { tenantId: 't', versionId, instanceId: 'mail_1', eventId: 'mail-1', startedBy: 'owner-1', data: input },
+      async () => { order.push('commit'); expect(calls).toEqual([]); },
+    );
+    order.push('done');
+    expect(order).toEqual(['commit', 'done']);
+    expect(sop.instancesOf('invoice-intake')).toEqual([]);
+    expect(run.id).toBe('run_mail_1');
+    expect(run.instanceId).toBe('mail_1');
+    expect(run.status).toBe('waiting_human');
+    expect(calls).toEqual(['lookup:INV-480']);
+
+    const again = await ex.runClaimed(
+      { tenantId: 't', versionId, instanceId: 'mail_1', eventId: 'mail-1', startedBy: 'owner-1', data: input },
+      async () => { throw new Error('must not commit twice'); },
+    );
+    expect(again.id).toBe(run.id);
+    expect(calls).toEqual(['lookup:INV-480']);
+  });
+
+  it('drops the claimed run and does not call the tool when the run row loses the insert', async () => {
+    await expect(ex.runClaimed(
+      { tenantId: 't', versionId, instanceId: 'mail_2', eventId: 'mail-2', startedBy: 'owner-1', data: input },
+      async () => { throw new Error('lost'); },
+    )).rejects.toThrow('lost');
+    expect(calls).toEqual([]);
+    expect(ex.byInstance('t', 'mail_2')).toBeNull();
+    expect(sop.instancesOf('invoice-intake')).toEqual([]);
+  });
 });
