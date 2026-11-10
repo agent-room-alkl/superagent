@@ -239,12 +239,18 @@ function present(run: Execution, userId: string) {
   return { ...run, canReconcile: run.status === 'outcome_unknown' && run.startedBy === userId };
 }
 
-/** Write the read-back onto the run's existing work-item rows. Does not insert, and does not rewrite another run. */
+/** Test seam: runs after the approval is restored and before its row is written. */
+export const beforeReadbackPersist: { current: (() => Promise<void>) | null } = { current: null };
+
+/** Write the read-back onto the run's existing work-item rows. Does not insert, and does not rewrite another run or a newer contract. */
 async function persistReadback(runId: string): Promise<void> {
   if (!runStore) return;
   for (const item of inboxState.current.all()) {
     if (item.payload.executionId !== runId) continue;
-    await updateWorkItem(runStore, item);
+    const wrote = await updateWorkItem(runStore, item);
+    if (wrote) continue;
+    const fresh = (await loadWorkItemsForRun(runStore, runId)).find((row) => row.id === item.id);
+    if (fresh) inboxState.current.remember(fresh);
   }
 }
 
@@ -264,6 +270,7 @@ export async function reconcile(tenantId: string, runId: string, actorUserId: st
   await restoreClaimedItems(runId);
   if (gatewayState.current.snapshot().actions.length === 0) await hydrateGateway();
   const run = executionState.current.reconcile(tenantId, runId, actorUserId);
+  if (beforeReadbackPersist.current) await beforeReadbackPersist.current();
   await persistReadback(run.id);
   await flushExecutions();
   await flushInbox();

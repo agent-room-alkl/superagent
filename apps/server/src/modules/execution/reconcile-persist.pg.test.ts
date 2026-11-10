@@ -13,7 +13,7 @@ import { sopState } from '../sop/index.js';
 import { SopRuntime } from '../sop/sop.js';
 import { toolsState } from '../tools/index.js';
 import { SopExecutor, type Connector } from './executor.js';
-import { bindExecutionStore, connectors, executionState, readbacks, reconcile } from './index.js';
+import { bindExecutionStore, beforeReadbackPersist, connectors, executionState, readbacks, reconcile } from './index.js';
 import { bindGatewayStore, gatewayState } from '../gateway/index.js';
 import { insertRun, loadRunById, updateRun } from './pg-runs.js';
 
@@ -155,7 +155,22 @@ live('a read-back confirms the original approval row after the process cache is 
     expect(writes).toEqual(['pay']);
     expect((await loadRunById(db, unknown.id))?.status).toBe('completed');
     expect(gatewayState.current.snapshot().actions.reduce((n, action) => n + action.calls, 0)).toBe(1);
+
+    const confirmed = (await loadWorkItemsForRun(db, unknown.id)).find((item) => item.id === approval.id)!;
+    const revised = { ...structuredClone(confirmed), payloadVersion: confirmed.payloadVersion + 1, payloadHash: 'revised-contract', status: 'withdrawn' as const, decision: null };
+    beforeReadbackPersist.current = async () => {
+      await db.query(`UPDATE work_item SET payload = $2::jsonb WHERE id = $1`, [revised.id, JSON.stringify(revised)]);
+    };
+    executionState.current.load({ runs: [], seq: 0 });
+    inboxState.current.load({ items: [], seq: 0 });
+    gatewayState.current.load({ actions: [] });
+    const replay = await reconcile('t', unknown.id, 'owner-1');
+    expect(replay.status).toBe('completed');
+    const kept = (await loadWorkItemsForRun(db, unknown.id)).find((item) => item.id === approval.id)!;
+    expect(kept).toMatchObject({ payloadVersion: revised.payloadVersion, payloadHash: 'revised-contract', status: 'withdrawn', decision: null });
+    expect(writes).toEqual(['pay']);
   } finally {
+    beforeReadbackPersist.current = null;
     readbacks.delete(toolId);
     connectors.delete(toolId);
     bindExecutionStore(null);
