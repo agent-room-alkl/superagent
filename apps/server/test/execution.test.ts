@@ -263,6 +263,9 @@ describe('SOP executor main line', () => {
     expect(run.id).toBe('run_mail_1');
     expect(run.instanceId).toBe('mail_1');
     expect(run.status).toBe('waiting_human');
+    expect(approvalOf(run.id).id).toBe('wi_run_mail_1_h_action_approval');
+    inbox.remember({ ...approvalOf(run.id), status: 'decided' });
+    expect(approvalOf(run.id).status).toBe('open');
     expect(calls).toEqual(['lookup:INV-480']);
 
     const again = await ex.runClaimed(
@@ -281,5 +284,15 @@ describe('SOP executor main line', () => {
     expect(calls).toEqual([]);
     expect(ex.byInstance('t', 'mail_2')).toBeNull();
     expect(sop.instancesOf('invoice-intake')).toEqual([]);
+  });
+
+  it('pins a stored version into an empty runtime without opening an instance', () => {
+    const empty = new SopRuntime();
+    const version = sop.get(versionId);
+    empty.pin(version);
+    expect(empty.get(versionId).status).toBe('published');
+    expect(empty.instancesOf('invoice-intake')).toEqual([]);
+    empty.pin({ ...version, number: 99 });
+    expect(empty.get(versionId).number).toBe(version.number);
   });
 });
