@@ -62,15 +62,19 @@ it('separates recipient evidence, real request-delivery status and the collector
     const staffView = (await app.inject({ url: '/api/v1/work-items', headers: assigned })).json().items;
     expect(staffView).toHaveLength(1); expect(staffView[0].longwork.type).toBe('collection-response'); expect(staffView[0].payload).not.toHaveProperty('responses');
     const reply = await app.inject({ method: 'POST', url: '/api/v1/long-items/collections/c/reply', headers: assigned, payload: { projectId: 'p', person: 'other', evidence: 'staff private evidence' } }); expect(reply.statusCode).toBe(200);
+    expect(reply.json().recipients).toEqual(['staff']);
+    await app.inject({ method: 'POST', url: '/api/v1/long-items/collections/c/reply', headers: other, payload: { projectId: 'p', evidence: 'other private evidence' } });
+    const update = await app.inject({ method: 'POST', url: '/api/v1/long-items/collections/c/reply', headers: assigned, payload: { projectId: 'p', evidence: 'staff private evidence' } });
+    expect(update.body).not.toContain('other private evidence'); expect(update.json().replies).toEqual({ staff: 'staff private evidence' });
     const otherView = (await app.inject({ url: '/api/v1/work-items', headers: other })).body;
     expect(otherView).not.toContain('staff private evidence');
     const rawOther = (await app.inject({ url: '/api/v1/long-items', headers: other })).body; expect(rawOther).not.toContain('staff private evidence');
     const collector = { 'x-dev-user': 'collector|employee|p' };
     const before = (await app.inject({ url: '/api/v1/work-items', headers: collector })).json().items[0];
-    expect(before.payload.verifiedSends).toBe(0); expect(before.payload.responses).toEqual({ staff: 'staff private evidence' });
+    expect(before.payload.verifiedSends).toBe(0); expect(before.payload.responses).toEqual({ staff: 'staff private evidence', other: 'other private evidence' });
     now += 60001; await work.tick('t');
     const after = (await app.inject({ url: '/api/v1/work-items', headers: collector })).json().items[0];
-    expect(after.payload.collectionState).toBe('summarized'); expect(after.payload.missing).toEqual(['other']);
+    expect(after.payload.collectionState).toBe('summarized'); expect(after.payload.missing).toEqual([]);
     expect((await app.inject({ method: 'POST', url: '/api/v1/long-items/collections/c/reply', headers: other, payload: { projectId: 'p', evidence: 'late' } })).statusCode).toBe(409);
     expect((await work.snapshot('t')).actions.every(a => a.status === 'failed')).toBe(true); // unsent requests are canceled at the deadline
   } finally { await app.close(); }

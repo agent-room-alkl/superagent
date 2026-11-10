@@ -3,13 +3,17 @@ import { canAccessProject } from '../../auth.js';
 import type { DateRule } from './dates.js';
 import type { ActionDriver, LongWork } from './service.js';
 import type { MailTrigger } from './graph.js';
-import type { Action } from './store.js';
+import type { Action, Collection } from './store.js';
 
 export interface LongWorkDeps { work: LongWork; mail?: MailTrigger; driver?: ActionDriver; ready(): Promise<boolean>; tick(): Promise<void> }
 function manager(req: FastifyRequest) { return req.user?.roles.some(r => r === 'admin' || r === 'owner'); }
 function reviewer(req: FastifyRequest) { return manager(req) || req.user?.roles.includes('reviewer'); }
 function actionVisible(req: FastifyRequest, a: Action) { return manager(req) || a.assigneeUserId === req.user!.userId || (!a.assigneeUserId && reviewer(req)); }
 function actionActor(req: FastifyRequest, a: Action) { return a.assigneeUserId ? a.assigneeUserId === req.user!.userId : reviewer(req); }
+function collectionView(req: FastifyRequest, c: Collection): Collection {
+  return manager(req) || c.assigneeUserId === req.user!.userId ? c : { ...c, recipients: [req.user!.userId],
+    replies: Object.fromEntries(Object.entries(c.replies).filter(([person]) => person === req.user!.userId)), missing: c.missing.filter(person => person === req.user!.userId) };
+}
 async function batchActor(req: FastifyRequest, deps: LongWorkDeps, id: string, projectId: string) {
   const rows = (await deps.work.snapshot(req.user!.tenantId)).actions.filter(a => a.batchId === id && a.projectId === projectId && a.payload.kind !== 'ambiguous_incoming');
   if (!rows.length || !rows.every(a => actionVisible(req, a))) throw Error('not_found');
@@ -37,7 +41,7 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
       exceptions: reviewer(req) ? state.exceptions.filter(e => canAccessProject(req.user!, e.projectId)) : [],
       actions: state.actions.filter(a => canAccessProject(req.user!, a.projectId) && actionVisible(req, a)),
       collections: state.collections.filter(c => canAccessProject(req.user!, c.projectId) && (manager(req) || c.assigneeUserId === req.user!.userId || c.recipients.includes(req.user!.userId)))
-        .map(c => manager(req) || c.assigneeUserId === req.user!.userId ? c : { ...c, recipients: [req.user!.userId], replies: Object.fromEntries(Object.entries(c.replies).filter(([person]) => person === req.user!.userId)), missing: c.missing.filter(person => person === req.user!.userId) }),
+        .map(c => collectionView(req, c)),
     };
   });
   app.post<{ Params: { id: string }; Body: { projectId: string; itemId: string } }>('/exceptions/:id/resolve', async req => {
@@ -106,7 +110,8 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
   });
   app.post<{ Params: { id: string }; Body: { projectId: string; evidence: string } }>('/collections/:id/reply', async req => {
     // Respondents are the authenticated user. Supplying another person's identity is never accepted.
-    return deps!.work.reply(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.user!.userId, req.body.evidence);
+    const c = await deps!.work.reply(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.user!.userId, req.body.evidence);
+    return collectionView(req, c);
   });
 };
 
