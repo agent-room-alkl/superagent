@@ -206,7 +206,9 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     await expect(run.getByRole('status', { name: '回读核对结果' })).toContainText('不允许回读');
     await expect(run.locator('[data-run-status]')).toHaveText('结果未知（已冻结）');
     expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/write-counts')))['INV-990']).toBe(1);
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/read-counts')))['INV-990'] ?? 0).toBe(0);
     expect(await run.getAttribute('data-run')).toBe(originalRunId);
+    await run.screenshot({ path: test.info().outputPath('paused-readback.png') });
     await json(page.request.post(`/api/v1/employees/${employeeId}/resume`));
   });
 
@@ -222,6 +224,8 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     await expect(run.locator('[data-run-status]')).toHaveText('已完成');
     await expect(run.locator('[data-step="w"] .readback')).toContainText('"amount":990');
     expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/write-counts')))['INV-990']).toBe(1);
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/read-counts')))['INV-990']).toBe(2);
     expect(await run.getAttribute('data-run')).toBe(originalRunId);
+    await run.screenshot({ path: test.info().outputPath('matched-readback.png') });
   });
 });

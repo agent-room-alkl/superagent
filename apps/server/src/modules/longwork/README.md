@@ -148,7 +148,7 @@ through the authenticated decision API. Guard tests cover source changes, closur
 
 Graph HTTP and business-tool tests use labeled synthetic adapters. They do not prove a live Microsoft 365 tenant
 has granted consent or that a real email/business write occurred. Existing prototype assertion mappings are not
-reclassified: the eight pending T-45 outcome-page assertions need their own UI integration and browser proof.
+reclassified by backend tests alone: remaining T-45 outcome-page assertions need their own UI integration and browser proof.
 The tenant aggregate is intentionally serialized; large mailboxes/high-volume tenants require partitioning and
 retention work before scaling. The unified inbox also shows assigned waiting cases, original mail, replies and their
 stable case id. Only the assignee can close a case, and an unresolved matching exception blocks closing. Replies,

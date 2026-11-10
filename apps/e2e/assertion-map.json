@@ -1212,9 +1212,9 @@
    "id": "qa-outcomes#28",
    "suite": "qa-outcomes",
    "assertion": "Write rehearsal auto-approved",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "A real published SOP stops for human approval; the external ledger stays empty before the decision."
   },
   {
    "id": "qa-outcomes#29",
@@ -1265,9 +1265,9 @@
    "id": "qa-outcomes#35",
    "suite": "qa-outcomes",
    "assertion": "Corrected external data could not be reread without a second write",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "An independent external correction is reread on the same run; the write connector count stays one."
   },
   {
    "id": "qa-outcomes#36",
@@ -1319,17 +1319,17 @@
    "id": "qa-outcomes#42",
    "suite": "qa-outcomes",
    "assertion": "Manual pause bypassed during readback",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "A paused employee is denied before the read-only probe; the probe count remains zero."
   },
   {
    "id": "qa-outcomes#43",
    "suite": "qa-outcomes",
    "assertion": "Paused readback repeated/finished external write",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "Denied paused reconciliation keeps the original run unknown and the external write count at one."
   },
   {
    "id": "qa-outcomes#44",
