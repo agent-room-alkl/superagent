@@ -1,19 +1,38 @@
 import fs from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
 import { loadRoomRows, saveRoomRows, type Queryable } from './pg-room.js';
-import { CommandRoom, type EmployeeRef, type RoomSnapshot, type Viewer } from './room.js';
-
-const EMPLOYEES: EmployeeRef[] = [
-  { id: 'emp-sales', name: '销售员工', ownerUserId: 'user-sales', status: 'active' },
-  { id: 'emp-ops', name: '运营员工', ownerUserId: 'user-ops', status: 'offline' },
-];
+import { employeesState } from '../employees/index.js';
+import { CommandRoom, type EmployeeRef, type EmployeeSource, type RoomSnapshot, type Viewer } from './room.js';
 
 const ROLES = new Set<Viewer['roles'][number]>(['admin', 'owner', 'employee', 'reviewer']);
 
-export function createCommandRoom(): CommandRoom {
-  const room = new CommandRoom(EMPLOYEES);
-  for (const userId of ['user-owner', 'user-sales', 'user-ops']) room.addMember('room-1', userId);
-  return room;
+/**
+ * The room names the digital employees that exist in the employee module, as they are now: the person answering
+ * for each one, whether it can take work, and the prompt version it would run with. Nothing here is a sample.
+ */
+export function registryEmployees(): EmployeeRef[] {
+  const registry = employeesState.current;
+  return registry.list().map((employee) => ({
+    id: employee.id,
+    name: employee.name,
+    ownerUserId: employee.owner,
+    duty: employee.duty,
+    status: employee.status === 'online' || employee.status === 'busy'
+      ? 'active'
+      : employee.status === 'paused'
+        ? 'paused'
+        : employee.status === 'unconnected' ? 'unconnected' : 'offline',
+    promptVersion: registry.currentPrompt(employee.id).version,
+    modelTier: employee.modelTier,
+  }));
+}
+
+let employeeSource: EmployeeSource = registryEmployees;
+
+/** A fresh room. Tests pass a fixed list; the running app reads the employee module. */
+export function createCommandRoom(employees: EmployeeSource = registryEmployees): CommandRoom {
+  employeeSource = employees;
+  return new CommandRoom(employees);
 }
 
 /** Process-local room. Postgres rows are the restart contract; the JSON file remains a fallback. */
@@ -26,7 +45,7 @@ export function bindRoomStore(db: Queryable | null): void {
 }
 
 export function reloadRoom(saved: RoomSnapshot): void {
-  roomState.current = CommandRoom.restore(EMPLOYEES, saved);
+  roomState.current = CommandRoom.restore(employeeSource, saved);
 }
 
 /** Gap-fill cursor. Missing means the start of the room. A bad value must not look like an empty catch-up. */
@@ -92,9 +111,17 @@ interface MessageBody {
   projectId?: string | null;
   body?: string;
   clientMessageId?: string;
+  followupTo?: string | null;
 }
 
-/** Command room HTTP surface (PRD §5.6). Auth headers stand in until Entra (T-39) is mounted. */
+const STATUS: Record<string, number> = { task_not_found: 404, forbidden: 403, not_assignee: 403, task_closed: 409, not_reported: 409 };
+
+function refusal(error: unknown): { code: number; body: { error: string } } {
+  const name = error instanceof Error ? error.message : 'forbidden';
+  return { code: STATUS[name] ?? 403, body: { error: STATUS[name] ? name : 'forbidden' } };
+}
+
+/** Command room HTTP surface (PRD §5.6). Under /api/v1 the caller is always the signed-in user. */
 export const roomModule: FastifyPluginAsync = async (app) => {
   app.get('/status', async () => ({ module: 'room', implemented: true }));
 
@@ -104,7 +131,8 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     const viewer = viewerFrom(req.headers, req.user);
     const posted = roomState.current.post({
       roomId: body.roomId,
-      tenantId: body.tenantId ?? 't',
+      // The signed-in user's tenant wins; the body value is only read where no auth hook is mounted (unit tests).
+      tenantId: req.user?.tenantId ?? body.tenantId ?? 't',
       projectId: body.projectId ?? null,
       authorUserId: viewer.userId,
       authorRoles: viewer.roles,
@@ -112,9 +140,25 @@ export const roomModule: FastifyPluginAsync = async (app) => {
       modelAvailable: header(req.headers, 'x-model-available') === 'false' ? false : undefined,
       body: body.body,
       clientMessageId: body.clientMessageId,
+      followupTo: typeof body.followupTo === 'string' && body.followupTo ? body.followupTo : null,
     });
     await flushRoom();
     return posted;
+  });
+
+  /** Who is looking, and which digital employees they may name. Read from the employee module on every call. */
+  app.get('/roster', async (req) => {
+    const viewer = viewerFrom(req.headers, req.user);
+    return {
+      viewer: { userId: viewer.userId, roles: viewer.roles, owner: viewer.roles.includes('owner') || viewer.roles.includes('admin') },
+      employees: roomState.current.roster(viewer).map((employee) => ({
+        id: employee.id,
+        name: employee.name,
+        duty: employee.duty ?? '',
+        status: employee.status,
+        ownerUserId: employee.ownerUserId,
+      })),
+    };
   });
 
   app.get('/messages', async (req, reply) => {
@@ -133,7 +177,10 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     return reply.type('text/event-stream').send(payload);
   });
 
-  app.get('/tasks', async (req) => ({ tasks: roomState.current.listTasks(viewerFrom(req.headers, req.user)) }));
+  app.get('/tasks', async (req) => {
+    const query = req.query as { roomId?: string };
+    return { tasks: roomState.current.listTasks(viewerFrom(req.headers, req.user), query.roomId || undefined) };
+  });
 
   app.post('/tasks/:id/report', async (req, reply) => {
     const params = req.params as { id: string };
@@ -144,8 +191,24 @@ export const roomModule: FastifyPluginAsync = async (app) => {
       await flushRoom();
       return message;
     } catch (error) {
-      const code = error instanceof Error && error.message === 'task_not_found' ? 404 : 403;
-      return reply.code(code).send({ error: error instanceof Error ? error.message : 'forbidden' });
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
     }
   });
+
+  for (const action of ['cancel', 'review'] as const) {
+    app.post(`/tasks/:id/${action}`, async (req, reply) => {
+      const params = req.params as { id: string };
+      const body = (req.body ?? {}) as { clientMessageId?: string };
+      if (!body.clientMessageId) return reply.code(400).send({ error: 'missing_fields' });
+      try {
+        const message = roomState.current[action](params.id, viewerFrom(req.headers, req.user), body.clientMessageId);
+        await flushRoom();
+        return message;
+      } catch (error) {
+        const refused = refusal(error);
+        return reply.code(refused.code).send(refused.body);
+      }
+    });
+  }
 };

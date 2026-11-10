@@ -4,6 +4,7 @@ import { Placeholder } from './pages/Placeholder';
 import { ToolsPage } from './pages/ToolsPage';
 import { KnowledgePage } from './pages/KnowledgePage';
 import { signOut, type SignedIn } from './auth';
+import { authHeaders } from './api';
 import { SuperAgentPage } from './pages/SuperAgentPage';
 import { CommandRoomPage } from './pages/CommandRoomPage';
 import { WorkInboxPage } from './pages/WorkInboxPage';
@@ -36,6 +37,36 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
+/**
+ * Someone signed in only as an employee works from the two daily pages (prototype QA: "Employee navigation
+ * expanded"). This trims the menu; the server still decides what each role may call.
+ */
+export function navFor(roles: readonly string[] | null): typeof NAV {
+  const staffOnly = roles !== null && roles.includes('employee') && !roles.some((role) => role === 'owner' || role === 'admin' || role === 'reviewer');
+  return staffOnly ? NAV.filter((group) => group.group === '日常工作') : NAV;
+}
+
+function useRoles(): string[] | null {
+  const [roles, setRoles] = useState<string[] | null>(null);
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/v1/room/roster', { headers: await authHeaders() });
+        if (!response.ok) return;
+        const data = (await response.json()) as { viewer?: { roles?: string[] } };
+        if (!stop && Array.isArray(data.viewer?.roles)) setRoles(data.viewer.roles);
+      } catch {
+        // Without an answer the full menu stays; every module still checks the role on the server.
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, []);
+  return roles;
+}
+
 function useHashPage(): string {
   const read = () => window.location.hash.slice(1) || 'room';
   const [page, setPage] = useState(read);
@@ -49,7 +80,8 @@ function useHashPage(): string {
 
 export function App({ user = { mode: 'dev' } }: { user?: SignedIn }) {
   const page = useHashPage();
-  const current = NAV.flatMap((g) => g.items).find((i) => i.id === page) ?? NAV[0]!.items[0]!;
+  const nav = navFor(useRoles());
+  const current = nav.flatMap((g) => g.items).find((i) => i.id === page) ?? nav[0]!.items[0]!;
   return (
     <>
       <header className="topbar">
@@ -64,7 +96,7 @@ export function App({ user = { mode: 'dev' } }: { user?: SignedIn }) {
       </header>
       <div className="app">
         <nav className="sidebar" aria-label="主菜单">
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div key={g.group}>
               <div className="nav-group">{g.group}</div>
               {g.items.map((i) => (

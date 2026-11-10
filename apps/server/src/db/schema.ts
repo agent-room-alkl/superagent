@@ -184,6 +184,8 @@ export const roomMessages = pgTable('room_messages', {
   clientMessageId: text('client_message_id').notNull(),
   mentions: jsonb('mentions').notNull(),
   taskIds: jsonb('task_ids').notNull(),
+  // message | reply | report | review | cancel; NULL on rows from before migration 0006
+  kind: text('kind'),
 }, (t) => [uniqueIndex('room_messages_dedup').on(t.roomId, t.clientMessageId)]);
 
 export const roomTasks = pgTable('room_tasks', {
@@ -197,6 +199,8 @@ export const roomTasks = pgTable('room_tasks', {
   title: text('title').notNull(),
   status: text('status').notNull(),
   waitingReason: text('waiting_reason'),
+  // who asked, the task it continues, the prompt snapshot, approval need, who accepted it (migration 0006)
+  context: jsonb('context').notNull().default({}),
 });
 
 export const roomMembers = pgTable('room_members', {

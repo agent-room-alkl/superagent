@@ -141,6 +141,16 @@ export interface ValidationResult {
   issues: SopGraphIssue[];
 }
 
+/** Restart contract. Event keys use sopEventKey: tenant|source|eventId|sopId. */
+export interface SopSnapshot {
+  seq: number;
+  versions: SopVersion[];
+  instances: WorkflowInstance[];
+  eventKeys: string[];
+  missed: string[];
+  skipped: string[];
+}
+
 /**
  * SOP publish gate and manual/date triggers (PRD §3.6).
  * Mail triggers are intentionally absent — they are a later batch.
@@ -305,10 +315,46 @@ export class SopRuntime {
   private published(sopId: string): SopVersion | undefined {
     return [...this.versions].reverse().find((version) => version.sopId === sopId && version.status === 'published');
   }
+
+  /** Enough state for another process to see published versions and already-claimed events. */
+  snapshot(): SopSnapshot {
+    return {
+      seq: this.seq,
+      versions: this.versions.map(cloneVersion),
+      instances: this.instances.map((instance) => ({ ...instance })),
+      eventKeys: [...this.eventKeys],
+      missed: [...this.missed],
+      skipped: [...this.skipped],
+    };
+  }
+
+  static restore(saved: SopSnapshot): SopRuntime {
+    const runtime = new SopRuntime();
+    runtime.seq = saved.seq;
+    for (const version of saved.versions) runtime.versions.push(cloneVersion(version));
+    for (const instance of saved.instances) runtime.instances.push({ ...instance });
+    for (const key of saved.eventKeys) runtime.eventKeys.add(key);
+    runtime.missed.push(...saved.missed);
+    runtime.skipped.push(...saved.skipped);
+    return runtime;
+  }
+}
+
+/** Dedup key from PRD §3.6: one instance per tenant, source, event, and SOP. */
+export function sopEventKey(tenantId: string, source: string, eventId: string, sopId: string): string {
+  return `${tenantId}|${source}|${eventId}|${sopId}`;
 }
 
 function eventKey(tenantId: string, source: string, eventId: string, sopId: string): string {
-  return `${tenantId}|${source}|${eventId}|${sopId}`;
+  return sopEventKey(tenantId, source, eventId, sopId);
+}
+
+function cloneVersion(version: SopVersion): SopVersion {
+  return {
+    ...version,
+    definition: copyDefinition(version.definition),
+    report: version.report ? structuredClone(version.report) : null,
+  };
 }
 
 function copyDefinition(definition: SopDefinition): SopDefinition {
