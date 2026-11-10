@@ -3,10 +3,10 @@
  * 待我处理 (work-items decide) and resume the run; this module never writes without one.
  */
 import type { FastifyPluginAsync } from 'fastify';
-import { flushGateway, gatewayState } from '../gateway/index.js';
+import { flushGateway, gatewayState, hydrateGateway } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
 import { flushInbox, inboxState, workItemEvents } from '../humanwork/index.js';
-import { insertWorkItem, loadWorkItemsForRun } from '../humanwork/pg-inbox.js';
+import { insertWorkItem, loadWorkItemsForRun, updateWorkItem } from '../humanwork/pg-inbox.js';
 import { insertRun, loadClaimedRuns, loadRunById, loadRunByInstance, loadRuns, saveRuns, updateRun, type Queryable } from './pg-runs.js';
 import { flushSop, sopState } from '../sop/index.js';
 import { loadVersionById } from '../sop/pg-sop.js';
@@ -239,6 +239,15 @@ function present(run: Execution, userId: string) {
   return { ...run, canReconcile: run.status === 'outcome_unknown' && run.startedBy === userId };
 }
 
+/** Write the read-back onto the run's existing work-item rows. Does not insert, and does not rewrite another run. */
+async function persistReadback(runId: string): Promise<void> {
+  if (!runStore) return;
+  for (const item of inboxState.current.all()) {
+    if (item.payload.executionId !== runId) continue;
+    await updateWorkItem(runStore, item);
+  }
+}
+
 /** Load one existing run and read it back. Does not start, claim, or open a second run. */
 export async function reconcile(tenantId: string, runId: string, actorUserId: string): Promise<Execution> {
   try {
@@ -252,8 +261,12 @@ export async function reconcile(tenantId: string, runId: string, actorUserId: st
       }
     }
   }
+  await restoreClaimedItems(runId);
+  if (gatewayState.current.snapshot().actions.length === 0) await hydrateGateway();
   const run = executionState.current.reconcile(tenantId, runId, actorUserId);
+  await persistReadback(run.id);
   await flushExecutions();
+  await flushInbox();
   await flushGateway();
   return run;
 }
