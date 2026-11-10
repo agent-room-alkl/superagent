@@ -68,6 +68,8 @@ export interface ExecuteResult {
   action: ActionRecord;
   submitted: boolean;
   invoked: boolean;
+  /** True when the row is executing and the external call has not run yet. */
+  pending: boolean;
 }
 
 /** Process restart contract for the outbox. The idempotency key is the stable action identity. */
@@ -86,12 +88,16 @@ export class ToolGateway {
   private readonly byKey = new Map<string, ActionRecord>();
   private seq = 0;
 
-  execute(input: ExecuteInput): ExecuteResult {
+  /**
+   * Records the decision and, when a call is still allowed, marks the row executing.
+   * Does not call the tool. The caller commits this snapshot, then finish().
+   */
+  reserve(input: ExecuteInput): ExecuteResult {
     const hash = payloadHash(input.payload);
     const idempotencyKey = [input.tenantId, input.instanceId, input.stepId, input.businessKey].join(':');
     const existing = this.byKey.get(idempotencyKey);
     if (existing && this.mustNotCallAgain(existing)) {
-      return { action: this.clone(existing), submitted: existing.status !== 'not_submitted', invoked: false };
+      return { action: this.clone(existing), submitted: existing.status !== 'not_submitted', invoked: false, pending: false };
     }
 
     const action = existing ?? this.create(input, idempotencyKey, hash);
@@ -105,47 +111,67 @@ export class ToolGateway {
     if (!input.authorize()) {
       action.status = 'not_submitted';
       action.reason = 'unauthorized';
-      return { action: this.clone(action), submitted: false, invoked: false };
+      return { action: this.clone(action), submitted: false, invoked: false, pending: false };
     }
 
     if (WRITE_EFFECTS.has(input.effect) && action.approvalHash !== hash) {
       action.status = 'not_submitted';
       action.reason = 'approval_mismatch';
-      return { action: this.clone(action), submitted: false, invoked: false };
+      return { action: this.clone(action), submitted: false, invoked: false, pending: false };
     }
 
     action.status = 'executing';
     action.reason = null;
     this.byKey.set(idempotencyKey, action);
+    return { action: this.clone(action), submitted: true, invoked: false, pending: true };
+  }
 
+  /** Runs the call for a row that reserve() left executing. */
+  finish(idempotencyKey: string, call: ExecuteInput['call']): ExecuteResult {
+    const action = this.byKey.get(idempotencyKey);
+    if (!action || action.status !== 'executing') throw new Error('action_not_armed');
     try {
-      const result = this.callExternal(input);
+      const result = call();
       action.calls += 1;
       action.externalRef = result?.externalRef ?? null;
-      if (input.intended) {
+      if (action.intended) {
         const actual = result?.actual ?? null;
         action.readback = actual;
-        if (payloadHash(input.intended) !== payloadHash(actual)) {
+        if (payloadHash(action.intended) !== payloadHash(actual)) {
           action.status = 'outcome_unknown';
           action.inconsistent = true;
           action.reason = 'readback_mismatch';
-          return { action: this.clone(action), submitted: true, invoked: true };
+          return { action: this.clone(action), submitted: true, invoked: true, pending: false };
         }
       }
       action.status = 'confirmed';
       action.inconsistent = false;
-      return { action: this.clone(action), submitted: true, invoked: true };
+      return { action: this.clone(action), submitted: true, invoked: true, pending: false };
     } catch (error) {
       action.calls += 1;
-      if (error instanceof OutcomeUnknownError || WRITE_EFFECTS.has(input.effect)) {
+      if (error instanceof OutcomeUnknownError || WRITE_EFFECTS.has(action.effect)) {
         action.status = 'outcome_unknown';
         action.reason = 'timeout';
       } else {
         action.status = 'failed';
         action.reason = error instanceof Error ? error.message : 'failed';
       }
-      return { action: this.clone(action), submitted: true, invoked: true };
+      return { action: this.clone(action), submitted: true, invoked: true, pending: false };
     }
+  }
+
+  /** A commit failed before the call. The row may be tried again. */
+  abort(idempotencyKey: string): void {
+    const action = this.byKey.get(idempotencyKey);
+    if (!action || action.status !== 'executing') return;
+    action.status = 'not_submitted';
+    action.reason = 'not_durable';
+  }
+
+  execute(input: ExecuteInput): ExecuteResult {
+    const reserved = this.reserve(input);
+    if (!reserved.pending) return reserved;
+    return this.finish(reserved.action.idempotencyKey, input.call);
   }
 
   /**
@@ -156,7 +182,7 @@ export class ToolGateway {
     const action = this.byKey.get(idempotencyKey);
     if (!action) throw new Error('action_not_found');
     if (action.status !== 'outcome_unknown') {
-      return { action: this.clone(action), submitted: action.status !== 'not_submitted', invoked: false };
+      return { action: this.clone(action), submitted: action.status !== 'not_submitted', invoked: false, pending: false };
     }
     const calls = action.calls;
     action.readback = actual;
@@ -169,7 +195,7 @@ export class ToolGateway {
       action.reason = 'readback_mismatch';
     }
     action.calls = calls;
-    return { action: this.clone(action), submitted: true, invoked: false };
+    return { action: this.clone(action), submitted: true, invoked: false, pending: false };
   }
 
   getByKey(key: string): ActionRecord | undefined {
@@ -187,6 +213,16 @@ export class ToolGateway {
     let seq = 0;
     for (const action of saved.actions) {
       const copy = structuredClone(action);
+      // A row left executing did not finish its flush after the call. A write must not be sent again.
+      if (copy.status === 'executing') {
+        if (WRITE_EFFECTS.has(copy.effect)) {
+          copy.status = 'outcome_unknown';
+          copy.reason = copy.reason ?? 'interrupted';
+        } else {
+          copy.status = 'not_submitted';
+          copy.reason = null;
+        }
+      }
       this.byKey.set(copy.idempotencyKey, copy);
       const match = /^act_(\d+)$/.exec(copy.id);
       const n = match ? Number(match[1]) : 0;
@@ -223,10 +259,6 @@ export class ToolGateway {
     };
     this.byKey.set(idempotencyKey, action);
     return action;
-  }
-
-  private callExternal(input: ExecuteInput): { externalRef?: string; actual?: Record<string, unknown> } | void {
-    return input.call();
   }
 
   private clone(action: ActionRecord): ActionRecord {
