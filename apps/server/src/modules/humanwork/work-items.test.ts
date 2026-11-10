@@ -125,3 +125,26 @@ it('a recorded branch is not a system approval, and an exception decision keeps 
   assert.equal(ruled.item.evidenceSource, 'human_report');
   assert.equal(ruled.item.payload.humanReference, 'TICKET-7');
 });
+
+it('a retired approval no longer stands, keeps its evidence, and an executed approval cannot be decided again', () => {
+  const inbox = new WorkInbox();
+  const item = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'owner', payload: { title: '批准写入', amount: 10 } });
+  inbox.decide(item.id, 'owner', 1);
+  const retired = inbox.retireDecision(item.id);
+  assert.equal(retired.decision, null);
+  assert.equal(retired.status, 'closed');
+  assert.equal(inbox.decide(item.id, 'owner', 1).reason, 'retired'); // never decided again, even before any read-back
+  const executed = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'owner', payload: { title: '批准写入', amount: 20 } });
+  inbox.decide(executed.id, 'owner', 1);
+  inbox.noteReadback(executed.id, true);
+  const after = inbox.retireDecision(executed.id);
+  assert.equal(after.actionStatus, 'confirmed');
+  assert.equal(after.submitCount, 1);
+  assert.equal(after.payloadHash, executed.payloadHash);
+  assert.equal(inbox.decide(executed.id, 'owner', 1).ok, false);
+  // an executed approval that was never retired cannot be decided again either
+  const kept = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'owner', payload: { title: '批准写入', amount: 30 } });
+  inbox.decide(kept.id, 'owner', 1);
+  inbox.noteReadback(kept.id, true);
+  assert.equal(inbox.decide(kept.id, 'owner', 1).ok, false);
+});

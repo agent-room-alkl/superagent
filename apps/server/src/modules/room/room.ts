@@ -35,7 +35,15 @@ export interface RoomMessage {
   kind: MessageKind;
 }
 
-export type MessageKind = 'message' | 'reply' | 'report' | 'review' | 'cancel';
+export type MessageKind = 'message' | 'reply' | 'report' | 'review' | 'cancel' | 'hold' | 'resume' | 'contract';
+
+/** What counts as done for a task. Each revision is a new version; acceptance is always against the current one. */
+export interface TaskContract {
+  criteria: string;
+  version: number;
+  revisedByUserId: string;
+  at: string;
+}
 
 /** What the employee was running with when the task was handed over. */
 export interface PromptSnapshot {
@@ -63,6 +71,9 @@ export interface RoomTask {
   /** "required" when the request is an outward action; reading and drafting need none. */
   approval: 'none' | 'required';
   reviewedByUserId: string | null;
+  contract: TaskContract | null;
+  /** The execution run that carries this task's external action, linked by the runtime or the person who asked. */
+  runId: string | null;
 }
 
 export interface RoomSnapshot {
@@ -88,6 +99,8 @@ export interface PostInput {
 }
 
 const OPEN: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['assigned', 'running', 'waiting']);
+const WAITING_CONNECTION = '等待连接';
+const ACTIVE = (employee: EmployeeRef | undefined) => employee?.status === 'active';
 
 function isOwner(viewer: Pick<Viewer, 'roles'>): boolean {
   return viewer.roles.includes('owner') || viewer.roles.includes('admin');
@@ -110,6 +123,8 @@ function withDefaults(task: RoomTask): RoomTask {
     promptSnapshot: task.promptSnapshot ? { ...task.promptSnapshot } : null,
     approval: task.approval ?? 'none',
     reviewedByUserId: task.reviewedByUserId ?? null,
+    contract: task.contract ? { ...task.contract } : null,
+    runId: task.runId ?? null,
   };
 }
 
@@ -263,6 +278,8 @@ export class CommandRoom {
       },
       approval: isExternalAction(body) ? 'required' : 'none',
       reviewedByUserId: null,
+      contract: null,
+      runId: null,
     };
     this.tasks.push(task);
     message.taskIds = original ? [original.id, task.id] : [task.id];
@@ -340,6 +357,108 @@ export class CommandRoom {
       taskIds: [task.id],
       kind: 'review',
     });
+  }
+
+  /**
+   * Work given to an employee that has since gone offline (paused, disconnected) waits for the connection.
+   * The task is not cancelled, re-created or handed to someone else, and nothing starts the employee remotely.
+   * Called before every room read and write, so the state the page shows is the state the server acts on.
+   */
+  holdDisconnected(): RoomMessage[] {
+    const employees = this.employees();
+    const held: RoomMessage[] = [];
+    for (const task of this.tasks) {
+      if (task.status !== 'assigned' && task.status !== 'running') continue;
+      const employee = employees.find((item) => item.id === task.employeeId);
+      if (ACTIVE(employee)) continue;
+      task.status = 'waiting';
+      task.waitingReason = WAITING_CONNECTION;
+      held.push(this.push({
+        roomId: task.roomId,
+        tenantId: task.tenantId,
+        authorUserId: 'super-agent',
+        body: `@${employee?.name ?? '数字员工'} 已断开，任务「${task.title}」保留为等待连接，没有重建或转交。`,
+        clientMessageId: `hold:${task.id}:${this.seq + 1}`,
+        mentions: employee ? [employee.id] : [],
+        taskIds: [task.id],
+        kind: 'hold',
+      }));
+    }
+    return held;
+  }
+
+  /**
+   * The person who asked, or an owner, resumes the same task once its employee is connected again.
+   * Still offline is refused; nothing is re-created, and the task keeps its id, source and history.
+   */
+  resume(taskId: string, viewer: Viewer, clientMessageId: string): RoomMessage {
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
+    if (prior) return prior;
+    if (task.status !== 'waiting' || task.waitingReason !== WAITING_CONNECTION) throw new Error('not_waiting');
+    const employee = this.employees().find((item) => item.id === task.employeeId);
+    if (!ACTIVE(employee)) throw new Error('employee_offline');
+    task.status = 'assigned';
+    task.waitingReason = null;
+    return this.push({
+      roomId: task.roomId,
+      tenantId: task.tenantId,
+      authorUserId: 'super-agent',
+      body: `@${employee!.name} 已重新连接，同一任务「${task.title}」继续进行，没有重建。`,
+      clientMessageId,
+      mentions: [employee!.id],
+      taskIds: [task.id],
+      kind: 'resume',
+    });
+  }
+
+  /** Link the execution run that carries this task's external action. A task carries one run; it is never swapped. */
+  linkRun(taskId: string, viewer: Viewer, runId: string): RoomTask {
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (task.runId && task.runId !== runId) throw new Error('run_already_linked');
+    task.runId = runId;
+    return withDefaults(task);
+  }
+
+  /**
+   * Set or revise what counts as done. A revision voids the person's earlier acceptance (a reviewed task goes back to
+   * reported) and the caller retires the linked run's action approval. Nothing here runs or repeats an external
+   * action, and the task keeps its id, source, reports and run.
+   */
+  reviseContract(taskId: string, viewer: Viewer, criteria: string, clientMessageId: string): { message: RoomMessage; task: RoomTask; revised: boolean } {
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
+    if (prior) return { message: prior, task: withDefaults(task), revised: false };
+    const text = criteria.trim();
+    if (!text || text.length > 2000) throw new Error('invalid_contract');
+    if (task.status === 'cancelled') throw new Error('task_closed');
+    if (task.contract?.criteria === text) throw new Error('contract_unchanged');
+    const version = (task.contract?.version ?? 0) + 1;
+    task.contract = { criteria: text, version, revisedByUserId: viewer.userId, at: this.now().toISOString() };
+    const hadAcceptance = task.status === 'reviewed';
+    if (hadAcceptance) task.status = 'reported';
+    task.reviewedByUserId = null;
+    const message = this.push({
+      roomId: task.roomId,
+      tenantId: task.tenantId,
+      authorUserId: viewer.userId,
+      body: version === 1
+        ? `验收契约第 1 版：${text}`
+        : `验收契约改为第 ${version} 版：${text}。之前的人工验收和动作批准作废；已有的外部提交和回读证据保留，不会自动重新执行。`,
+      clientMessageId,
+      mentions: [],
+      taskIds: [task.id],
+      kind: 'contract',
+    });
+    return { message, task: withDefaults(task), revised: version > 1 || hadAcceptance };
+  }
+
+  /** One task as the caller may see it. */
+  task(taskId: string, viewer: Viewer): RoomTask {
+    return withDefaults(this.visibleTask(taskId, viewer));
   }
 
   /** Events with seq greater than lastSeq. Unknown rooms and non-members get nothing. */

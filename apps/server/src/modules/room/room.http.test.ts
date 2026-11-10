@@ -293,6 +293,32 @@ it('roster, cancel and review answer by who is asking; a task someone cannot see
   await app.close();
 });
 
+it('run link, contract and resume answer by who is asking, and a run that does not exist is not linked', async () => {
+  const app = Fastify();
+  await app.register(roomModule, { prefix: '/api/v1/room' });
+  const owner = { 'x-user-id': 'user-owner', 'x-roles': 'owner' };
+  const sales = { 'x-user-id': 'user-sales', 'x-roles': 'employee' };
+  const ops = { 'x-user-id': 'user-ops', 'x-roles': 'employee' };
+  const posted = await app.inject({ method: 'POST', url: '/api/v1/room/messages', headers: owner, payload: { roomId: 'room-1', body: '@销售员工 请登记付款 INV-101', clientMessageId: 'c-run' } });
+  const id = posted.json().task.id as string;
+
+  expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/run`, headers: owner, payload: { runId: 'run_missing' } })).json()).toEqual({ error: 'run_not_found' });
+  expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/run`, headers: ops, payload: { runId: 'run_missing' } })).statusCode).toBe(404);
+  const contract = (headers: Record<string, string>, criteria: string, clientMessageId: string) =>
+    app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/contract`, headers, payload: { criteria, clientMessageId } });
+  expect((await contract(sales, '核对金额', 'k1')).statusCode).toBe(403); // the assignee did not ask for the work
+  expect((await contract(ops, '核对金额', 'k2')).statusCode).toBe(404);
+  expect((await contract(owner, '', 'k3')).json()).toEqual({ error: 'invalid_contract' });
+  const saved = await contract(owner, '核对金额', 'k4');
+  expect(saved.json()).toMatchObject({ task: { contract: { version: 1 } }, retiredApprovals: [] });
+  expect((await contract(owner, '核对金额', 'k5')).json()).toEqual({ error: 'contract_unchanged' });
+  expect((await app.inject({ url: `/api/v1/room/tasks/${id}/outcome`, headers: owner })).json()).toMatchObject({ contract: { version: 1 }, outcome: null });
+  expect((await app.inject({ url: `/api/v1/room/tasks/${id}/outcome`, headers: ops })).statusCode).toBe(404);
+  const resume = await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/resume`, headers: owner, payload: { clientMessageId: 'r1' } });
+  expect(resume.json()).toEqual({ error: 'not_waiting' }); // the employee is online; nothing to resume
+  await app.close();
+});
+
 it('rejects a gap-fill cursor that is not a whole message sequence', async () => {
   const app = Fastify();
   await app.register(roomModule, { prefix: '/api/v1/room' });

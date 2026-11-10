@@ -11,7 +11,7 @@ import { authHeaders } from '../api';
 const ROOM_ID = 'room-1';
 const POLL_MS = 4000;
 
-export type MessageKind = 'message' | 'reply' | 'report' | 'review' | 'cancel';
+export type MessageKind = 'message' | 'reply' | 'report' | 'review' | 'cancel' | 'hold' | 'resume' | 'contract';
 
 export interface ApiMessage {
   id: string;
@@ -35,7 +35,41 @@ export interface ApiTask {
   promptSnapshot?: { employeeId: string; promptVersion: number | null; modelTier: string | null; takenAt: string } | null;
   approval?: 'none' | 'required';
   reviewedByUserId?: string | null;
+  contract?: { criteria: string; version: number; revisedByUserId: string; at: string } | null;
+  runId?: string | null;
 }
+
+/** The linked run as the server reports it: its approvals and the external attempts the gateway recorded. */
+export interface TaskOutcome {
+  runId: string;
+  runStatus: string;
+  eventId: string;
+  approvals: Array<{ id: string; status: string; standing: boolean; actionStatus: string | null }>;
+  attempts: number;
+  actions: Array<{ stepId: string; status: string; calls: number; externalRef: string | null; readback: unknown }>;
+}
+
+const RUN_STATUS: Record<string, string> = {
+  completed: '已完成', running: '进行中', waiting_human: '等待人工', blocked: '已阻塞', outcome_unknown: '结果未知', failed: '失败',
+};
+
+/** Whether an approval still authorises anything. A retired one is closed with no decision. */
+export function approvalLine(approval: TaskOutcome['approvals'][number]): string {
+  if (approval.standing) return '批准有效';
+  return approval.status === 'closed' || approval.status === 'withdrawn' ? '批准已作废' : '尚未批准';
+}
+
+/** The external attempts the gateway recorded for the run, and what the read-back said. */
+export function attemptsLine(outcome: Pick<TaskOutcome, 'attempts' | 'actions'>): string {
+  const statuses = outcome.actions.map((action) => action.status);
+  const read = statuses.includes('outcome_unknown') ? '，结果未知' : statuses.includes('confirmed') ? '，回读一致' : '';
+  return `外部提交 ${outcome.attempts} 次${read}。修改验收契约不会重新提交。`;
+}
+
+export function runStatusLabel(status: string): string {
+  return RUN_STATUS[status] ?? status;
+}
+
 
 export interface RosterEmployee {
   id: string;
@@ -154,14 +188,23 @@ export function taskReports(task: Pick<ApiTask, 'id'>, messages: readonly ApiMes
 const OPEN_STATUS = new Set(['assigned', 'running', 'waiting']);
 
 /** What this person may do with a task. The server decides again on every call; this only hides dead buttons. */
-export function taskActions(task: ApiTask, viewer: RoomViewer | null): { report: boolean; review: boolean; cancel: boolean; followup: boolean } {
-  if (!viewer) return { report: false, review: false, cancel: false, followup: false };
+export interface TaskActions { report: boolean; review: boolean; cancel: boolean; followup: boolean; resume: boolean; contract: boolean }
+
+/** A task held because its employee disconnected. Only reconnecting the employee and resuming it moves it on. */
+export function waitingForConnection(task: Pick<ApiTask, 'status' | 'waitingReason'>): boolean {
+  return task.status === 'waiting' && task.waitingReason === '等待连接';
+}
+
+export function taskActions(task: ApiTask, viewer: RoomViewer | null): TaskActions {
+  if (!viewer) return { report: false, review: false, cancel: false, followup: false, resume: false, contract: false };
   const asked = viewer.owner || task.createdByUserId === viewer.userId;
   return {
     report: task.assigneeUserId === viewer.userId && (OPEN_STATUS.has(task.status) || task.status === 'reported'),
     review: asked && task.status === 'reported',
     cancel: asked && OPEN_STATUS.has(task.status),
     followup: (asked || task.assigneeUserId === viewer.userId) && task.status !== 'cancelled',
+    resume: asked && waitingForConnection(task),
+    contract: asked && task.status !== 'cancelled',
   };
 }
 
@@ -169,6 +212,9 @@ export function messageKindLabel(message: ApiMessage, tasks: readonly ApiTask[])
   if (message.kind === 'report') return '回报';
   if (message.kind === 'review') return '复核';
   if (message.kind === 'cancel') return '取消';
+  if (message.kind === 'hold') return '等待连接';
+  if (message.kind === 'resume') return '恢复';
+  if (message.kind === 'contract') return '验收契约';
   if (message.kind === 'reply') return message.taskIds.length > 0 ? '任务' : '回复';
   return tasks.some((task) => task.messageId === message.id) ? '派活' : '消息';
 }
@@ -188,6 +234,10 @@ const REFUSALS: Record<string, string> = {
   not_reported: '还没有回报，不能复核。',
   forbidden: '你不能对这条任务做这个操作。',
   task_not_found: '找不到这条任务。',
+  employee_offline: '数字员工还没有重新连接。请先在「数字员工」里恢复它，再恢复这条任务。',
+  contract_unchanged: '验收契约没有变化。',
+  invalid_contract: '请写清楚怎样才算完成（不超过 2000 字）。',
+  not_waiting: '这条任务没有在等待连接。',
 };
 
 function newId(prefix: string): string {
@@ -205,6 +255,8 @@ export function CommandRoomPage() {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [reportDraft, setReportDraft] = useState('');
+  const [contractDraft, setContractDraft] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ taskId: string; data: TaskOutcome | null } | null>(null);
   const [notice, setNotice] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
@@ -329,7 +381,7 @@ export function CommandRoomPage() {
   }
 
   /** report / review / cancel. The same click retried keeps its client id, so it lands once. */
-  async function act(task: ApiTask, action: 'report' | 'review' | 'cancel', text?: string) {
+  async function act(task: ApiTask, action: 'report' | 'review' | 'cancel' | 'resume', text?: string) {
     if (acting) return;
     const key = `${action}:${task.id}:${text ?? ''}`;
     const id = actionId.current?.key === key ? actionId.current.id : newId(`web-${action}`);
@@ -359,10 +411,65 @@ export function CommandRoomPage() {
     }
   }
 
+  // The linked run's approvals and attempts, read again whenever the task list refreshes while the drawer is open.
+  useEffect(() => {
+    if (!openTaskId) return;
+    let stop = false;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/v1/room/tasks/${encodeURIComponent(openTaskId)}/outcome`, { headers: await authHeaders() });
+        if (!response.ok || stop) return;
+        const data = (await response.json()) as { outcome: TaskOutcome | null };
+        if (!stop) setOutcome({ taskId: openTaskId, data: data.outcome });
+      } catch {
+        // The drawer keeps the last outcome it had.
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [openTaskId, tasks]);
+
+  async function saveContract(task: ApiTask) {
+    const criteria = (contractDraft ?? '').trim();
+    if (acting || !criteria) return;
+    const key = `contract:${task.id}:${criteria}`;
+    const id = actionId.current?.key === key ? actionId.current.id : newId('web-contract');
+    actionId.current = { key, id };
+    setActing(true);
+    setNotice('');
+    try {
+      const response = await fetch(`/api/v1/room/tasks/${encodeURIComponent(task.id)}/contract`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ criteria, clientMessageId: id }),
+      });
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { error?: string } | null;
+        setNotice(REFUSALS[error?.error ?? ''] ?? '验收契约没有保存。');
+        return;
+      }
+      const data = (await response.json()) as { message: ApiMessage };
+      actionId.current = null;
+      setContractDraft(null);
+      setMessages((current) => mergeRoomMessages(current, [data.message]));
+      void pull();
+    } catch {
+      setNotice('验收契约没有保存，可以再试一次。');
+    } finally {
+      setActing(false);
+    }
+  }
+
   function jumpTo(messageId: string) {
     stick.current = false;
     setFocusMessageId(messageId);
     document.getElementById(`room-msg-${messageId}`)?.scrollIntoView({ block: 'center' });
+  }
+
+  function openTaskDrawer(id: string | null) {
+    setContractDraft(null);
+    setOpenTaskId(id);
   }
 
   function startFollowup(task: ApiTask) {
@@ -371,6 +478,7 @@ export function CommandRoomPage() {
   }
 
   const openTask = tasks.find((task) => task.id === openTaskId) ?? null;
+  const openOutcome = outcome && openTask && outcome.taskId === openTask.id ? outcome.data : null;
   const followupTask = tasks.find((task) => task.id === followupId) ?? null;
   const source = openTask ? messages.find((message) => message.id === openTask.messageId) ?? null : null;
   const original = openTask?.followupTo ? tasks.find((task) => task.id === openTask.followupTo) ?? null : null;
@@ -419,7 +527,7 @@ export function CommandRoomPage() {
                 </header>
                 <p>{message.body}</p>
                 {message.taskIds.filter((id) => tasks.some((task) => task.id === id)).slice(-1).map((id) => (
-                  <button type="button" className="exec-link" key={id} data-open-task={id} onClick={() => setOpenTaskId(id)}>查看任务</button>
+                  <button type="button" className="exec-link" key={id} data-open-task={id} onClick={() => openTaskDrawer(id)}>查看任务</button>
                 ))}
               </article>
             ))}
@@ -478,7 +586,7 @@ export function CommandRoomPage() {
             {tasks.length === 0 ? (
               <p className="exec-empty">当前没有由对话产生的任务。</p>
             ) : tasks.map((task) => (
-              <button type="button" className="exec-task" key={task.id} data-task={task.id} data-status={task.status} onClick={() => setOpenTaskId(task.id)}>
+              <button type="button" className="exec-task" key={task.id} data-task={task.id} data-status={task.status} onClick={() => openTaskDrawer(task.id)}>
                 <strong>{task.title}</strong>
                 <span>{taskLine(task, employees)}</span>
               </button>
@@ -489,7 +597,7 @@ export function CommandRoomPage() {
           <aside className="panel exec-drawer" aria-label="任务详情" data-task-detail={openTask.id}>
             <div className="exec-pane-head">
               <h2>任务详情</h2>
-              <button type="button" onClick={() => setOpenTaskId(null)}>关闭</button>
+              <button type="button" onClick={() => openTaskDrawer(null)}>关闭</button>
             </div>
             <dl>
               <div><dt>概览</dt><dd>{openTask.title}</dd></div>
@@ -507,7 +615,7 @@ export function CommandRoomPage() {
                   <dt>追问自</dt>
                   <dd data-followup-of>
                     {original ? original.title : '原任务不在当前可见的列表里。'}
-                    {original ? <button type="button" className="exec-link" onClick={() => setOpenTaskId(original.id)}>打开原任务</button> : null}
+                    {original ? <button type="button" className="exec-link" onClick={() => openTaskDrawer(original.id)}>打开原任务</button> : null}
                   </dd>
                 </div>
               ) : null}
@@ -528,6 +636,30 @@ export function CommandRoomPage() {
                 </dd>
               </div>
               <div>
+                <dt>验收契约</dt>
+                <dd data-contract>
+                  {openTask.contract ? `第 ${openTask.contract.version} 版：${openTask.contract.criteria}` : '还没有写验收契约。'}
+                </dd>
+              </div>
+              {openTask.runId ? (
+                <div>
+                  <dt>执行与外部动作</dt>
+                  <dd data-outcome>
+                    {openOutcome ? (
+                      <>
+                        <p data-run={openOutcome.runId}>事件 {openOutcome.eventId} · {runStatusLabel(openOutcome.runStatus)}</p>
+                        <ul>
+                          {openOutcome.approvals.map((approval) => (
+                            <li key={approval.id} data-approval-item={approval.id} data-standing={approval.standing ? 'yes' : 'no'}>{approvalLine(approval)}</li>
+                          ))}
+                        </ul>
+                        <p data-attempts={openOutcome.attempts}>{attemptsLine(openOutcome)}</p>
+                      </>
+                    ) : '正在读取执行记录…'}
+                  </dd>
+                </div>
+              ) : null}
+              <div>
                 <dt>结果与证据</dt>
                 <dd data-evidence>
                   {reports.length === 0 ? '还没有回报。' : (
@@ -545,6 +677,19 @@ export function CommandRoomPage() {
                 </dd>
               </div>
             </dl>
+            {may.contract ? (
+              <div className="exec-report">
+                <label htmlFor="room-contract">{openTask.contract ? '修改验收契约' : '写验收契约'}</label>
+                <textarea
+                  id="room-contract"
+                  value={contractDraft ?? openTask.contract?.criteria ?? ''}
+                  onChange={(event) => setContractDraft(event.target.value)}
+                  placeholder="怎样才算完成，例如：必须核对金额、供应商和产品编号，负责人独立复核"
+                />
+                {openTask.contract ? <p className="exec-empty">保存新版本后，之前的人工验收和动作批准作废；已有的外部提交和回读证据保留。</p> : null}
+                <button type="button" disabled={acting || (contractDraft ?? '').trim() === ''} onClick={() => void saveContract(openTask)}>保存契约</button>
+              </div>
+            ) : null}
             {may.report ? (
               <div className="exec-report">
                 <label htmlFor="room-report">回报内容</label>
@@ -555,6 +700,7 @@ export function CommandRoomPage() {
             <div className="exec-composer-actions">
               {may.review ? <button type="button" disabled={acting} onClick={() => void act(openTask, 'review')}>复核通过</button> : null}
               {may.followup ? <button type="button" onClick={() => startFollowup(openTask)}>追问</button> : null}
+              {may.resume ? <button type="button" disabled={acting} onClick={() => void act(openTask, 'resume')}>恢复任务</button> : null}
               {may.cancel ? <button type="button" disabled={acting} onClick={() => void act(openTask, 'cancel')}>取消任务</button> : null}
             </div>
           </aside>

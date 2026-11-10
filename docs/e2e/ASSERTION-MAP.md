@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 166 |
+| e2e | Covered by a Playwright test against the real app | 170 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 21 |
+| pending | Feature not built yet; the owner task will add the E2E | 17 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 17, T-45 4
+Pending by owner: T-41 17
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -208,10 +208,10 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 34 | Mismatched result review enabled | e2e | apps/e2e/tests/mainline.spec.ts |
 | 35 | Corrected external data could not be reread without a second write | e2e | apps/e2e/tests/mainline.spec.ts — An independent external correction is reread on the same run; the write connector count stays one. |
 | 36 | Matching readback did not verify original request | e2e | apps/e2e/tests/mainline.spec.ts |
-| 37 | Changed contract retains old action approval/acceptance | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 38 | Contract revision repeats write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 39 | Offline rehearsal discarded original task | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 40 | Manual reconnect failed to resume original task | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 37 | Changed contract retains old action approval/acceptance | e2e | apps/e2e/tests/mainline.spec.ts — contract revision on the command-room task retires the linked run's approval and the human acceptance |
+| 38 | Contract revision repeats write | e2e | apps/e2e/tests/mainline.spec.ts — the run keeps one gateway call and one ledger entry after the revision |
+| 39 | Offline rehearsal discarded original task | e2e | apps/e2e/tests/command-room.spec.ts — a paused employee holds the same task as 等待连接 |
+| 40 | Manual reconnect failed to resume original task | e2e | apps/e2e/tests/command-room.spec.ts — the owner resumes the employee, then resumes the same task id |
 | 41 | Existing client incorrectly promises remote start | n/a | prototype copy about the desktop client; no such client in the product |
 | 42 | Manual pause bypassed during readback | e2e | apps/e2e/tests/mainline.spec.ts — A paused employee is denied before the read-only probe; the probe count remains zero. |
 | 43 | Paused readback repeated/finished external write | e2e | apps/e2e/tests/mainline.spec.ts — Denied paused reconciliation keeps the original run unknown and the external write count at one. |

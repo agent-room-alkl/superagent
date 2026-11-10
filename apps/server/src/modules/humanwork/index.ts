@@ -18,6 +18,11 @@ export async function flushInbox(): Promise<void> {
   if (inboxStore) await saveInbox(inboxStore, inboxState.current.snapshot());
 }
 
+/** A run's own work item lives in its own row (work_item); write the change there as well as the snapshot. */
+export async function persistWorkItem(item: WorkItem): Promise<void> {
+  if (inboxStore && typeof item.payload.executionId === 'string') await updateWorkItem(inboxStore, item);
+}
+
 export async function hydrateInbox(): Promise<void> {
   if (!inboxStore) return;
   const saved = await loadInbox(inboxStore);
