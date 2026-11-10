@@ -69,6 +69,11 @@ export interface ExecutorDeps {
    * Absent in unit tests, which call the tool without a database.
    */
   commitBeforeCall?: () => Promise<void>;
+  /**
+   * Fresh external values for an unknown write. This is a read, not the write connector.
+   * Absent or throwing means reconcile refuses without calling gateway.readBack.
+   */
+  readBackActual?: (toolId: string, params: Record<string, unknown>) => Record<string, unknown> | null;
 }
 
 export class ExecutionError extends Error {
@@ -126,6 +131,49 @@ export class SopExecutor {
     const r = this.runs.get(id);
     if (!r || r.tenantId !== tenantId) throw new ExecutionError('not_found', 'execution not found', 404);
     return structuredClone(r);
+  }
+
+  /**
+   * Read back an existing unknown run. Loads that run only: no manualStart, no new instance, no write connector.
+   * A refusal leaves the run and its gateway row unchanged.
+   */
+  reconcile(tenantId: string, runId: string, actorUserId: string): Execution {
+    const run = this.runs.get(runId);
+    if (!run || run.tenantId !== tenantId || actorUserId !== run.startedBy) throw new ExecutionError('not_found', '找不到可核对的原执行，或当前身份没有访问权限', 404);
+    if (run.status !== 'outcome_unknown') return structuredClone(run);
+    const step = run.steps.find((s) => s.status === 'outcome_unknown');
+    if (!step) return structuredClone(run);
+    const version = this.deps.sop().get(run.versionId);
+    const definition = version.definition as { employeeStatus?: string; graph?: SopGraph };
+    if (definition.employeeStatus === 'paused') throw new ExecutionError('not_authorized', '流程员工已暂停，未调用外部系统', 403);
+    const toolId = definition.graph?.nodes.find((n) => n.id === step.nodeId)?.ref;
+    if (!toolId) throw new ExecutionError('not_found', '找不到可核对的原执行', 404);
+    const employeeId = this.employeeFor(run, step.nodeId);
+    const refusal = this.deps.authorize(structuredClone(run), toolId, employeeId);
+    if (refusal) throw new ExecutionError('not_authorized', refusal, 403);
+    if (!this.deps.readBackActual) throw new ExecutionError('readback_unavailable', '只读核对暂不可用，没有重新提交外部动作', 503);
+    let actual: Record<string, unknown> | null;
+    try {
+      actual = this.deps.readBackActual(toolId, this.paramsFor(run));
+    } catch (error) {
+      if (error instanceof ExecutionError) throw error;
+      throw new ExecutionError('readback_unavailable', '只读核对暂不可用，没有重新提交外部动作', 503);
+    }
+    const key = [run.tenantId, run.instanceId, step.nodeId, run.eventId].join(':');
+    const result = this.deps.gateway.readBack(key, actual);
+    const confirmed = result.action.status === 'confirmed';
+    step.readback = result.action.readback;
+    if (confirmed) {
+      step.status = 'done';
+      step.detail = '已回读一致，没有再次提交外部动作';
+      if (run.steps.every((s) => s.status === 'done')) run.status = 'completed';
+    } else {
+      step.detail = '回读与批准的值不一致，已停止，不会重复写入';
+      run.status = 'outcome_unknown';
+    }
+    const approval = this.approvalFor(run, step.nodeId);
+    if (approval) this.deps.inbox().noteReadback(approval.id, confirmed);
+    return structuredClone(run);
   }
 
   /** The run already bound to this claimed instance, if this process has it. */
