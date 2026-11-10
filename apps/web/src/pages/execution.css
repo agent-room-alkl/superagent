@@ -35,3 +35,48 @@
 .exec-drawer th, .exec-drawer td { text-align: left; padding: var(--space-2xs) var(--space-xs); border-top: 1px solid var(--color-soft-rule); }
 .exec-drawer fieldset { border: 1px solid var(--color-soft-rule); display: flex; flex-direction: column; gap: var(--space-2xs); }
 .exec-drawer code { overflow-wrap: anywhere; }
+
+/* Command room: the page itself does not scroll on a desktop; the transcript, the task list and the drawer do. */
+@media (min-width: 801px) {
+  .exec-room { height: calc(100dvh - var(--header) - 48px); min-height: 0; }
+  .exec-room .exec-grid { grid-template-rows: minmax(0, 1fr); }
+  .exec-room .exec-grid:has(.exec-drawer) { grid-template-columns: minmax(0, 1.2fr) minmax(200px, .6fr) minmax(280px, .9fr); }
+}
+@media (max-width: 800px) {
+  .exec-room .exec-stream { max-height: 55dvh; }
+}
+.exec-stream { overflow-y: auto; }
+.exec-room .exec-drawer { overflow-y: auto; gap: var(--space-sm); }
+.exec-empty, .exec-notice { margin: 0; color: var(--color-muted); font-size: 13px; }
+.exec-notice:empty { display: none; }
+.exec-message-focus { outline: 2px solid var(--color-rule); outline-offset: 2px; }
+.exec-link {
+  align-self: flex-start; border: 0; background: transparent; color: inherit; text-decoration: underline;
+  padding: 0; margin-left: var(--space-xs); font-size: 13px; cursor: pointer;
+}
+.exec-message .exec-link { margin: var(--space-2xs) 0 0; }
+.exec-mentions {
+  display: flex; flex-direction: column; border: 1px solid var(--color-rule); border-radius: var(--radius-sm);
+  background: var(--color-paper); max-height: 180px; overflow-y: auto;
+}
+.exec-mentions p { margin: 0; padding: var(--space-xs) var(--space-sm); color: var(--color-muted); font-size: 13px; }
+.exec-composer .exec-mentions button {
+  display: flex; align-items: baseline; gap: var(--space-sm); min-height: 36px; border: 0; border-radius: 0;
+  background: transparent; text-align: left; padding: var(--space-2xs) var(--space-sm);
+}
+.exec-composer .exec-mentions button:hover, .exec-composer .exec-mentions button:focus-visible { background: var(--color-well); }
+.exec-followup { display: flex; align-items: center; gap: var(--space-sm); margin: 0; }
+.exec-followup span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.exec-report { display: flex; flex-direction: column; gap: var(--space-xs); }
+.exec-report label { color: var(--color-muted); font-size: 13px; }
+.exec-report textarea {
+  width: 100%; min-height: 64px; resize: vertical; border-radius: var(--radius-sm);
+  border: 1px solid var(--color-rule); background: var(--color-paper); color: var(--color-ink); padding: var(--space-xs) var(--space-sm);
+}
+.exec-report button, .exec-drawer .exec-composer-actions button, .exec-followup button {
+  min-height: 36px; border-radius: var(--radius-sm); border: 1px solid var(--color-rule);
+  background: var(--color-well); color: var(--color-ink); padding: 0 var(--space-sm);
+}
+.exec-report button { align-self: flex-start; }
+.exec-drawer ul { margin: 0; padding-left: var(--space-md); }
+.exec-room .exec-composer-actions button, .exec-followup button { white-space: nowrap; flex-shrink: 0; }

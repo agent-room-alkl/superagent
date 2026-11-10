@@ -11,6 +11,7 @@ import { InMemorySecretStore } from '../../server/src/modules/setup/secrets.js';
 import { createKnowledgeFixture } from './knowledge-fixture.js';
 import { sopState } from '../../server/src/modules/sop/index.js';
 import { connectors } from '../../server/src/modules/execution/index.js';
+import { createCommandRoom, roomState } from '../../server/src/modules/room/index.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
 
@@ -71,6 +72,9 @@ connectors.set('e2e.erp.pay', (params) => {
 });
 app.post<{ Body: { mode: 'ok' | 'mismatch' } }>('/__e2e/erp/mode', async (req) => ((erp.mode = req.body.mode), { mode: erp.mode }));
 app.get('/__e2e/erp/ledger', async () => Object.fromEntries(erp.ledger));
+// The command room is one shared room per process. Test-only hook: start it empty again, so "a new room has no
+// tasks" is tested on a new room. Digital employees stay in the employee module; specs create their own.
+app.post('/__e2e/room/reset', async () => ((roomState.current = createCommandRoom()), { reset: true }));
 await knowledge.attach(app);
 await app.listen({ host: '127.0.0.1', port: Number(process.env.PORT ?? 4173) });
 console.log(JSON.stringify({ msg: 'e2e server ready', stub }));

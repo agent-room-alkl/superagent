@@ -1,17 +1,38 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { applyRoomTranscript, assigneeForReport, CommandRoomPage, nextRoomCursor, roomDraftKey, roomEventsFromSse, taskLine } from './CommandRoomPage';
+import {
+  actorLabel, CommandRoomPage, draftStorageKey, insertMention, mergeRoomMessages, messageKindLabel, nextRoomCursor,
+  roomDraftKey, roomEventsFromSse, taskActions, taskLine, taskReports, taskStatusLabel,
+  type ApiMessage, type ApiTask, type RosterEmployee,
+} from './CommandRoomPage';
 import { canDecide, decisionWhy, GROUPS, inboxFromServer, KIND_LABEL, RENDERER_LABEL, WorkInboxPage } from './WorkInboxPage';
+import { navFor } from '../App';
+
+const EMPLOYEES: RosterEmployee[] = [
+  { id: 'emp-1', name: '销售员工', duty: '询价与报价', status: 'active', ownerUserId: 'user-sales' },
+  { id: 'emp-2', name: '运营员工', duty: '库存', status: 'offline', ownerUserId: 'user-ops' },
+];
+const task = (over: Partial<ApiTask>): ApiTask => ({
+  id: 't1', title: '整理询价草稿', status: 'assigned', assigneeUserId: 'user-sales', waitingReason: null,
+  employeeId: 'emp-1', messageId: 'm1', createdByUserId: 'user-owner', followupTo: null, promptSnapshot: null, approval: 'none', reviewedByUserId: null,
+  ...over,
+});
+const OWNER = { userId: 'user-owner', roles: ['owner'], owner: true };
+const SALES = { userId: 'user-sales', roles: ['employee'], owner: false };
 
 describe('execution pages reuse the v12 copy', () => {
-  it('keeps the command room title and subtitle on one head, with the shared transcript', () => {
+  it('keeps the command room title and subtitle on one head, and shows no invented conversation or task', () => {
     const html = renderToStaticMarkup(<CommandRoomPage />);
     expect(html).toContain('Agent Room 指挥室');
     expect(html).toContain('同一件工作里，企业负责人、超级智能体和数字员工共享目标、上下文、任务与回报。');
     expect(html).toContain('共享协作记录');
     expect(html).toContain('不展示隐藏思维链');
-    expect(html).toContain('@销售员工 整理询价草稿');
     expect(html).toContain('同事的新消息不会清掉这里的草稿');
+    expect(html).toContain('当前没有由对话产生的任务。');
+    expect(html).not.toContain('销售员工'); // nothing is written into the page; people and work come from the server
+    expect(html).not.toContain('询价草稿');
+    expect(html).not.toContain('模拟同事回报');
+    expect(html).not.toContain('href="#brain"'); // only shown once the server says the viewer is an owner
   });
 
   it('reads a one-shot SSE gap-fill and ignores a frame whose sequence is not a number', () => {
@@ -32,28 +53,67 @@ describe('execution pages reuse the v12 copy', () => {
     expect(events.map((message) => message.id)).toEqual(['m4', 'm5']);
     expect(nextRoomCursor(events, 0)).toBe(4);
     expect(roomEventsFromSse('')).toEqual([]);
-    const sample = [{ id: 'm1', actor: '负责人', kind: '消息', body: '你好' }];
-    expect(applyRoomTranscript(sample, [], 0)).toEqual([]);
-    expect(applyRoomTranscript(sample, events, 0).map((line) => line.id)).toEqual(['m4', 'm5']);
-    expect(applyRoomTranscript(sample, events, 3).map((line) => line.id)).toEqual(['m1', 'm4', 'm5']);
     expect(roomDraftKey('Enter', false)).toBe('send');
     expect(roomDraftKey('Enter', true)).toBe('newline');
   });
 
-  it('labels a server task by status and assignee', () => {
-    expect(taskLine({ id: 't1', title: '整理询价草稿', status: 'reported', assigneeUserId: 'user-sales', waitingReason: null })).toBe('已回报 · 销售员工');
-    expect(taskLine({ id: 't2', title: '核对库存', status: 'waiting', assigneeUserId: 'user-ops', waitingReason: '等待连接' })).toBe('等待连接 · 运营员工');
-    expect(taskLine({ id: 't3', title: '整理询价草稿', status: 'assigned', assigneeUserId: 'user-owner', waitingReason: null })).toBe('进行中 · 负责人');
+  it('merges new messages in room order without replacing or repeating what is already shown', () => {
+    const m = (id: string, seq: number): ApiMessage => ({ id, seq, authorUserId: 'user-owner', body: id, taskIds: [] });
+    const shown = [m('m1', 1), m('m4', 4)];
+    expect(mergeRoomMessages(shown, [])).toBe(shown);
+    expect(mergeRoomMessages(shown, [m('m4', 4)])).toBe(shown);
+    // the reply to my own send (seq 5, 6) is shown before the poll brings an earlier line from a colleague (seq 3)
+    const afterSend = mergeRoomMessages(shown, [m('m5', 5), m('m6', 6)]);
+    expect(mergeRoomMessages(afterSend, [m('m3', 3), m('m5', 5)]).map((message) => message.id)).toEqual(['m1', 'm3', 'm4', 'm5', 'm6']);
   });
 
-  it('reports as the assignee of the current task, and keeps that user when the payload lags', () => {
-    const tasks = [
-      { id: 'sales', assigneeUserId: 'user-sales' },
-      { id: 'ops', assigneeUserId: 'user-ops' },
-    ];
-    expect(assigneeForReport(tasks, null)).toEqual({ taskId: 'sales', userId: 'user-sales' });
-    expect(assigneeForReport(tasks, 'ops')).toEqual({ taskId: 'ops', userId: 'user-ops' });
-    expect(assigneeForReport([], 'ops', 'user-ops')).toEqual({ taskId: 'ops', userId: 'user-ops' });
+  it('inserts a mention and keeps drafts apart per person', () => {
+    expect(insertMention('', '销售员工')).toBe('@销售员工 ');
+    expect(insertMention('@', '销售员工')).toBe('@销售员工 ');
+    expect(insertMention('请看一下', '销售员工')).toBe('请看一下 @销售员工 ');
+    expect(insertMention('请看一下 @', '销售员工')).toBe('请看一下 @销售员工 ');
+    expect(draftStorageKey('user-owner')).not.toBe(draftStorageKey('user-sales'));
+  });
+
+  it('labels a server task by status and the employee it was given to', () => {
+    expect(taskLine(task({ status: 'reported' }), EMPLOYEES)).toBe('已回报，待复核 · 销售员工');
+    expect(taskLine(task({ status: 'waiting', waitingReason: '等待连接', employeeId: 'emp-2' }), EMPLOYEES)).toBe('等待连接 · 运营员工');
+    expect(taskLine(task({ employeeId: 'emp-gone' }), EMPLOYEES)).toBe('进行中 · 数字员工');
+    expect(taskStatusLabel({ status: 'reviewed', waitingReason: null })).toBe('已复核');
+    expect(taskStatusLabel({ status: 'cancelled', waitingReason: null })).toBe('已取消');
+  });
+
+  it('names speakers and message kinds from the server data', () => {
+    const tasks = [task({})];
+    const source: ApiMessage = { id: 'm1', seq: 1, authorUserId: 'user-owner', body: '@销售员工 整理询价草稿', taskIds: ['t1'], kind: 'message' };
+    const handover: ApiMessage = { id: 'm2', seq: 2, authorUserId: 'super-agent', body: '已交给 @销售员工', taskIds: ['t1'], kind: 'reply' };
+    const report: ApiMessage = { id: 'm3', seq: 3, authorUserId: 'user-sales', body: '草稿已放在对话里', taskIds: ['t1'], kind: 'report' };
+    const followup: ApiMessage = { id: 'm4', seq: 4, authorUserId: 'user-sales', body: '请补充交期', taskIds: ['t1'], kind: 'message' };
+    expect([source, handover, report].map((message) => messageKindLabel(message, tasks))).toEqual(['派活', '任务', '回报']);
+    expect(messageKindLabel({ ...handover, taskIds: [] }, tasks)).toBe('回复');
+    expect(actorLabel(source, OWNER, tasks, EMPLOYEES)).toBe('我');
+    expect(actorLabel(source, SALES, tasks, EMPLOYEES)).toBe('同事');
+    expect(actorLabel(handover, OWNER, tasks, EMPLOYEES)).toBe('超级智能体');
+    expect(actorLabel(report, OWNER, tasks, EMPLOYEES)).toBe('销售员工');
+    // a follow-up written by the assignee is not evidence for the task
+    expect(taskReports(tasks[0]!, [source, handover, report, followup]).map((message) => message.id)).toEqual(['m3']);
+  });
+
+  it('offers only the task actions this person may take', () => {
+    expect(taskActions(task({}), null)).toEqual({ report: false, review: false, cancel: false, followup: false });
+    expect(taskActions(task({}), OWNER)).toEqual({ report: false, review: false, cancel: true, followup: true });
+    expect(taskActions(task({}), SALES)).toEqual({ report: true, review: false, cancel: false, followup: true });
+    expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true });
+    expect(taskActions(task({ status: 'reviewed' }), SALES).report).toBe(false);
+    expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false });
+  });
+
+  it('gives an employee-only sign-in the two daily pages and everyone else the full menu', () => {
+    const ids = (roles: string[] | null) => navFor(roles).flatMap((group) => group.items.map((item) => item.id));
+    expect(ids(['employee'])).toEqual(['room', 'work']);
+    expect(ids(['owner'])).toHaveLength(7);
+    expect(ids(['employee', 'reviewer'])).toHaveLength(7);
+    expect(ids(null)).toHaveLength(7);
   });
 
   it('replaces the offline sample with the server list, including an empty inbox', () => {
