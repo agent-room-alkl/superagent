@@ -10,7 +10,7 @@ export interface LongItem {
   replies: Array<{ eventId: string; body: string; receivedAt: string }>;
 }
 export interface Exception { id: string; kind: 'exception_ruling'; renderer: 'issue_list'; assignee: string;
-  eventId: string; candidates: string[]; projectId: string; resolvedTo: string | null }
+  eventId: string; candidates: string[]; projectId: string; resolvedTo: string | null; sourceId?: string; sopId?: string; resolutionKind?: 'existing' | 'new' }
 export interface Action {
   id: string; batchId: string; rowId: string; projectId: string; payload: Record<string, unknown>; hash: string;
   status: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'unknown';

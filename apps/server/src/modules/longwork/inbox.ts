@@ -19,7 +19,7 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
     const item = base(`long-match:${e.id}`, e.projectId, e.assignee, {
       title: '来件需要确认原事项', reason: '线程改变或存在多个候选事项，请核对证据后选择。', original: incoming,
       candidates: e.candidates.map(id => { const i = state.items.find(x => x.id === id); return { id, object: i?.objectId, person: i?.person, thread: i?.threadId }; }),
-      resolvedTo: e.resolvedTo,
+      resolvedTo: e.resolvedTo, resolutionKind: e.resolutionKind ?? 'existing',
     });
     return { ...item, kind: 'exception_ruling', status: e.resolvedTo ? 'closed' : 'open',
       canAct: !e.resolvedTo && (owner || user.roles.includes('reviewer')) && e.assignee === user.userId,
