@@ -4,6 +4,8 @@ import pg from 'pg';
 import { expect, it } from 'vitest';
 import type { Execution } from './executor.js';
 import { insertRun, loadRunByInstance, saveRuns } from './pg-runs.js';
+import { insertWorkItem, loadWorkItemsForRun, saveInbox } from '../humanwork/pg-inbox.js';
+import type { WorkItem } from '../humanwork/work-items.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const live = databaseUrl ? it : it.skip;
@@ -38,7 +40,7 @@ live('a claimed run stays when another process replaces the shared snapshot', as
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     await admin.query(`SET search_path TO "${schema}"`);
-    for (const file of ['0010_inbox_and_runs.sql', '0011_execution_run.sql']) {
+    for (const file of ['0010_inbox_and_runs.sql', '0011_execution_run.sql', '0012_work_item.sql']) {
       const sql = fs.readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8');
       await admin.query(sql.replace(/^GRANT .*$/gm, ''));
     }
@@ -50,6 +52,15 @@ live('a claimed run stays when another process replaces the shared snapshot', as
     const kept = await loadRunByInstance(db, 't', 'mail_1');
     expect(kept?.id).toBe('run_mail_1');
     expect(kept?.status).toBe('waiting_human');
+    const item = {
+      id: 'wi_run_mail_1_h_action_approval', tenantId: 't', kind: 'action_approval', renderer: 'field_diff',
+      projectId: null, assigneeUserId: 'owner-1', payloadVersion: 1, payload: { executionId: 'run_mail_1' },
+      payloadHash: 'h', status: 'open', decision: null, submitCount: 0, actionStatus: null, systemVerified: false,
+      evidenceSource: null, waitingOn: null, draft: null, rows: [],
+    } as WorkItem;
+    await insertWorkItem(db, item);
+    await saveInbox(db, { seq: 1, items: [] });
+    expect((await loadWorkItemsForRun(db, 'run_mail_1')).map((row) => row.id)).toEqual([item.id]);
   } finally {
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     admin.release();

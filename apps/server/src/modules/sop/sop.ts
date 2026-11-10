@@ -316,6 +316,17 @@ export class SopRuntime {
     return [...this.versions].reverse().find((version) => version.sopId === sopId && version.status === 'published');
   }
 
+  /** Install one stored version. An id that is already here is left as it is, including a newer published copy. */
+  pin(version: SopVersion): SopVersion {
+    const existing = this.versions.find((item) => item.id === version.id);
+    if (existing) return existing;
+    const copy = cloneVersion(version);
+    this.versions.push(copy);
+    const n = Number(/^sopv_(\d+)$/.exec(copy.id)?.[1] ?? 0);
+    if (n > this.seq) this.seq = n;
+    return copy;
+  }
+
   /** Enough state for another process to see published versions and already-claimed events. */
   snapshot(): SopSnapshot {
     return {

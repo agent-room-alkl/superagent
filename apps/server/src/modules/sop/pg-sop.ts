@@ -139,6 +139,17 @@ export async function loadPublishedVersion(db: Queryable, sopId: string): Promis
   return row ? fromVersionRow(row) : null;
 }
 
+/** The version id pinned on an instance. This is not the latest published version. */
+export async function loadVersionById(db: Queryable, id: string): Promise<SopVersion | null> {
+  const result = await db.query<VersionRow>(
+    `SELECT id, sop_id, number, definition, status, report, revision, validated_revision, effective_at
+     FROM sop_versions WHERE id = $1`,
+    [id],
+  );
+  const row = result.rows[0];
+  return row ? fromVersionRow(row) : null;
+}
+
 /**
  * Claims tenant+source+event_id+sop_id. Returns false when the row already exists,
  * including when this process is not the one that published the SOP.
