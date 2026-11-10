@@ -4,7 +4,7 @@ import type { Queryable } from '../sop/pg-sop.js';
 export interface SopStartLink { requestId?: string; status: 'waiting_publication' | 'paused' | 'waiting_runtime' | 'blocked_claim' | 'blocked_source' | 'cancelled'; versionId?: string; instanceId?: string; reason: string }
 export interface MailExecutionLink {
   runId?: string; status: 'dispatching' | 'waiting_runtime' | 'running' | 'waiting_human' | 'completed' | 'blocked' | 'outcome_unknown';
-  reason: string; updatedAt: string; leaseOwner?: string; leaseUntil?: number;
+  reason: string; updatedAt: string; leaseOwner?: string; leaseUntil?: number; attempted?: boolean;
 }
 
 export interface LongItem {

@@ -17,7 +17,7 @@ export interface MailSopConsumer {
   inspect(tenantId: string, instanceId: string): Promise<ClaimedMailRun | null>;
 }
 const reasons: Record<ClaimedMailRun['status'], string> = {
-  running: '流程正在处理；运行状态不代表外部结果已核验。', waiting_human: '流程等待人工工作项；尚未批准的动作不会执行。',
+  running: '执行已登记，步骤状态待核对；这不代表外部结果已核验。', waiting_human: '流程等待人工工作项；尚未批准的动作不会执行。',
   completed: '流程执行记录已结束；外部结果以各步骤的回读证据为准，仍待负责人核对。',
   blocked: '流程已阻塞，请核对关联执行记录；不会自动重建或重复写入。', outcome_unknown: '流程结果未知，保留同一执行；只允许授权后的回读核对。',
 };
@@ -70,7 +70,9 @@ export class MailSopBridge {
           // Recheck the case/source immediately before crossing the execution boundary.
           const allowed = await this.store.change(tenant, s => {
             const item = s.items.find(i => i.id === id); const source = this.sources.find(x => x.id === item?.sourceId && x.tenant === tenant);
-            return !!item && item.phase !== 'closed' && item.sopStart?.status === 'waiting_runtime' && item.sopExecution?.leaseOwner === leaseOwner && bound(item, source, tenant);
+            const allowed = !!item && item.phase !== 'closed' && item.sopStart?.status === 'waiting_runtime' && item.sopExecution?.leaseOwner === leaseOwner && bound(item, source, tenant);
+            if (allowed) item.sopExecution!.attempted = true; // durable uncertainty marker before crossing the boundary
+            return allowed;
           });
           if (allowed) run = await this.consumer!.start(claim.input);
           else result = { status: 'blocked', reason: '原事项或来源已改变，未启动流程；等待负责人核对。' };
@@ -88,7 +90,8 @@ export class MailSopBridge {
       const item = s.items.find(i => i.id === id);
       if (!item || item.sopExecution?.leaseOwner !== leaseOwner) return;
       // Closing/revoking during a call does not erase a possibly-started run's identity.
-      item.sopExecution = { ...result, ...(result.runId ? {} : item.sopExecution.runId ? { runId: item.sopExecution.runId } : {}), updatedAt: new Date(this.now()).toISOString() };
-    });
+      item.sopExecution = { ...result, ...(item.sopExecution.attempted ? { attempted: true } : {}),
+        ...(result.runId ? {} : item.sopExecution.runId ? { runId: item.sopExecution.runId } : {}), updatedAt: new Date(this.now()).toISOString() };
+    }, { prepareSop: true });
   }
 }

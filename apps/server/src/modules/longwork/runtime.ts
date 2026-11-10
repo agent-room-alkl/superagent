@@ -43,8 +43,8 @@ export function createLongWorkDeps(runtime: Runtime, env = process.env, consumer
     work, ...(mail ? { mail } : {}),
     ready: async () => {
       if (!runtime.pool) return true;
-      const row = (await runtime.pool.query("SELECT to_regclass('longwork_state') AS name, to_regclass('longwork_sop_starts') AS starts, to_regclass('sop_versions') AS versions, to_regclass('sop_instances') AS instances, to_regclass('sop_events') AS events")).rows[0];
-      return !!row?.name && !!row.starts && !!row.versions && !!row.instances && !!row.events;
+      const row = (await runtime.pool.query("SELECT to_regclass('longwork_state') AS name, to_regclass('longwork_sop_starts') AS starts, to_regclass('sop_versions') AS versions, to_regclass('sop_instances') AS instances, to_regclass('sop_events') AS events, to_regclass('execution_run') AS runs, to_regclass('work_item') AS items")).rows[0];
+      return !!row?.name && !!row.starts && !!row.versions && !!row.instances && !!row.events && (!consumer || (!!row.runs && !!row.items));
     },
     tick: async () => {
       await work.tick(runtime.config.platformTenantId);
