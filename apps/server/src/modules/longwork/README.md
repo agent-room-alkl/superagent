@@ -39,6 +39,20 @@ consumer must recheck the request's current state/source and provide durable ste
 write-before-call fencing. It must never treat a metadata instance's `running` registry status as execution proof.
 The unified inbox shows this waiting reason and its version/instance ids. Ordinary reads never prepare new starts.
 
+`MailSopBridge` provides the guarded consumer boundary. A configured `MailSopConsumer` must use the execution
+owner's durable, already-claimed-instance entry and read-only per-instance lookup. It must check the pinned version
+and current execution eligibility; it must not call the manual trigger or choose a newer publication. Until this
+adapter is installed, `createLongWorkDeps` leaves requests in the honest `waiting_runtime` state.
+
+The bridge serializes overlapping dispatch with a short durable lease and rechecks the source and open case before
+starting. It first looks for an existing run after every retry/restart, including a lost start response, and never
+advances an existing run. The executor's unique tenant/instance row remains the final fence. Once a run id is known,
+a missing execution record blocks rather than opening a replacement. At most fifty cases are inspected per tick,
+oldest inspection first, so later requests cannot starve behind waiting runs. Approved object fields are captured
+when the mail is accepted; later source edits cannot change those parameters, and the mail body stays nested data.
+Legacy cases without a captured input block for explicit reconciliation. Execution links expose status and stable
+identity separately from the long item's phase; a completed graph is still not human acceptance of external results.
+
 The worker registers a `created` subscription, renews it before expiry and reconciles folder delta pages every
 minute. A webhook only authenticates `subscriptionId` + `clientState` and durably requests a scan. It never treats
 notification bodies as business instructions. Delta URLs must remain on the approved Graph mailbox/folder;

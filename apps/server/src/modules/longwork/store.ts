@@ -2,6 +2,10 @@ import type pg from 'pg';
 import type { Queryable } from '../sop/pg-sop.js';
 
 export interface SopStartLink { requestId?: string; status: 'waiting_publication' | 'paused' | 'waiting_runtime' | 'blocked_claim' | 'blocked_source' | 'cancelled'; versionId?: string; instanceId?: string; reason: string }
+export interface MailExecutionLink {
+  runId?: string; status: 'dispatching' | 'waiting_runtime' | 'running' | 'waiting_human' | 'completed' | 'blocked' | 'outcome_unknown';
+  reason: string; updatedAt: string; leaseOwner?: string; leaseUntil?: number;
+}
 
 export interface LongItem {
   id: string; sourceId: string; sopId: string; projectId: string; objectId: string; person: string;
@@ -12,6 +16,7 @@ export interface LongItem {
   waitRequestId?: string; registrationEvidence?: string; threadAliases?: string[];
   reviewer?: string;
   sopStart?: SopStartLink;
+  sopInput?: Record<string, unknown>; sopMail?: { id: string; threadId: string; from: string; receivedAt: string; body: string }; sopExecution?: MailExecutionLink;
   replies: Array<{ eventId: string; body: string; receivedAt: string }>;
 }
 export interface Exception { id: string; kind: 'exception_ruling'; renderer: 'issue_list'; assignee: string;

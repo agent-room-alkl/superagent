@@ -4,6 +4,7 @@ import { MemoryLongWorkStore, PgLongWorkStore } from './store.js';
 import { MailTrigger, type GraphSource } from './graph.js';
 import type { LongWorkDeps } from './http.js';
 import { prepareMailSopStarts } from './sop-starts.js';
+import { MailSopBridge, type MailSopConsumer } from './sop-execution.js';
 
 export function sourceConfig(raw: string | undefined, tenant: string): GraphSource[] {
   if (!raw) return [];
@@ -20,10 +21,11 @@ export function sourceConfig(raw: string | undefined, tenant: string): GraphSour
   return sources;
 }
 
-export function createLongWorkDeps(runtime: Runtime, env = process.env): LongWorkDeps {
+export function createLongWorkDeps(runtime: Runtime, env = process.env, consumer?: MailSopConsumer): LongWorkDeps {
   const sources = sourceConfig(env.MAIL_TRIGGERS_JSON, runtime.config.platformTenantId);
   const store = runtime.pool ? new PgLongWorkStore(runtime.pool, prepareMailSopStarts(sources)) : new MemoryLongWorkStore();
   const work = new LongWork(store);
+  const bridge = new MailSopBridge(store, sources, consumer);
   let mail: MailTrigger | undefined;
   if (sources.length) {
     if (!env.MAIL_NOTIFICATION_URL) throw Error('MAIL_NOTIFICATION_URL is required');
@@ -46,6 +48,7 @@ export function createLongWorkDeps(runtime: Runtime, env = process.env): LongWor
     },
     tick: async () => {
       await work.tick(runtime.config.platformTenantId);
+      await bridge.tick(runtime.config.platformTenantId);
       // A bad mailbox must not prevent other approved sources being scanned. Emit no source bodies or secrets.
       const results = await Promise.allSettled(sources.map(s => mail!.tick(s)));
       if (results.some(r => r.status === 'rejected')) throw Error('mail_scan_failed; periodic scan will retry');

@@ -44,7 +44,7 @@ export class LongWork {
       const due = objectDue(source.dueRule, source.fields);
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId, objectId: source.objectId,
         person: input.person.toLowerCase(), threadId: input.threadId, assignee: source.assignee, reviewer: source.reviewer, phase: 'initial', dueAt: due.dueAt,
-        dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs, events: [], replies: [],
+        dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs, events: [], replies: [], sopInput: structuredClone(source.fields),
         original: { body: '人工登记等待；凭证未经系统核验，没有发送邮件。', receivedAt: new Date(this.now()).toISOString() },
         waitRequestId: input.requestId, registrationEvidence: input.evidence };
       s.items.push(item); return item;
@@ -80,6 +80,7 @@ export class LongWork {
       }
       if (candidates.length === 1) {
         const item = candidates[0]!;
+        if (!item.events.length) item.sopMail = structuredClone(mail);
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
         this.cancelPending(state.actions, item.id);
         return { item, merged: true };
@@ -88,7 +89,7 @@ export class LongWork {
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
         objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee, reviewer: source.reviewer,
         phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
-        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
+        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [], sopInput: structuredClone(source.fields), sopMail: structuredClone(mail) };
       state.items.push(item);
       return { item, merged: false };
     }, { prepareSop: true });
@@ -115,6 +116,7 @@ export class LongWork {
       if (!e.resolvedTo) {
         const a = s.actions.find(a => a.batchId === exceptionId)!;
         const mail = a.payload.mail as unknown as Incoming;
+        if (!item.events.length) item.sopMail = structuredClone(mail);
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
         if (item.threadId !== mail.threadId && !item.threadAliases?.includes(mail.threadId)) (item.threadAliases ??= []).push(mail.threadId);
         this.cancelPending(s.actions, item.id);
@@ -142,7 +144,7 @@ export class LongWork {
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
         objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee, reviewer: source.reviewer,
         phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
-        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
+        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [], sopInput: structuredClone(source.fields), sopMail: structuredClone(mail) };
       s.items.push(item); e.resolvedTo = item.id; e.resolutionKind = 'new';
       action.status = 'succeeded'; action.evidence = 'Reviewer classified incoming data as a new case; no external action executed';
       return item;
