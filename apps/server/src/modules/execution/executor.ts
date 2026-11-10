@@ -62,6 +62,8 @@ export interface ExecutorDeps {
    * Returns null when allowed, otherwise the reason. The gateway refuses and nothing is invoked when it is not null.
    */
   authorize: (execution: Execution, toolId: string, employeeId: string | null) => string | null;
+  /** Who is bound to this tool at the moment of the call. Omitted in tests that do not check the snapshot. */
+  identityOf?: (employeeId: string, toolId: string) => { userId: string; toolInstallationId: string } | null;
   /**
    * Persist the gateway snapshot after a row is marked executing and before the connector runs.
    * Absent in unit tests, which call the tool without a database.
@@ -97,6 +99,23 @@ export class SopExecutor {
   private seq = 0;
 
   constructor(private deps: ExecutorDeps) {}
+
+  snapshot(): { runs: Execution[]; seq: number } {
+    return { runs: [...this.runs.values()].map((run) => structuredClone(run)), seq: this.seq };
+  }
+
+  /** Replaces the in-memory runs. The inbox and SOP version must already be loaded. */
+  load(saved: { runs: Execution[]; seq: number }): void {
+    this.runs.clear();
+    let seq = saved.seq;
+    for (const run of saved.runs) {
+      const copy = structuredClone(run);
+      this.runs.set(copy.id, copy);
+      const n = Number(/^ex_(\d+)$/.exec(copy.id)?.[1] ?? 0);
+      if (n > seq) seq = n;
+    }
+    this.seq = seq;
+  }
 
   /** Runs of one tenant only; another tenant's run is indistinguishable from a missing one. */
   list(tenantId: string, sopId?: string): Execution[] {
@@ -211,6 +230,7 @@ export class SopExecutor {
       approvalHash = payloadHash(params);
     }
     const employeeId = this.employeeFor(run, step.nodeId);
+    const bound = employeeId && this.deps.identityOf ? this.deps.identityOf(employeeId, toolId) : null;
     let refusal: string | null = null;
     const call = () => {
       const r = connector(params);
@@ -225,6 +245,7 @@ export class SopExecutor {
       payload: params,
       intended: write ? params : undefined,
       approvalHash,
+      identity: employeeId && bound ? { employeeId, userId: bound.userId, toolInstallationId: bound.toolInstallationId } : undefined,
       authorize: () => (refusal = this.deps.authorize(structuredClone(run), toolId, employeeId)) === null,
       call,
     });

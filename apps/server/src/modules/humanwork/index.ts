@@ -1,11 +1,28 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkItemKind, WorkItemRenderer } from '@superagent/shared';
 import { viewerFrom } from '../room/index.js';
+import { loadInbox, saveInbox, type Queryable } from './pg-inbox.js';
 import { WorkInbox, type WorkItem } from './work-items.js';
 import type { LongWorkDeps } from '../longwork/http.js';
 import { longInbox } from '../longwork/inbox.js';
 
 export const inboxState = { current: new WorkInbox() };
+
+let inboxStore: Queryable | null = null;
+
+export function bindInboxStore(db: Queryable | null): void {
+  inboxStore = db;
+}
+
+export async function flushInbox(): Promise<void> {
+  if (inboxStore) await saveInbox(inboxStore, inboxState.current.snapshot());
+}
+
+export async function hydrateInbox(): Promise<void> {
+  if (!inboxStore) return;
+  const saved = await loadInbox(inboxStore);
+  if (saved) inboxState.current.load(saved);
+}
 
 /** Listeners for decided items (the SOP executor resumes the run an approval belongs to). */
 export const workItemEvents: { decided: Array<(item: WorkItem) => void | Promise<void>> } = { decided: [] };
@@ -43,6 +60,10 @@ function attempt<T>(reply: FastifyReply, run: () => T): T | FastifyReply {
 }
 
 export const humanworkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async (app, { deps }) => {
+  app.addHook('onResponse', async (req) => {
+    if (req.method === 'GET' || req.method === 'HEAD') return;
+    await flushInbox();
+  });
   app.get('/', async (req) => {
     const query = req.query as { exceptions?: string; project?: string };
     const viewer = viewerFrom(req.headers, req.user);

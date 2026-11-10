@@ -117,6 +117,23 @@ export class WorkInbox {
     return [...this.items.values()].map((item) => this.view(item));
   }
 
+  snapshot(): { items: WorkItem[]; seq: number } {
+    return { items: [...this.items.values()].map((item) => structuredClone(item)), seq: this.seq };
+  }
+
+  /** Replaces this inbox. Call it on the instance the routes and the executor already hold. */
+  load(saved: { items: WorkItem[]; seq: number }): void {
+    this.items.clear();
+    let seq = saved.seq;
+    for (const item of saved.items) {
+      const copy = structuredClone(item);
+      this.items.set(copy.id, copy);
+      const n = Number(/^wi_(\d+)$/.exec(copy.id)?.[1] ?? 0);
+      if (n > seq) seq = n;
+    }
+    this.seq = seq;
+  }
+
   list(viewer: Viewer, options?: { exceptionsOnly?: boolean; projectId?: string; tenantId?: string }): WorkItem[] {
     return [...this.items.values()]
       .filter((item) => !options?.tenantId || item.tenantId === options.tenantId)
