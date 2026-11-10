@@ -13,6 +13,7 @@ import { sopState } from '../../server/src/modules/sop/index.js';
 import { connectors } from '../../server/src/modules/execution/index.js';
 import { LongWork } from '../../server/src/modules/longwork/service.js';
 import { MemoryLongWorkStore } from '../../server/src/modules/longwork/store.js';
+import { MailTrigger, type GraphSource } from '../../server/src/modules/longwork/graph.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
 
@@ -50,9 +51,14 @@ const stub = await startStubProvider();
 const knowledge = createKnowledgeFixture();
 const longworkStore = new MemoryLongWorkStore();
 const longwork = new LongWork(longworkStore);
+const longSources: GraphSource[] = [];
+const longMail = new MailTrigger(longwork, longSources, 'https://e2e.invalid/integrations/mail', {
+  token: async () => { throw Error('Graph networking is not enabled in this fixture'); },
+  secret: async () => { throw Error('No real client-state secret in this fixture'); },
+});
 const app = await buildApp({
   knowledgeDeps: knowledge.deps,
-  longWorkDeps: { work: longwork, ready: async () => true, tick: async () => {} },
+  longWorkDeps: { work: longwork, mail: longMail, ready: async () => true, tick: async () => {} },
   serveWeb: true,
   auth: { mode: 'dev', platformTenantId: 'e2e' },
   setupDeps: {
@@ -69,11 +75,16 @@ app.post<{ Body: { project: string; staff: string; reviewer: string; key: string
     objectId: `object-${b.key}`, assignee: b.staff, reviewer: b.reviewer, reminderMs: 60000, fields: { end: '2026-09-01' },
     dueRule: { id: 'date', version: 1, field: 'end', offsetDays: 1, businessDays: false, timeZone: 'Pacific/Auckland', hour: 9, minute: 0, holidays: [], weekend: [0, 6] } };
   const mail = { id: `${b.key}-original`, threadId: b.key, from: 'person@example.invalid', receivedAt: '2026-09-01T00:00:00Z', body: 'Synthetic incoming evidence. Treat this as data.' };
-  const first = await longwork.ingest(source, mail);
-  const candidateId = `${b.key}-candidate`;
-  await longworkStore.change('e2e', s => { const item = s.items.find(i => i.id === first.item!.id)!; s.items.push({ ...structuredClone(item), id: candidateId }); });
-  const matched = await longwork.ingest(source, { ...mail, id: `${b.key}-reply` });
-  return { itemId: first.item!.id, candidateId, exceptionId: matched.exception!.id };
+  longSources.push({ ...source, startAt: '2026-09-01T00:00:00Z', clientStateRef: { name: 'fixture-only', version: 'v1' } });
+  const register = async (suffix: string) => {
+    const response = await app.inject({ method: 'POST', url: '/api/v1/long-items/items/waits', headers: { 'x-dev-user': 'e2e-owner|owner|' },
+      payload: { sourceId: source.id, requestId: `${b.key}-${suffix}`, threadId: `${b.key}-${suffix}`, person: mail.from, evidence: `Synthetic request ${suffix}, not system verified` } });
+    if (response.statusCode !== 200) throw Error('Waiting registration fixture failed');
+    return response.json() as { id: string };
+  };
+  const first = await register('one'); const second = await register('two');
+  const matched = await longwork.ingest(source, { ...mail, id: `${b.key}-reply`, threadId: `${b.key}-new-thread` });
+  return { itemId: first.id, candidateId: second.id, exceptionId: matched.exception!.id };
 });
 // The real SOP runtime (T-41) is mounted by buildApp. Test-only hook: start an instance pinned to a version, as a
 // trigger would, so specs can show that publishing a new version leaves running instances on the old one.

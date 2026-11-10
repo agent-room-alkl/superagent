@@ -22,8 +22,12 @@ live('real PostgreSQL serializes duplicate mail, persists restart recovery and r
     await Promise.all(Array.from({ length: 12 }, () => new LongWork(new PgLongWorkStore(pool)).ingest(source, mail)));
     expect((await work.snapshot('t')).items).toHaveLength(1);
     expect((await work.snapshot('t')).receipts).toHaveLength(1);
+    const waits = await Promise.all(Array.from({ length: 8 }, () => work.openWaiting(source, { requestId: 'wait-two', threadId: 'second-thread', person: mail.from, evidence: 'Synthetic prior request' })));
+    expect(new Set(waits.map(w => w.id)).size).toBe(1);
+    const changedThread = await work.ingest(source, { ...mail, id: 'changed-thread-mail', threadId: 'third-thread' });
+    expect(changedThread.exception!.candidates).toHaveLength(2);
     await expect(store.change('t', s => { s.items.length = 0; throw Error('rollback'); })).rejects.toThrow('rollback');
-    expect((await work.snapshot('t')).items).toHaveLength(1);
+    expect((await work.snapshot('t')).items).toHaveLength(2);
     const [a] = await work.createBatch('t', 'b', 'p', [{ id: 'one', payload: { amount: 10 } }, { id: 'two', payload: { amount: 20 } }]);
     await work.approve('t', 'b', 'p', [{ id: 'one', hash: a!.hash }], 'reviewer');
     let writes = 0; let reads = 0;
@@ -33,7 +37,7 @@ live('real PostgreSQL serializes duplicate mail, persists restart recovery and r
     const restarted = new LongWork(new PgLongWorkStore(pool));
     await restarted.run('t', a!.id, 'p', driver); await restarted.run('t', a!.id, 'p', driver);
     expect({ writes, reads }).toEqual({ writes: 1, reads: 1 });
-    const state = await restarted.snapshot('t'); expect(state.actions.map(a => a.status)).toEqual(['succeeded', 'pending']);
+    const state = await restarted.snapshot('t'); expect(state.actions.filter(a => a.batchId === 'b').map(a => a.status)).toEqual(['succeeded', 'pending']);
     expect((await restarted.snapshot('other-tenant')).items).toHaveLength(0);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); await admin.end(); }
 }, 20000);

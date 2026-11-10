@@ -40,6 +40,12 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
   });
   app.post<{ Params: { id: string }; Body: { projectId: string } }>('/items/:id/close', async req =>
     deps!.work.close(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.user!.userId));
+  app.post<{ Body: { sourceId: string; requestId: string; person: string; threadId: string; evidence: string } }>('/items/waits', async req => {
+    if (!manager(req)) throw Error('forbidden');
+    const s = deps!.mail?.sources.find(s => s.id === req.body.sourceId && s.tenant === req.user!.tenantId);
+    if (!s) throw Error('not_found'); project(req, s.projectId);
+    return deps!.work.openWaiting(s, req.body);
+  });
   app.post<{ Body: DateRule }>('/date-rules', async req => {
     if (!manager(req)) throw Error('forbidden'); return deps!.work.saveRule(req.user!.tenantId, req.body);
   });
