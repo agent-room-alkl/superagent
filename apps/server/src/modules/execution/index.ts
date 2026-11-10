@@ -3,7 +3,7 @@
  * 待我处理 (work-items decide) and resume the run; this module never writes without one.
  */
 import type { FastifyPluginAsync } from 'fastify';
-import { ToolGateway } from '../gateway/gateway.js';
+import { flushGateway, gatewayState } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
 import { inboxState, workItemEvents } from '../humanwork/index.js';
 import { flushSop, sopState } from '../sop/index.js';
@@ -41,7 +41,7 @@ export const executionState = {
   current: new SopExecutor({
     sop: () => sopState.current,
     inbox: () => inboxState.current,
-    gateway: new ToolGateway(),
+    gateway: gatewayState.current,
     tools: toolInfo,
     connectors,
     reviewerOf: (run) => run.startedBy,
@@ -50,7 +50,8 @@ export const executionState = {
 };
 
 workItemEvents.decided.push((item) => {
-  executionState.current.onDecided(item);
+  const run = executionState.current.onDecided(item);
+  if (run) void flushGateway();
 });
 
 export const executionModule: FastifyPluginAsync = async (app) => {
@@ -65,6 +66,7 @@ export const executionModule: FastifyPluginAsync = async (app) => {
     if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
     const run = executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
     await flushSop();
+    await flushGateway();
     reply.code(201);
     return run;
   });
