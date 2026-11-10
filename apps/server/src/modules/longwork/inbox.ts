@@ -3,8 +3,9 @@ import { canAccessProject } from '../../auth.js';
 import type { WorkItem } from '../humanwork/work-items.js';
 import { payloadHash } from '../gateway/gateway.js';
 import type { LongWork } from './service.js';
+import { batchCollectionInbox } from './work-inbox.js';
 
-export type LongInboxItem = WorkItem & { canAct: boolean; longwork: { type: 'match' | 'waiting'; id: string; projectId: string } };
+export type LongInboxItem = WorkItem & { canAct: boolean; longwork: { type: 'match' | 'waiting' | 'batch' | 'collection' | 'collection-response'; id: string; projectId: string } };
 export async function longInbox(work: LongWork, user: UserContext, query: { project?: string; exceptions?: string }): Promise<LongInboxItem[]> {
   const state = await work.snapshot(user.tenantId);
   const owner = user.roles.some(r => r === 'owner' || r === 'admin');
@@ -25,7 +26,8 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
       canAct: !e.resolvedTo && (owner || user.roles.includes('reviewer')) && e.assignee === user.userId,
       longwork: { type: 'match', id: e.id, projectId: e.projectId } };
   });
-  if (query.exceptions === '1') return exceptions;
+  const extra = batchCollectionInbox(state, user, query, base);
+  if (query.exceptions === '1') return [...exceptions, ...extra.filter(i => i.longwork.type === 'batch' && i.payload.hasExceptions === true)];
   const waiting: LongInboxItem[] = state.items.filter(i => visible(i.projectId) && (owner || i.assignee === user.userId)).map(i => {
     const item = base(`long-item:${i.id}`, i.projectId, i.assignee, { title: `长事项 · ${i.objectId}`, due: i.dueAt,
       why: i.phase === 'replied' ? '来件已并回同一事项，等待负责人核对；这不是系统验收完成。' : '阶段只表示跟进计划；发送是否成功请核对独立动作记录。',
@@ -35,5 +37,5 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
     return { ...item, status: i.phase === 'closed' ? 'closed' : 'open', waitingOn: ['closed', 'replied'].includes(i.phase) ? null : i.person,
       canAct: i.assignee === user.userId && i.phase !== 'closed', longwork: { type: 'waiting', id: i.id, projectId: i.projectId } };
   });
-  return [...exceptions, ...waiting];
+  return [...exceptions, ...waiting, ...extra];
 }

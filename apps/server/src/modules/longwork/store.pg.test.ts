@@ -4,6 +4,7 @@ import pg from 'pg';
 import { expect, it } from 'vitest';
 import { PgLongWorkStore } from './store.js';
 import { LongWork, type MailSource, type ActionDriver } from './service.js';
+import { longInbox } from './inbox.js';
 
 const live = process.env.DATABASE_URL ? it : it.skip;
 live('real PostgreSQL serializes duplicate mail, persists restart recovery and rolls back failed mutations', async () => {
@@ -30,7 +31,8 @@ live('real PostgreSQL serializes duplicate mail, persists restart recovery and r
     expect(new Set(newCases.map(i => i.id)).size).toBe(1);
     await expect(store.change('t', s => { s.items.length = 0; throw Error('rollback'); })).rejects.toThrow('rollback');
     expect((await work.snapshot('t')).items).toHaveLength(3);
-    const [a] = await work.createBatch('t', 'b', 'p', [{ id: 'one', payload: { amount: 10 } }, { id: 'two', payload: { amount: 20 } }]);
+    const [a] = await work.createBatch('t', 'b', 'p', [{ id: 'one', payload: { amount: 10 } }, { id: 'two', payload: { amount: 20 } }], 'reviewer');
+    await work.selectRows('t', 'b', 'p', ['one'], 'reviewer');
     await work.approve('t', 'b', 'p', [{ id: 'one', hash: a!.hash }], 'reviewer');
     let writes = 0; let reads = 0;
     const driver: ActionDriver = { authorize: async () => true, execute: async () => { writes++; throw Error('lost response'); },
@@ -40,6 +42,15 @@ live('real PostgreSQL serializes duplicate mail, persists restart recovery and r
     await restarted.run('t', a!.id, 'p', driver); await restarted.run('t', a!.id, 'p', driver);
     expect({ writes, reads }).toEqual({ writes: 1, reads: 1 });
     const state = await restarted.snapshot('t'); expect(state.actions.filter(a => a.batchId === 'b').map(a => a.status)).toEqual(['succeeded', 'pending']);
+    const projected = await longInbox(restarted, { tenantId: 't', userId: 'reviewer', roles: ['employee'], projectScopes: ['p'] }, {});
+    const batch = projected.find(i => i.id === 'long-batch:b')!;
+    expect(batch.canAct).toBe(true); expect(batch.rows.map(r => [r.id, r.selected, r.executed])).toEqual([['two', false, false], ['one', true, true]]);
+    await restarted.runSelected('t', 'b', 'p', 'reviewer', driver); expect({ writes, reads }).toEqual({ writes: 1, reads: 1 });
+    await restarted.collect('t', { id: 'c', projectId: 'p', deadline: '2099-01-01T00:00:00Z', recipients: ['first', 'other'], assigneeUserId: 'collector' });
+    await restarted.reply('t', 'c', 'p', 'first', 'Private first-person evidence');
+    const anotherProcess = new LongWork(new PgLongWorkStore(pool));
+    const other = await longInbox(anotherProcess, { tenantId: 't', userId: 'other', roles: ['employee'], projectScopes: ['p'] }, {});
+    expect(JSON.stringify(other)).not.toContain('Private first-person evidence');
     expect((await restarted.snapshot('other-tenant')).items).toHaveLength(0);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); await admin.end(); }
 }, 20000);

@@ -19,6 +19,9 @@ export interface ActionDriver {
 }
 const key = (...parts: string[]) => JSON.stringify(parts);
 function validText(value: unknown, limit = 256): value is string { return typeof value === 'string' && value.length > 0 && value.length <= limit; }
+function cleanBatchRow(row: { payload: Record<string, unknown>; clean?: boolean }) {
+  return row.clean !== false && (!Object.hasOwn(row.payload, 'amount') || (typeof row.payload.amount === 'number' && Number.isFinite(row.payload.amount) && row.payload.amount >= 0));
+}
 export function validateSource(s: MailSource) {
   if (![s.id, s.tenant, s.mailbox, s.folder, s.sopId, s.projectId, s.objectId, s.assignee, s.reviewer].every(x => validText(x)) ||
     !Number.isFinite(s.reminderMs) || s.reminderMs < 60000) throw Error('invalid_mail_source');
@@ -40,7 +43,7 @@ export class LongWork {
       }
       const due = objectDue(source.dueRule, source.fields);
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId, objectId: source.objectId,
-        person: input.person.toLowerCase(), threadId: input.threadId, assignee: source.assignee, phase: 'initial', dueAt: due.dueAt,
+        person: input.person.toLowerCase(), threadId: input.threadId, assignee: source.assignee, reviewer: source.reviewer, phase: 'initial', dueAt: due.dueAt,
         dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs, events: [], replies: [],
         original: { body: '人工登记等待；凭证未经系统核验，没有发送邮件。', receivedAt: new Date(this.now()).toISOString() },
         waitRequestId: input.requestId, registrationEvidence: input.evidence };
@@ -83,7 +86,7 @@ export class LongWork {
       }
       const due = objectDue(source.dueRule, source.fields);
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
-        objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee,
+        objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee, reviewer: source.reviewer,
         phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
         original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
       state.items.push(item);
@@ -137,7 +140,7 @@ export class LongWork {
       const mail = action.payload.mail as unknown as Incoming;
       const due = objectDue(source.dueRule, source.fields);
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
-        objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee,
+        objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee, reviewer: source.reviewer,
         phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
         original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
       s.items.push(item); e.resolvedTo = item.id; e.resolutionKind = 'new';
@@ -160,17 +163,20 @@ export class LongWork {
     });
   }
 
-  createBatch(tenant: string, batchId: string, projectId: string, rows: Array<{ id: string; payload: Record<string, unknown> }>) {
-    if (!validText(batchId) || !validText(projectId) || !Array.isArray(rows) || !rows.length || rows.length > 500 || new Set(rows.map(r => r.id)).size !== rows.length) throw Error('invalid_batch');
+  createBatch(tenant: string, batchId: string, projectId: string, rows: Array<{ id: string; payload: Record<string, unknown>; clean?: boolean }>, assigneeUserId?: string) {
+    if (!validText(batchId) || batchId.startsWith('collection:') || !validText(projectId) || !Array.isArray(rows) || !rows.length || rows.length > 500 || new Set(rows.map(r => r.id)).size !== rows.length) throw Error('invalid_batch');
+    if (assigneeUserId !== undefined && !validText(assigneeUserId)) throw Error('invalid_assignee');
+    for (const row of rows) if (!validText(row.id) || !row.payload || typeof row.payload !== 'object' || Array.isArray(row.payload) || (row.clean !== undefined && typeof row.clean !== 'boolean')) throw Error('invalid_row');
     return this.store.change(tenant, s => {
+      if (s.items.some(i => i.id === batchId)) throw Error('batch_conflict');
       const existing = s.actions.filter(a => a.batchId === batchId);
       if (existing.length) {
-        if (existing.length !== rows.length || rows.some(r => !existing.some(a => a.rowId === r.id && a.projectId === projectId && a.hash === payloadHash(r.payload)))) throw Error('batch_conflict');
+        if (existing.length !== rows.length || rows.some(r => !existing.some(a => a.rowId === r.id && a.projectId === projectId && a.hash === payloadHash(r.payload) && (a.clean ?? true) === cleanBatchRow(r) && (a.assigneeUserId ?? null) === (assigneeUserId ?? null)))) throw Error('batch_conflict');
         return existing;
       }
       const actions = rows.map(row => {
-        if (!validText(row.id) || !row.payload || typeof row.payload !== 'object' || Array.isArray(row.payload)) throw Error('invalid_row');
-        return { id: randomUUID(), batchId, rowId: row.id, projectId, payload: structuredClone(row.payload), hash: payloadHash(row.payload), status: 'pending' as const, approval: null };
+        return { id: randomUUID(), batchId, rowId: row.id, projectId, payload: structuredClone(row.payload), hash: payloadHash(row.payload), status: 'pending' as const, approval: null,
+          clean: cleanBatchRow(row), selected: false, ...(assigneeUserId ? { assigneeUserId } : {}) };
       }); s.actions.push(...actions); return actions;
     });
   }
@@ -180,11 +186,43 @@ export class LongWork {
       const actions = selected.map(row => {
         const a = s.actions.find(x => x.batchId === batchId && x.rowId === row.id && x.projectId === projectId);
         if (!a || a.hash !== row.hash || a.payload.kind === 'ambiguous_incoming') throw Error('approval_conflict');
+        if (a.assigneeUserId && a.assigneeUserId !== by) throw Error('forbidden');
+        if (a.clean === false) throw Error('conflict_row');
         if (a.status !== 'pending' && a.status !== 'approved') throw Error('no_resubmit');
         return a;
       });
-      for (const a of actions) { a.approval = { by, hash: a.hash }; a.status = 'approved'; } return actions;
+      for (const a of actions) { a.approval = { by, hash: a.hash }; a.status = 'approved'; a.selected = true; } return actions;
     });
+  }
+
+  selectRows(tenant: string, batchId: string, projectId: string, selected: string[], by: string) {
+    if (!Array.isArray(selected) || new Set(selected).size !== selected.length) throw Error('invalid_selection');
+    return this.store.change(tenant, s => {
+      const rows = s.actions.filter(a => a.batchId === batchId && a.projectId === projectId && a.payload.kind !== 'ambiguous_incoming');
+      if (!rows.length) throw Error('not_found');
+      if (rows.some(a => a.assigneeUserId && a.assigneeUserId !== by)) throw Error('forbidden');
+      for (const id of selected) {
+        const a = rows.find(a => a.rowId === id);
+        if (!a || a.clean === false) throw Error('conflict_row');
+        if (!['pending', 'approved'].includes(a.status)) throw Error('no_resubmit');
+      }
+      for (const a of rows) if (['pending', 'approved'].includes(a.status)) a.selected = selected.includes(a.rowId);
+      return rows;
+    });
+  }
+
+  async runSelected(tenant: string, batchId: string, projectId: string, by: string, driver: ActionDriver, readOnly = false) {
+    const rows = (await this.snapshot(tenant)).actions.filter(a => a.batchId === batchId && a.projectId === projectId && a.payload.kind !== 'ambiguous_incoming');
+    if (!rows.length) throw Error('not_found');
+    if (rows.some(a => a.assigneeUserId && a.assigneeUserId !== by)) throw Error('forbidden');
+    const selected = rows.filter(a => readOnly ? ['unknown', 'executing'].includes(a.status) : a.selected && a.status === 'approved');
+    const results: Array<{ rowId: string; status?: string; error?: string }> = [];
+    for (const a of selected) {
+      try { const result = await this.run(tenant, a.id, projectId, driver); results.push({ rowId: a.rowId, status: result.status }); }
+      catch (e) { const code = e instanceof Error ? e.message : '';
+        results.push({ rowId: a.rowId, error: ['not_authorized', 'action_in_progress_conflict', 'not_approved', 'conflict_row', 'not_found'].includes(code) ? code : 'connector_unavailable' }); }
+    }
+    return { results };
   }
 
   /** Commit intent before I/O. Concurrent callers and restart recovery can only read an uncertain result. */
@@ -195,6 +233,7 @@ export class LongWork {
       if (a.status === 'executing' && (a.leaseUntil ?? 0) > this.now()) throw Error('action_in_progress_conflict');
       if (a.status === 'executing' || a.status === 'unknown') return { action: a, mode: 'read' as const };
       if (a.status !== 'approved' || a.approval?.hash !== a.hash || payloadHash(a.payload) !== a.hash) throw Error('not_approved');
+      if (a.clean === false) throw Error('conflict_row');
       a.status = 'executing'; a.leaseUntil = this.now() + 60000; return { action: a, mode: 'write' as const };
     });
     if (claim.mode === 'none') return claim.action;
@@ -222,25 +261,29 @@ export class LongWork {
     });
   }
 
-  collect(tenant: string, input: Pick<Collection, 'id' | 'projectId' | 'deadline' | 'recipients'>) {
+  collect(tenant: string, input: Pick<Collection, 'id' | 'projectId' | 'deadline' | 'recipients' | 'assigneeUserId' | 'approverUserId'>) {
     if (!validText(input.id) || !validText(input.projectId) || !Number.isFinite(Date.parse(input.deadline)) || !input.recipients.length ||
       input.recipients.length > 500 || !input.recipients.every(x => validText(x)) || new Set(input.recipients).size !== input.recipients.length) throw Error('invalid_collection');
+    if ((input.assigneeUserId !== undefined && !validText(input.assigneeUserId)) || (input.approverUserId !== undefined && !validText(input.approverUserId))) throw Error('invalid_assignee');
     return this.store.change(tenant, s => {
       const existing = s.collections.find(c => c.id === input.id);
-      if (existing) { if (payloadHash(input) !== payloadHash({ id: existing.id, projectId: existing.projectId, deadline: existing.deadline, recipients: existing.recipients })) throw Error('collection_conflict'); return existing; }
+      if (existing) { if (payloadHash(input) !== payloadHash({ id: existing.id, projectId: existing.projectId, deadline: existing.deadline, recipients: existing.recipients,
+        ...(existing.assigneeUserId ? { assigneeUserId: existing.assigneeUserId } : {}), ...(existing.approverUserId ? { approverUserId: existing.approverUserId } : {}) })) throw Error('collection_conflict'); return existing; }
+      if (s.actions.some(a => a.batchId === `collection:${input.id}`)) throw Error('collection_conflict');
       const c: Collection = { ...structuredClone(input), status: 'open', replies: {}, missing: [] }; s.collections.push(c);
       // Send intents require the same explicit approval and configured driver as any batch write.
       for (const person of c.recipients) { const payload = { kind: 'collection_request', collectionId: c.id, recipient: person, deadline: c.deadline };
-        s.actions.push({ id: randomUUID(), batchId: `collection:${c.id}`, rowId: person, projectId: c.projectId, payload, hash: payloadHash(payload), status: 'pending', approval: null }); }
+        s.actions.push({ id: randomUUID(), batchId: `collection:${c.id}`, rowId: person, projectId: c.projectId, payload, hash: payloadHash(payload), status: 'pending', approval: null,
+          clean: true, selected: false, ...((c.approverUserId ?? c.assigneeUserId) ? { assigneeUserId: c.approverUserId ?? c.assigneeUserId } : {}) }); }
       return c;
     });
   }
   reply(tenant: string, id: string, projectId: string, person: string, evidence: string) {
-    if (!validText(evidence, 100000)) throw Error('evidence_required');
+    if (!validText(evidence, 100000) || !evidence.trim()) throw Error('evidence_required');
     return this.store.change(tenant, s => {
       const c = s.collections.find(x => x.id === id && x.projectId === projectId); if (!c || !c.recipients.includes(person)) throw Error('not_found');
       if (c.status !== 'open' || this.now() >= Date.parse(c.deadline)) throw Error('collection_closed');
-      c.replies[person] = evidence; return c;
+      Object.defineProperty(c.replies, person, { value: evidence, writable: true, configurable: true, enumerable: true }); return c;
     });
   }
   tick(tenant: string) {
@@ -250,7 +293,8 @@ export class LongWork {
         if (!['initial', 'reminder'].includes(i.phase) || Date.parse(i.dueAt) > now) continue;
         const next = i.phase === 'initial' ? 'reminder' : 'final';
         const payload = { kind: 'reminder', itemId: i.id, phase: next, recipient: i.person };
-        s.actions.push({ id: randomUUID(), batchId: i.id, rowId: next, projectId: i.projectId, payload, hash: payloadHash(payload), status: 'pending', approval: null });
+        s.actions.push({ id: randomUUID(), batchId: i.id, rowId: next, projectId: i.projectId, payload, hash: payloadHash(payload), status: 'pending', approval: null,
+          clean: true, selected: false, ...(i.reviewer ? { assigneeUserId: i.reviewer } : {}) });
         i.phase = next; i.dueAt = new Date(now + i.reminderMs).toISOString();
       }
       for (const c of s.collections) if (c.status === 'open' && Date.parse(c.deadline) <= now) {

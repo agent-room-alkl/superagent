@@ -10,6 +10,7 @@ export interface LongItem {
   dateRuleId: string; dateRuleVersion: number;
   original: { body: string; receivedAt: string };
   waitRequestId?: string; registrationEvidence?: string; threadAliases?: string[];
+  reviewer?: string;
   sopStart?: SopStartLink;
   replies: Array<{ eventId: string; body: string; receivedAt: string }>;
 }
@@ -20,10 +21,12 @@ export interface Action {
   status: 'pending' | 'approved' | 'executing' | 'succeeded' | 'failed' | 'unknown';
   approval: { by: string; hash: string } | null; evidence?: string;
   leaseUntil?: number;
+  assigneeUserId?: string; clean?: boolean; selected?: boolean;
 }
 export interface Collection {
   id: string; projectId: string; deadline: string; status: 'open' | 'summarized';
   recipients: string[]; replies: Record<string, string>; missing: string[];
+  assigneeUserId?: string; approverUserId?: string;
 }
 export interface State {
   items: LongItem[]; exceptions: Exception[]; receipts: string[]; actions: Action[]; collections: Collection[];
