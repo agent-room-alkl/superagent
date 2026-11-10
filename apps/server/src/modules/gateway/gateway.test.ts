@@ -173,3 +173,38 @@ it('a reloaded gateway read-back does not send the write again', () => {
   assert.equal(read.action.calls, 1);
   assert.equal(calls, 0);
 });
+
+it('a write committed as executing is not sent again after a restart', () => {
+  const gateway = new ToolGateway();
+  const hash = payloadHash(base.payload);
+  const reserved = gateway.reserve({
+    ...base,
+    approvalHash: hash,
+    authorize: () => true,
+    call: () => {
+      throw new Error('should not run');
+    },
+  });
+  assert.equal(reserved.pending, true);
+  assert.equal(reserved.action.status, 'executing');
+  assert.equal(reserved.action.calls, 0);
+  const restored = new ToolGateway();
+  restored.load(gateway.snapshot());
+  let calls = 0;
+  const again = restored.execute({
+    ...base,
+    approvalHash: hash,
+    authorize: () => true,
+    call: () => {
+      calls += 1;
+      return { actual: { amount: 40 } };
+    },
+  });
+  assert.equal(calls, 0);
+  assert.equal(again.invoked, false);
+  assert.equal(again.action.status, 'outcome_unknown');
+  assert.equal(again.action.reason, 'interrupted');
+  const read = restored.readBack(again.action.idempotencyKey, { amount: 40 });
+  assert.equal(read.invoked, false);
+  assert.equal(read.action.status, 'confirmed');
+});

@@ -55,8 +55,8 @@ beforeEach(() => {
 const approvalOf = (runId: string) => inbox.all().find((i) => i.kind === 'action_approval' && i.payload.executionId === runId)!;
 
 describe('SOP executor main line', () => {
-  it('runs to the human review, writes only after approval, reads back and completes', () => {
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-1', startedBy: 'owner-1', data: input });
+  it('runs to the human review, writes only after approval, reads back and completes', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-1', startedBy: 'owner-1', data: input });
     expect(run.status).toBe('waiting_human');
     expect(run.steps.map((s) => [s.nodeId, s.status])).toEqual([['t', 'done'], ['a', 'done'], ['e', 'done'], ['r', 'done'], ['h', 'waiting_human'], ['w', 'pending']]);
     expect(calls).toEqual(['lookup:INV-480']); // read step ran; no write yet
@@ -66,7 +66,7 @@ describe('SOP executor main line', () => {
 
     const decided = inbox.decide(item.id, 'owner-1', item.payloadVersion);
     expect(decided.ok).toBe(true);
-    const done = ex.onDecided(decided.item)!;
+    const done = (await ex.onDecided(decided.item))!;
     expect(done.status).toBe('completed');
     expect(calls).toEqual(['lookup:INV-480', 'pay:INV-480']);
     const w = done.steps.find((s) => s.nodeId === 'w')!;
@@ -74,12 +74,12 @@ describe('SOP executor main line', () => {
     expect(w.detail).toContain('回读一致');
     expect(ledger.get('INV-480')).toEqual(input);
     // the same approval cannot make it write twice
-    expect(ex.onDecided(decided.item)).toBeNull();
+    expect(await ex.onDecided(decided.item)).toBeNull();
     expect(calls.filter((c) => c.startsWith('pay'))).toHaveLength(1);
   });
 
-  it('missing required input asks for it instead of running', () => {
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-2', startedBy: 'owner-1', data: { invoiceNo: 'INV-1' } });
+  it('missing required input asks for it instead of running', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-2', startedBy: 'owner-1', data: { invoiceNo: 'INV-1' } });
     expect(run.status).toBe('blocked');
     expect(run.steps[0]!.detail).toContain('缺少必填字段：amount');
     const supply = inbox.all().find((i) => i.kind === 'supply_info')!;
@@ -87,11 +87,11 @@ describe('SOP executor main line', () => {
     expect(calls).toEqual([]);
   });
 
-  it('read-back mismatch: outcome unknown, frozen, exception opened, approval cannot be re-submitted, no second write', () => {
+  it('read-back mismatch: outcome unknown, frozen, exception opened, approval cannot be re-submitted, no second write', async () => {
     connectors.set('erp.pay', (p) => (calls.push(`pay:${p.invoiceNo}`), { externalRef: 'ERP-X', actual: { ...p, amount: 4800 } }));
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-3', startedBy: 'owner-1', data: input });
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-3', startedBy: 'owner-1', data: input });
     const item = approvalOf(run.id);
-    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item)!;
+    const after = (await ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item))!;
     expect(after.status).toBe('outcome_unknown');
     expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toContain('回读与批准的值不一致');
     const exc = inbox.all().find((i) => i.id === after.exceptionItemId)!;
@@ -101,43 +101,43 @@ describe('SOP executor main line', () => {
     expect(calls.filter((c) => c.startsWith('pay'))).toHaveLength(1);
   });
 
-  it('timeout: outcome unknown, never retried automatically', () => {
+  it('timeout: outcome unknown, never retried automatically', async () => {
     connectors.set('erp.pay', () => { calls.push('pay'); throw new OutcomeUnknownError('timeout'); });
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-4', startedBy: 'owner-1', data: input });
-    const after = ex.onDecided(inbox.decide(approvalOf(run.id).id, 'owner-1', 1).item)!;
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-4', startedBy: 'owner-1', data: input });
+    const after = (await ex.onDecided(inbox.decide(approvalOf(run.id).id, 'owner-1', 1).item))!;
     expect(after.status).toBe('outcome_unknown');
     expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toContain('不会自动重试');
     expect(calls).toEqual(['lookup:INV-480', 'pay']); // one write attempt only
   });
 
-  it('a revised approval no longer matches the run parameters: blocked, nothing written', () => {
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-5', startedBy: 'owner-1', data: input });
+  it('a revised approval no longer matches the run parameters: blocked, nothing written', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-5', startedBy: 'owner-1', data: input });
     const item = approvalOf(run.id);
     const revised = inbox.revise(item.id, { amount: 9999 });
-    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', revised.payloadVersion).item)!;
+    const after = (await ex.onDecided(inbox.decide(item.id, 'owner-1', revised.payloadVersion).item))!;
     expect(after.status).toBe('blocked');
     expect(after.steps.find((s) => s.nodeId === 'w')!.detail).toBe('批准的参数与本次写入不一致');
     expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
   });
 
-  it('blocks honestly without a connector or an available tool; refuses unpublished versions and duplicate events', () => {
+  it('blocks honestly without a connector or an available tool; refuses unpublished versions and duplicate events', async () => {
     connectors.delete('erp.lookup');
-    expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-6', startedBy: 'o', data: input })).toMatchObject({ status: 'blocked' });
+    expect(await ex.start({ tenantId: 't', versionId, eventId: 'mail-6', startedBy: 'o', data: input })).toMatchObject({ status: 'blocked' });
     expect(ex.list('t').at(-1)!.steps.find((s) => s.nodeId === 'r')!.detail).toContain('没有已安装的连接器');
     connectors.set('erp.lookup', () => undefined);
     tools['erp.lookup'] = { effect: 'read', available: false };
-    expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input }).steps.find((s) => s.nodeId === 'r')!.detail).toContain('不可用');
+    expect((await ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).steps.find((s) => s.nodeId === 'r')!.detail).toContain('不可用');
     const draft = sop.draft('other', { requiredFields: [], employeeStatus: 'active', graph } as never);
-    expect(() => ex.start({ tenantId: 't', versionId: draft.id, eventId: 'x', startedBy: 'o', data: {} })).toThrow(/published/);
-    expect(() => ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).toThrow(/already opened/);
+    await expect(ex.start({ tenantId: 't', versionId: draft.id, eventId: 'x', startedBy: 'o', data: {} })).rejects.toThrow(/published/);
+    await expect(ex.start({ tenantId: 't', versionId, eventId: 'mail-7', startedBy: 'o', data: input })).rejects.toThrow(/already opened/);
   });
 
-  it('re-authorises every call at execution time: a refusal blocks the run and nothing is written', () => {
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-9', startedBy: 'owner-1', data: input });
+  it('re-authorises every call at execution time: a refusal blocks the run and nothing is written', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-9', startedBy: 'owner-1', data: input });
     expect(authCalls).toEqual([['erp.lookup', 'emp-1']]); // the read step was authorised for the performing employee
     refuse = '数字员工当前状态为 paused，不能执行'; // e.g. the employee was paused after the approval was requested
     const item = approvalOf(run.id);
-    const after = ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item)!;
+    const after = (await ex.onDecided(inbox.decide(item.id, 'owner-1', 1).item))!;
     expect(after.status).toBe('blocked');
     expect(after.steps.find((s) => s.nodeId === 'w')).toMatchObject({ status: 'blocked', detail: '未授权，未写入：数字员工当前状态为 paused，不能执行' });
     expect(authCalls.at(-1)).toEqual(['erp.pay', 'emp-1']);
@@ -145,26 +145,67 @@ describe('SOP executor main line', () => {
     expect(ledger.size).toBe(0);
   });
 
-  it('a read step is refused too when not authorised', () => {
+  it('a read step is refused too when not authorised', async () => {
     refuse = '工具 erp.lookup 没有为该数字员工安装并绑定账号';
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-10', startedBy: 'owner-1', data: input });
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-10', startedBy: 'owner-1', data: input });
     expect(run.status).toBe('blocked');
     expect(run.steps.find((s) => s.nodeId === 'r')!.detail).toContain('未授权');
     expect(calls).toEqual([]);
     expect(inbox.all().filter((i) => i.kind === 'action_approval')).toEqual([]);
   });
 
-  it('runs are tenant-scoped: another tenant cannot list, read or resume them', () => {
-    const run = ex.start({ tenantId: 't', versionId, eventId: 'mail-8', startedBy: 'owner-1', data: input });
+  it('runs are tenant-scoped: another tenant cannot list, read or resume them', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-8', startedBy: 'owner-1', data: input });
     expect(ex.list('other')).toEqual([]);
     expect(() => ex.get('other', run.id)).toThrow(/not found/);
     const item = approvalOf(run.id);
-    expect(ex.onDecided({ ...inbox.decide(item.id, 'owner-1', 1).item, tenantId: 'other' })).toBeNull();
+    expect(await ex.onDecided({ ...inbox.decide(item.id, 'owner-1', 1).item, tenantId: 'other' })).toBeNull();
     expect(ex.get('t', run.id).status).toBe('waiting_human');
     expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
   });
 
   it('runs in graph order', () => {
     expect(stepOrder(graph)).toEqual(['t', 'a', 'e', 'r', 'h', 'w']);
+  });
+
+  it('commits the executing row before the connector runs, and a failed commit does not call', async () => {
+    const gateway = new ToolGateway();
+    let committedCalls = -1;
+    const watched = new SopExecutor({
+      sop: () => sop,
+      inbox: () => inbox,
+      gateway,
+      tools: (id) => tools[id] ?? null,
+      connectors,
+      reviewerOf: () => 'owner-1',
+      authorize: () => null,
+      commitBeforeCall: async () => {
+        committedCalls = calls.length;
+        const row = gateway.snapshot().actions.at(-1);
+        expect(row?.status).toBe('executing');
+        expect(row?.calls).toBe(0);
+      },
+    });
+    await watched.start({ tenantId: 't', versionId, eventId: 'mail-commit', startedBy: 'owner-1', data: input });
+    expect(committedCalls).toBe(0);
+    expect(calls).toEqual(['lookup:INV-480']);
+
+    calls.length = 0;
+    const failing = new SopExecutor({
+      sop: () => sop,
+      inbox: () => inbox,
+      gateway: new ToolGateway(),
+      tools: (id) => tools[id] ?? null,
+      connectors,
+      reviewerOf: () => 'owner-1',
+      authorize: () => null,
+      commitBeforeCall: async () => {
+        throw new Error('db down');
+      },
+    });
+    const blocked = await failing.start({ tenantId: 't', versionId, eventId: 'mail-commit-fail', startedBy: 'owner-1', data: input });
+    expect(blocked.status).toBe('blocked');
+    expect(blocked.steps.find((s) => s.nodeId === 'r')!.detail).toContain('尚未落盘');
+    expect(calls).toEqual([]);
   });
 });
