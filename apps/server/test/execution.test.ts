@@ -164,6 +164,26 @@ describe('SOP executor main line', () => {
     expect(calls.filter((c) => c.startsWith('pay'))).toEqual([]);
   });
 
+  it('records the employee and tool installation on the gateway row at call time', async () => {
+    const gateway = new ToolGateway();
+    const watched = new SopExecutor({
+      sop: () => sop,
+      inbox: () => inbox,
+      gateway,
+      tools: (id) => tools[id] ?? null,
+      connectors,
+      reviewerOf: () => 'owner-1',
+      authorize: () => null,
+      identityOf: (employeeId, toolId) => ({ userId: 'owner-1', toolInstallationId: `${toolId}:${employeeId}@1.0.0+3` }),
+    });
+    await watched.start({ tenantId: 't', versionId, eventId: 'mail-identity', startedBy: 'owner-1', data: input });
+    expect(gateway.snapshot().actions[0]?.identitySnapshot).toEqual({
+      employeeId: 'emp-1',
+      userId: 'owner-1',
+      toolInstallationId: 'erp.lookup:emp-1@1.0.0+3',
+    });
+  });
+
   it('runs in graph order', () => {
     expect(stepOrder(graph)).toEqual(['t', 'a', 'e', 'r', 'h', 'w']);
   });

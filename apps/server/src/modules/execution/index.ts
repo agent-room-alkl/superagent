@@ -46,6 +46,15 @@ export const executionState = {
     connectors,
     reviewerOf: (run) => run.startedBy,
     authorize,
+    identityOf: (employeeId, toolId) => {
+      const bound = toolsState.current.callable(employeeId).find((t) => t.toolId === toolId);
+      if (!bound) return null;
+      try {
+        return { userId: employeesState.current.get(employeeId).owner, toolInstallationId: `${toolId}:${employeeId}@${bound.version}+${bound.bindingVersion}` };
+      } catch {
+        return null;
+      }
+    },
     commitBeforeCall: () => flushGateway(),
   }),
 };
