@@ -7,6 +7,8 @@ export interface BatchRow {
   clean: boolean;
   selected: boolean;
   executed: boolean;
+  /** Set when a batch mixes several projects. The project filter hides the other rows. */
+  projectId?: string | null;
 }
 
 export interface WorkItem {
@@ -49,7 +51,7 @@ export interface NewWorkItem {
   assigneeUserId: string;
   payload?: Record<string, unknown>;
   waitingOn?: string | null;
-  rows?: Array<Pick<BatchRow, 'id' | 'clean' | 'selected'>>;
+  rows?: Array<Pick<BatchRow, 'id' | 'clean' | 'selected'> & { projectId?: string | null }>;
 }
 
 export type WorkGroup = 'action' | 'waiting' | 'internal';
@@ -120,8 +122,8 @@ export class WorkInbox {
       .filter((item) => !options?.tenantId || item.tenantId === options.tenantId)
       .filter((item) => this.visible(item, viewer))
       .filter((item) => !options?.exceptionsOnly || item.kind === 'exception_ruling')
-      .filter((item) => !options?.projectId || item.projectId === options.projectId)
-      .map((item) => this.view(item));
+      .filter((item) => !options?.projectId || this.covers(item, options.projectId))
+      .map((item) => this.view(item, options?.projectId));
   }
 
   decide(id: string, actorUserId: string, expectedVersion: number): { ok: boolean; reason?: string; item: WorkItem } {
@@ -295,12 +297,21 @@ export class WorkInbox {
     return item;
   }
 
-  private view(item: WorkItem): WorkItem {
+  /** An item matches when it, or one of its batch rows, belongs to the project. */
+  private covers(item: WorkItem, projectId: string): boolean {
+    if (item.projectId === projectId) return true;
+    return item.rows.some((row) => row.projectId === projectId);
+  }
+
+  private view(item: WorkItem, projectId?: string): WorkItem {
+    const rows = projectId
+      ? item.rows.filter((row) => !row.projectId || row.projectId === projectId)
+      : item.rows;
     return {
       ...item,
       payload: { ...item.payload },
       decision: item.decision ? { ...item.decision } : null,
-      rows: item.rows.map((row) => ({ ...row })),
+      rows: rows.map((row) => ({ ...row })),
       waitingOn: item.waitingOn,
       draft: item.draft ? { ...item.draft } : null,
       systemVerified: item.evidenceSource === 'human_report' ? false : item.systemVerified,

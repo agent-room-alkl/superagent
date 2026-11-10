@@ -5,9 +5,8 @@
    "id": "qa-human-work#1",
    "suite": "qa-human-work",
    "assertion": "Queue title expanded",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#2",
@@ -259,9 +258,8 @@
    "id": "qa-human-work#37",
    "suite": "qa-human-work",
    "assertion": "Project filter also scopes batch contents",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#38",

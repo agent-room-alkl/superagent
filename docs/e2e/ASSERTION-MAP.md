@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 125 |
+| e2e | Covered by a Playwright test against the real app | 127 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 62 |
+| pending | Feature not built yet; the owner task will add the E2E | 60 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 54, T-45 8
+Pending by owner: T-41 52, T-45 8
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -18,7 +18,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 
 | # | Assertion | Status | Where / owner |
 |---|---|---|---|
-| 1 | Queue title expanded | pending | T-41 — not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project) |
+| 1 | Queue title expanded | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 2 | sample-tenant fixtures opt in | n/a | prototype demo fixtures; the product starts empty (covered by "unbuilt modules say who owns them" and per-feature empty states) |
 | 3 | No invented business tasks before opt in | n/a | prototype demo fixtures; the product starts empty (covered by "unbuilt modules say who owns them" and per-feature empty states) |
 | 4 | staff member A sees only five assigned work items | e2e | apps/e2e/tests/work-inbox.spec.ts |
@@ -54,7 +54,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 34 | manager B sees exceptions without taking all normal work | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 35 | Exception decision preserves evidence and verification boundary | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 36 | Project filter selects only relevant work | e2e | apps/e2e/tests/work-inbox.spec.ts |
-| 37 | Project filter also scopes batch contents | pending | T-41 — not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project) |
+| 37 | Project filter also scopes batch contents | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 38 | Upstream revision revokes downstream permission | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 40 | Manual note cannot erase mismatched system outcome | e2e | apps/e2e/tests/work-inbox.spec.ts |
