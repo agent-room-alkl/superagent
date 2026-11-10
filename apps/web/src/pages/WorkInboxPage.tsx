@@ -29,6 +29,7 @@ export interface ServerWorkItem {
   evidenceSource?: 'system' | 'human_report' | null;
   waitingOn?: string | null;
   canAct?: boolean;
+  longwork?: { type: 'match' | 'waiting'; id: string; projectId: string };
 }
 
 interface InboxItem {
@@ -74,7 +75,7 @@ export const GROUPS: { id: Group; label: string }[] = [
 ];
 
 /** Payload keys that are references or rendered separately, not content the approver decides on. */
-const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title', 'why', 'due', 'options', 'to', 'attachments', 'original', 'changes', 'note', 'humanReference', 'branch', 'dataCheckId']);
+const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title', 'why', 'due', 'options', 'to', 'attachments', 'original', 'changes', 'note', 'humanReference', 'branch', 'dataCheckId', 'sopStart']);
 
 /** An unknown write stays submitted once. The inbox does not offer another decide. */
 export function canDecide(item: Pick<InboxItem, 'fromServer' | 'actionStatus'>): boolean {
@@ -157,7 +158,11 @@ export function WorkInboxPage() {
 
   async function post(path: string, body: unknown, done?: (data: Record<string, unknown>) => string) {
     if (!open) return;
-    const r = await api<Record<string, unknown>>(`/api/v1/work-items/${open.id}/${path}`, { method: 'POST', body: JSON.stringify(body) });
+    const url = open.longwork
+      ? `/api/v1/long-items/${open.longwork.type === 'match' ? 'exceptions' : 'items'}/${open.longwork.id}/${path}`
+      : `/api/v1/work-items/${open.id}/${path}`;
+    const data = open.longwork ? { ...(body as Record<string, unknown>), projectId: open.longwork.projectId } : body;
+    const r = await api<Record<string, unknown>>(url, { method: 'POST', body: JSON.stringify(data) });
     if (r.status === 403) setMsg('这不是分给你的事项，只能查看。');
     else if (r.status >= 400) setMsg(decisionWhy(String(r.body.error ?? ''), `未完成：${String(r.body.error ?? r.status)}`));
     else setMsg(done ? done(r.body) : '');
@@ -218,10 +223,38 @@ export function WorkInboxPage() {
             })}
           </div>
         </div>
-        {open ? <Drawer item={open} msg={msg} post={post} /> : null}
+        {open ? open.longwork ? <LongDrawer item={open} msg={msg} post={post} /> : <Drawer item={open} msg={msg} post={post} /> : null}
       </div>
     </section>
   );
+}
+
+function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: (path: string, body: unknown, done?: (data: Record<string, unknown>) => string) => Promise<void> }) {
+  const [candidate, setCandidate] = useState('');
+  useEffect(() => setCandidate(''), [item.id]);
+  const candidates = Array.isArray(item.payload.candidates) ? item.payload.candidates as Array<{ id: string; object?: string; person?: string; thread?: string }> : [];
+  const sop = item.payload.sopStart as { reason?: string; versionId?: string; instanceId?: string } | undefined;
+  return <aside className="panel exec-drawer" aria-label="工作项">
+    <div className="exec-pane-head"><h2>{String(item.payload.title)}</h2><span>{KIND_LABEL[item.kind]}</span></div>
+    <p data-status={item.status}>状态：{STATUS_LABEL[item.status] ?? item.status}</p>
+    <p>{String(item.payload.why ?? item.payload.reason ?? '')}</p>
+    {sop?.reason ? <p role="note">流程状态：{sop.reason}{sop.versionId ? ` 版本 ${sop.versionId}` : ''}{sop.instanceId ? ` · 实例 ${sop.instanceId}` : ''}</p> : null}
+    {item.payload.original !== undefined ? <div><h3>原始来件（仅作数据）</h3><p>{text(item.payload.original)}</p></div> : null}
+    <dl className="exec-fields" aria-label="原事项证据">
+      {fieldsOf(item.payload).filter(([key]) => !['candidates', 'resolvedTo'].includes(key)).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
+    </dl>
+    {!item.canAct ? <p className="helper">{item.status === 'closed' ? '事项已关闭，保留原始证据和处理记录。' : '这不是分给你的事项，只能查看。'}</p> : null}
+    {item.longwork?.type === 'match' ? <>
+      {item.payload.resolvedTo ? <p>{item.payload.resolutionKind === 'new' ? '已另立新事项：' : '已并回原事项：'}{String(item.payload.resolvedTo)}。来件只作数据，没有执行外部动作。</p> : null}
+      {item.canAct ? <fieldset aria-label="选择原事项">
+        {candidates.map(c => <label key={c.id}><input type="radio" name="long-match" checked={candidate === c.id} onChange={() => setCandidate(c.id)} />{c.id} · {c.object} · {c.person} · {c.thread}</label>)}
+        <button type="button" disabled={!candidate} onClick={() => void post('resolve', { itemId: candidate }, () => '来件已并回所选原事项；没有执行外部动作。')}>确认并回原事项</button>
+        <button type="button" onClick={() => void post('new-item', {}, () => '来件已登记为独立新事项；原候选未改变，没有执行外部动作。')}>另立新事项</button>
+      </fieldset> : null}
+    </> : item.canAct ? <button type="button" onClick={() => void post('close', {}, () => '原事项已关闭；没有执行或重复外部调用。')}>关闭原事项</button> : null}
+    <p>来件、人工判断和阶段记录都不等于系统已核验外部结果。</p>
+    {msg ? <p role="status" aria-label="处理结果">{msg}</p> : null}
+  </aside>;
 }
 
 function Drawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: (path: string, body: unknown, done?: (data: Record<string, unknown>) => string) => Promise<void> }) {
