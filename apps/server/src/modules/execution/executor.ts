@@ -100,6 +100,23 @@ export class SopExecutor {
 
   constructor(private deps: ExecutorDeps) {}
 
+  snapshot(): { runs: Execution[]; seq: number } {
+    return { runs: [...this.runs.values()].map((run) => structuredClone(run)), seq: this.seq };
+  }
+
+  /** Replaces the in-memory runs. The inbox and SOP version must already be loaded. */
+  load(saved: { runs: Execution[]; seq: number }): void {
+    this.runs.clear();
+    let seq = saved.seq;
+    for (const run of saved.runs) {
+      const copy = structuredClone(run);
+      this.runs.set(copy.id, copy);
+      const n = Number(/^ex_(\d+)$/.exec(copy.id)?.[1] ?? 0);
+      if (n > seq) seq = n;
+    }
+    this.seq = seq;
+  }
+
   /** Runs of one tenant only; another tenant's run is indistinguishable from a missing one. */
   list(tenantId: string, sopId?: string): Execution[] {
     return [...this.runs.values()].filter((r) => r.tenantId === tenantId && (!sopId || r.sopId === sopId)).map((r) => structuredClone(r));

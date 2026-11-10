@@ -184,6 +184,28 @@ describe('SOP executor main line', () => {
     });
   });
 
+  it('a restarted process resumes the same run from the saved inbox and does not write twice', async () => {
+    const run = await ex.start({ tenantId: 't', versionId, eventId: 'mail-restart', startedBy: 'owner-1', data: input });
+    const inbox2 = new WorkInbox();
+    inbox2.load(inbox.snapshot());
+    const resumed = new SopExecutor({
+      sop: () => sop,
+      inbox: () => inbox2,
+      gateway: new ToolGateway(),
+      tools: (id) => tools[id] ?? null,
+      connectors,
+      reviewerOf: () => 'owner-1',
+      authorize: () => null,
+    });
+    resumed.load(ex.snapshot());
+    const item = inbox2.all().find((i) => i.kind === 'action_approval' && i.payload.executionId === run.id)!;
+    const done = (await resumed.onDecided(inbox2.decide(item.id, 'owner-1', item.payloadVersion).item))!;
+    expect(done.id).toBe(run.id);
+    expect(done.status).toBe('completed');
+    expect(calls.filter((c) => c.startsWith('pay'))).toHaveLength(1);
+    expect(await resumed.onDecided(inbox2.all().find((i) => i.id === item.id)!)).toBeNull();
+  });
+
   it('runs in graph order', () => {
     expect(stepOrder(graph)).toEqual(['t', 'a', 'e', 'r', 'h', 'w']);
   });

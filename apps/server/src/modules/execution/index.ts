@@ -5,7 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { flushGateway, gatewayState } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
-import { inboxState, workItemEvents } from '../humanwork/index.js';
+import { flushInbox, inboxState, workItemEvents } from '../humanwork/index.js';
+import { loadRuns, saveRuns, type Queryable } from './pg-runs.js';
 import { flushSop, sopState } from '../sop/index.js';
 import { toolsState } from '../tools/index.js';
 import { ExecutionError, SopExecutor, type Connector } from './executor.js';
@@ -59,9 +60,28 @@ export const executionState = {
   }),
 };
 
+let runStore: Queryable | null = null;
+
+export function bindExecutionStore(db: Queryable | null): void {
+  runStore = db;
+}
+
+export async function flushExecutions(): Promise<void> {
+  if (runStore) await saveRuns(runStore, executionState.current.snapshot());
+}
+
+export async function hydrateExecutions(): Promise<void> {
+  if (!runStore) return;
+  const saved = await loadRuns(runStore);
+  if (saved) executionState.current.load(saved);
+}
+
 workItemEvents.decided.push(async (item) => {
   const run = await executionState.current.onDecided(item);
-  if (run) await flushGateway();
+  if (!run) return;
+  await flushExecutions();
+  await flushInbox();
+  await flushGateway();
 });
 
 export const executionModule: FastifyPluginAsync = async (app) => {
@@ -76,6 +96,8 @@ export const executionModule: FastifyPluginAsync = async (app) => {
     if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
     const run = await executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
     await flushSop();
+    await flushExecutions();
+    await flushInbox();
     await flushGateway();
     reply.code(201);
     return run;
