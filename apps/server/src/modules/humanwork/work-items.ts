@@ -171,6 +171,13 @@ export class WorkInbox {
     if (item.actionStatus === 'outcome_unknown') {
       return { ok: false, reason: 'no_resubmit', item: this.view(item) };
     }
+    if (item.status === 'closed' && !item.decision && item.submitCount > 0) {
+      return { ok: false, reason: 'retired', item: this.view(item) };
+    }
+    if (item.actionStatus === 'confirmed') {
+      // the write already went out and was read back; a new action needs a new approval, not this one again
+      return { ok: false, reason: 'already_executed', item: this.view(item) };
+    }
     if (item.status === 'decided' || item.status === 'closed' || item.decision) {
       return { ok: false, reason: 'conflict', item: this.view(item) };
     }
@@ -201,6 +208,22 @@ export class WorkInbox {
     item.status = 'withdrawn';
     item.actionStatus = null;
     if (item.kind === 'data_check') this.revokeDownstream(item.id);
+    return this.view(item);
+  }
+
+  /**
+   * The task this approval served changed what counts as done, so the approval no longer stands. The payload, the
+   * submit count and the action's system evidence stay as they were; nothing is executed or undone.
+   */
+  retireDecision(id: string): WorkItem {
+    const item = this.require(id);
+    item.decision = null;
+    item.draft = null;
+    // closed, not withdrawn: a withdrawn item can be decided again, a retired approval never can
+    item.status = 'closed';
+    // A new version with the same payload and hash: the stored row's version guard then refuses a late write of the
+    // older, still-approved copy from another process, and an old expectedVersion no longer matches.
+    item.payloadVersion += 1;
     return this.view(item);
   }
 

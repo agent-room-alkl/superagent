@@ -123,6 +123,11 @@ const STATUS: Record<string, number> = {
   evidence_failed: 409,
   empty_supplement: 400,
   not_held: 409,
+  not_waiting: 409,
+  employee_offline: 409,
+  run_already_linked: 409,
+  contract_unchanged: 409,
+  invalid_contract: 400,
 };
 
 function refusal(error: unknown): { code: number; body: { error: string } } {
@@ -133,6 +138,11 @@ function refusal(error: unknown): { code: number; body: { error: string } } {
 /** Command room HTTP surface (PRD §5.6). Under /api/v1 the caller is always the signed-in user. */
 export const roomModule: FastifyPluginAsync = async (app) => {
   app.get('/status', async () => ({ module: 'room', implemented: true }));
+
+  // An employee paused or disconnected in the employee module holds its open tasks before anything is read or done.
+  app.addHook('preHandler', async () => {
+    if (roomState.current.holdDisconnected().length > 0) await flushRoom();
+  });
 
   app.post('/messages', async (req, reply) => {
     const body = (req.body ?? {}) as MessageBody;
@@ -213,7 +223,62 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     }
   });
 
-  for (const action of ['cancel', 'review'] as const) {
+  /** Link the execution run that carries this task's external action. The run must exist for this tenant. */
+  app.post('/tasks/:id/run', async (req, reply) => {
+    const params = req.params as { id: string };
+    const body = (req.body ?? {}) as { runId?: string };
+    if (typeof body.runId !== 'string' || !body.runId) return reply.code(400).send({ error: 'missing_fields' });
+    const viewer = viewerFrom(req.headers, req.user);
+    try {
+      const task = roomState.current.task(params.id, viewer);
+      const { findRun } = await import('./outcome.js');
+      const run = findRun(task.tenantId, body.runId);
+      // Someone else's run reads as missing: linking it would expose its event and results through this task.
+      const owner = viewer.roles.includes('owner') || viewer.roles.includes('admin');
+      if (!run || (!owner && run.startedBy !== viewer.userId)) return reply.code(404).send({ error: 'run_not_found' });
+      const linked = roomState.current.linkRun(params.id, viewer, body.runId);
+      await flushRoom();
+      return linked;
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  /** Set or revise the acceptance contract. A revision retires the linked run's approvals; it never re-executes. */
+  app.post('/tasks/:id/contract', async (req, reply) => {
+    const params = req.params as { id: string };
+    const body = (req.body ?? {}) as { criteria?: string; clientMessageId?: string };
+    if (typeof body.criteria !== 'string' || !body.clientMessageId) return reply.code(400).send({ error: 'missing_fields' });
+    try {
+      const result = roomState.current.reviseContract(params.id, viewerFrom(req.headers, req.user), body.criteria, body.clientMessageId);
+      let retired: string[] = [];
+      if (result.revised && result.task.runId) {
+        const { retireApprovals } = await import('./outcome.js');
+        retired = await retireApprovals(result.task.tenantId, result.task.runId);
+      }
+      await flushRoom();
+      return { message: result.message, task: result.task, retiredApprovals: retired };
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  /** The linked run's state, approvals and external attempts, for whoever can see the task. */
+  app.get('/tasks/:id/outcome', async (req, reply) => {
+    const params = req.params as { id: string };
+    try {
+      const task = roomState.current.task(params.id, viewerFrom(req.headers, req.user));
+      const { outcomeOf } = await import('./outcome.js');
+      return { contract: task.contract, outcome: task.runId ? outcomeOf(task.tenantId, task.runId) : null };
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  for (const action of ['cancel', 'review', 'resume'] as const) {
     app.post(`/tasks/:id/${action}`, async (req, reply) => {
       const params = req.params as { id: string };
       const body = (req.body ?? {}) as { clientMessageId?: string };

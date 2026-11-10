@@ -376,3 +376,45 @@ test('an empty summary invents nothing; an unsent draft stays unsent; failed evi
   expect(resumed).toMatchObject({ id: financeTask.id, status: 'assigned', hold: null });
   expect(await tasksOf(page, OWNER)).toHaveLength(2);
 });
+
+test('an employee that disconnects keeps the same task waiting; the owner reconnects it and resumes that task, never a new one', async ({ page }) => {
+  const staff = `e2e-room-staff-${tag()}`;
+  const ops = await employee(page, '运营员工', staff);
+  await as(page, OWNER);
+  await say(page, `@${ops.name} 请核对客户资料`);
+  await expect(taskCards(page)).toHaveCount(1);
+  const [task] = await tasksOf(page, OWNER);
+  expect(task).toMatchObject({ status: 'assigned', employeeId: ops.id });
+
+  // the employee goes offline in the employee module (the client disconnects or the owner pauses it)
+  await ok(page.request.post(`/api/v1/employees/${ops.id}/pause`, { headers: { 'x-dev-user': OWNER } }));
+  await expect(taskCards(page).first()).toContainText('等待连接', { timeout: 15_000 });
+  await expect(taskCards(page)).toHaveCount(1); // not dropped, not re-created
+  await expect(stream(page).locator('[data-kind="hold"]')).toContainText('保留为等待连接');
+  expect((await tasksOf(page, OWNER)).map((t) => [t.id, t.status, t.waitingReason])).toEqual([[task!.id, 'waiting', '等待连接']]);
+
+  // resuming before the employee is back is refused and changes nothing
+  await taskCards(page).first().click();
+  await drawer(page).getByRole('button', { name: '恢复任务' }).click();
+  await expect(page.getByLabel('指挥室提示')).toHaveText('数字员工还没有重新连接。请先在「数字员工」里恢复它，再恢复这条任务。');
+  await expect(drawer(page).locator('[data-status]')).toHaveText('等待连接');
+
+  // the owner reconnects the employee; that alone does not restart anything
+  expect((await ok<{ status: string }>(page.request.post(`/api/v1/employees/${ops.id}/resume`, { headers: { 'x-dev-user': OWNER } }))).status).toBe('online');
+  await page.reload();
+  await expect(taskCards(page).first()).toContainText('等待连接');
+
+  // resuming continues the same task: same id, same source message, still one task
+  await taskCards(page).first().click();
+  await drawer(page).getByRole('button', { name: '恢复任务' }).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('进行中');
+  await expect(drawer(page).getByRole('button', { name: '恢复任务' })).toHaveCount(0);
+  await expect(stream(page).locator('[data-kind="resume"]')).toContainText('同一任务');
+  const after = await tasksOf(page, OWNER);
+  expect(after).toHaveLength(1);
+  expect(after[0]).toMatchObject({ id: task!.id, messageId: task!.messageId, status: 'assigned', waitingReason: null });
+
+  // the employee's report lands on that same task
+  expect((await report(page, staffHeader(staff), task!.id, '客户资料已核对')).status()).toBe(200);
+  expect((await tasksOf(page, OWNER))[0]).toMatchObject({ id: task!.id, status: 'reported' });
+});

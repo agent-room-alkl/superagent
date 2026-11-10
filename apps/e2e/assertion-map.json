@@ -1268,33 +1268,33 @@
    "id": "qa-outcomes#37",
    "suite": "qa-outcomes",
    "assertion": "Changed contract retains old action approval/acceptance",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "contract revision on the command-room task retires the linked run's approval and the human acceptance"
   },
   {
    "id": "qa-outcomes#38",
    "suite": "qa-outcomes",
    "assertion": "Contract revision repeats write",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/mainline.spec.ts",
+   "note": "the run keeps one gateway call and one ledger entry after the revision"
   },
   {
    "id": "qa-outcomes#39",
    "suite": "qa-outcomes",
    "assertion": "Offline rehearsal discarded original task",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "a paused employee holds the same task as 等待连接"
   },
   {
    "id": "qa-outcomes#40",
    "suite": "qa-outcomes",
    "assertion": "Manual reconnect failed to resume original task",
-   "status": "pending",
-   "owner": "T-45",
-   "note": "long-running items, approvals bound to parameters, read-back (with T-41)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "the owner resumes the employee, then resumes the same task id"
   },
   {
    "id": "qa-outcomes#41",
