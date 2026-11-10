@@ -294,9 +294,8 @@
    "id": "qa-human-work#42",
    "suite": "qa-human-work",
    "assertion": "Existing task evidence boundary retained",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-human-work#43",
@@ -1010,9 +1009,8 @@
    "id": "qa-outcomes#2",
    "suite": "qa-outcomes",
    "assertion": "Empty summary invents work",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#3",
@@ -1040,9 +1038,8 @@
    "id": "qa-outcomes#6",
    "suite": "qa-outcomes",
    "assertion": "Draft boundary missing",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#7",
@@ -1055,33 +1052,29 @@
    "id": "qa-outcomes#8",
    "suite": "qa-outcomes",
    "assertion": "Raw implementation JSON in result",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#9",
    "suite": "qa-outcomes",
    "assertion": "Verified result cannot be reviewed",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#10",
    "suite": "qa-outcomes",
    "assertion": "Malformed evidence passed",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#11",
    "suite": "qa-outcomes",
    "assertion": "Failed evidence can be accepted",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#12",
@@ -1101,17 +1094,15 @@
    "id": "qa-outcomes#14",
    "suite": "qa-outcomes",
    "assertion": "Empty supplement accepted",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#15",
    "suite": "qa-outcomes",
    "assertion": "Supplement restarted/replaced task",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#16",
@@ -1125,17 +1116,15 @@
    "id": "qa-outcomes#17",
    "suite": "qa-outcomes",
    "assertion": "Blocker has no responsible person",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#18",
    "suite": "qa-outcomes",
    "assertion": "Authorized original task failed to resume",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#19",
@@ -1197,9 +1186,8 @@
    "id": "qa-outcomes#26",
    "suite": "qa-outcomes",
    "assertion": "Summary leaks other owner",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#27",
@@ -1449,9 +1437,8 @@
    "id": "qa-outcomes#60",
    "suite": "qa-outcomes",
    "assertion": "Summary not linked to room",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#61",

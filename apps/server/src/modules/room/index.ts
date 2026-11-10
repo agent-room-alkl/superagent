@@ -114,7 +114,16 @@ interface MessageBody {
   followupTo?: string | null;
 }
 
-const STATUS: Record<string, number> = { task_not_found: 404, forbidden: 403, not_assignee: 403, task_closed: 409, not_reported: 409 };
+const STATUS: Record<string, number> = {
+  task_not_found: 404,
+  forbidden: 403,
+  not_assignee: 403,
+  task_closed: 409,
+  not_reported: 409,
+  evidence_failed: 409,
+  empty_supplement: 400,
+  not_held: 409,
+};
 
 function refusal(error: unknown): { code: number; body: { error: string } } {
   const name = error instanceof Error ? error.message : 'forbidden';
@@ -182,6 +191,14 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     return { tasks: roomState.current.listTasks(viewerFrom(req.headers, req.user), query.roomId || undefined) };
   });
 
+  app.get('/summary', async (req) => {
+    const view = roomState.current.summary(viewerFrom(req.headers, req.user));
+    return {
+      label: view.label,
+      tasks: view.tasks.map((task) => ({ id: task.id, title: task.title, messageId: task.messageId, employeeId: task.employeeId })),
+    };
+  });
+
   app.post('/tasks/:id/report', async (req, reply) => {
     const params = req.params as { id: string };
     const body = (req.body ?? {}) as { body?: string; clientMessageId?: string };
@@ -211,4 +228,64 @@ export const roomModule: FastifyPluginAsync = async (app) => {
       }
     });
   }
+
+  app.post<{ Params: { id: string }; Body: { body?: string | null } }>('/tasks/:id/verify', async (req, reply) => {
+    if (!req.body || !('body' in req.body)) return reply.code(400).send({ error: 'missing_fields' });
+    try {
+      const task = roomState.current.verifyEvidence(req.params.id, viewerFrom(req.headers, req.user), req.body.body ?? null);
+      await flushRoom();
+      return { task, overview: roomState.current.overview(task.id, viewerFrom(req.headers, req.user)) };
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/tasks/:id/ask-input', async (req, reply) => {
+    try {
+      const task = roomState.current.askInput(req.params.id, viewerFrom(req.headers, req.user));
+      await flushRoom();
+      return { task };
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { text?: string; clientMessageId?: string } }>('/tasks/:id/supplement', async (req, reply) => {
+    const body = req.body ?? {};
+    if (typeof body.text !== 'string' || !body.clientMessageId) return reply.code(400).send({ error: 'missing_fields' });
+    try {
+      const result = roomState.current.supplement(req.params.id, viewerFrom(req.headers, req.user), body.text, body.clientMessageId);
+      await flushRoom();
+      return result;
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  app.post<{ Params: { id: string } }>('/tasks/:id/hold', async (req, reply) => {
+    try {
+      const task = roomState.current.holdForPermission(req.params.id, viewerFrom(req.headers, req.user));
+      await flushRoom();
+      return { task };
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
+
+  app.post<{ Params: { id: string }; Body: { clientMessageId?: string } }>('/tasks/:id/release-hold', async (req, reply) => {
+    const body = req.body ?? {};
+    if (!body.clientMessageId) return reply.code(400).send({ error: 'missing_fields' });
+    try {
+      const result = roomState.current.releaseHold(req.params.id, viewerFrom(req.headers, req.user), body.clientMessageId);
+      await flushRoom();
+      return result;
+    } catch (error) {
+      const refused = refusal(error);
+      return reply.code(refused.code).send(refused.body);
+    }
+  });
 };

@@ -35,6 +35,10 @@ export interface ApiTask {
   promptSnapshot?: { employeeId: string; promptVersion: number | null; modelTier: string | null; takenAt: string } | null;
   approval?: 'none' | 'required';
   reviewedByUserId?: string | null;
+  evidence?: { fields: { subject: string | null; body: string | null }; sent: boolean } | null;
+  verification?: 'none' | 'verified' | 'failed';
+  inputSupplement?: string | null;
+  hold?: { reason: string; responsible: string } | null;
 }
 
 export interface RosterEmployee {
@@ -146,6 +150,28 @@ export function taskLine(task: ApiTask, employees: readonly RosterEmployee[]): s
   return `${taskStatusLabel(task)} · ${employeeName(employees, task.employeeId)}`;
 }
 
+/** An unsent draft says so. The evidence object itself is never printed. */
+export function unsentDraftBoundary(task: Pick<ApiTask, 'title' | 'evidence'>): '尚未发送' | null {
+  if (!task.evidence || task.evidence.sent) return null;
+  if (!task.title.includes('草稿')) return null;
+  return '尚未发送';
+}
+
+/** Drawer overview: the title and, for an unsent draft, the boundary. No implementation JSON. */
+export function resultOverview(task: Pick<ApiTask, 'title' | 'evidence'>): string {
+  const boundary = unsentDraftBoundary(task);
+  return boundary ? `${task.title}。${boundary}` : task.title;
+}
+
+export function supplementError(text: string): '请填写' | null {
+  return text.trim() ? null : '请填写';
+}
+
+/** Incoming room events do not replace a workflow draft the person is still editing. */
+export function applyAsyncReport<T>(draft: T): T {
+  return draft;
+}
+
 /** The reports attached to a task, oldest first. Only a report counts: follow-ups and notices are not results. */
 export function taskReports(task: Pick<ApiTask, 'id'>, messages: readonly ApiMessage[]): ApiMessage[] {
   return messages.filter((message) => message.kind === 'report' && message.taskIds.includes(task.id));
@@ -186,6 +212,8 @@ const REFUSALS: Record<string, string> = {
   not_assignee: '只有被指派的同事能回报这条任务。',
   task_closed: '这条任务已经结束，不能再改。',
   not_reported: '还没有回报，不能复核。',
+  evidence_failed: '证据不完整，不能复核通过。',
+  empty_supplement: '请填写要补充的内容。',
   forbidden: '你不能对这条任务做这个操作。',
   task_not_found: '找不到这条任务。',
 };
@@ -205,6 +233,8 @@ export function CommandRoomPage() {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
   const [reportDraft, setReportDraft] = useState('');
+  const [supplementDraft, setSupplementDraft] = useState('');
+  const [supplementHelp, setSupplementHelp] = useState('');
   const [notice, setNotice] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
@@ -359,6 +389,39 @@ export function CommandRoomPage() {
     }
   }
 
+  async function saveSupplement(task: ApiTask) {
+    const help = supplementError(supplementDraft);
+    if (help) {
+      setSupplementHelp(help);
+      return;
+    }
+    if (acting) return;
+    const key = `supplement:${task.id}:${supplementDraft.trim()}`;
+    const id = actionId.current?.key === key ? actionId.current.id : newId('web-supplement');
+    actionId.current = { key, id };
+    setActing(true);
+    setSupplementHelp('');
+    try {
+      const response = await fetch(`/api/v1/room/tasks/${encodeURIComponent(task.id)}/supplement`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ text: supplementDraft.trim(), clientMessageId: id }),
+      });
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { error?: string } | null;
+        setSupplementHelp(error?.error === 'empty_supplement' ? '请填写' : '补充没有保存。');
+        return;
+      }
+      actionId.current = null;
+      setSupplementDraft('');
+      void pull();
+    } catch {
+      setSupplementHelp('补充没有保存。');
+    } finally {
+      setActing(false);
+    }
+  }
+
   function jumpTo(messageId: string) {
     stick.current = false;
     setFocusMessageId(messageId);
@@ -474,6 +537,24 @@ export function CommandRoomPage() {
             <h2>任务</h2>
             <span>由对话产生，链回原消息</span>
           </div>
+          <div data-outcome="summary">
+            {tasks.length === 0 ? <p>暂无事项</p> : (
+              <ul>
+                {tasks.map((task) => (
+                  <li key={task.id}>
+                    <button
+                      type="button"
+                      className="outcome-message-card"
+                      data-outcome="summary-message"
+                      onClick={() => { if (task.messageId) jumpTo(task.messageId); setOpenTaskId(task.id); }}
+                    >
+                      {task.title}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="exec-scroll">
             {tasks.length === 0 ? (
               <p className="exec-empty">当前没有由对话产生的任务。</p>
@@ -492,7 +573,7 @@ export function CommandRoomPage() {
               <button type="button" onClick={() => setOpenTaskId(null)}>关闭</button>
             </div>
             <dl>
-              <div><dt>概览</dt><dd>{openTask.title}</dd></div>
+              <div><dt>概览</dt><dd data-overview>{resultOverview(openTask)}</dd></div>
               <div><dt>状态</dt><dd data-status>{taskStatusLabel(openTask)}</dd></div>
               <div><dt>指派</dt><dd data-assignee>@{employeeName(employees, openTask.employeeId)}{openTask.assigneeUserId === viewerId ? '（由你负责）' : ''}</dd></div>
               <div>
@@ -542,9 +623,19 @@ export function CommandRoomPage() {
                   )}
                   {openTask.status === 'reported' ? <p>已回报，还没有人复核。回报不等于已被接受。</p> : null}
                   {openTask.status === 'reviewed' ? <p>已由人复核通过。</p> : null}
+                  {unsentDraftBoundary(openTask) ? <p data-boundary>{unsentDraftBoundary(openTask)}</p> : null}
+                  {openTask.hold ? <p data-blocker>负责人：{openTask.hold.responsible}</p> : null}
                 </dd>
               </div>
             </dl>
+            {openTask.waitingReason === '等待补充' ? (
+              <div className="exec-report">
+                <label htmlFor="outcome-input">补充资料</label>
+                <input id="outcome-input" value={supplementDraft} onChange={(event) => setSupplementDraft(event.target.value)} />
+                <p id="outcome-input-help">{supplementHelp}</p>
+                <button type="button" data-outcome="save-input" disabled={acting} onClick={() => void saveSupplement(openTask)}>保存补充</button>
+              </div>
+            ) : null}
             {may.report ? (
               <div className="exec-report">
                 <label htmlFor="room-report">回报内容</label>
@@ -553,7 +644,7 @@ export function CommandRoomPage() {
               </div>
             ) : null}
             <div className="exec-composer-actions">
-              {may.review ? <button type="button" disabled={acting} onClick={() => void act(openTask, 'review')}>复核通过</button> : null}
+              {may.review ? <button type="button" data-review disabled={acting || openTask.verification === 'failed'} onClick={() => void act(openTask, 'review')}>复核通过</button> : null}
               {may.followup ? <button type="button" onClick={() => startFollowup(openTask)}>追问</button> : null}
               {may.cancel ? <button type="button" disabled={acting} onClick={() => void act(openTask, 'cancel')}>取消任务</button> : null}
             </div>
