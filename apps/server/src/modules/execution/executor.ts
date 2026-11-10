@@ -10,7 +10,7 @@
 import type { SopGraph, ToolEffect } from '@superagent/shared';
 import { OutcomeUnknownError, payloadHash, type ToolGateway } from '../gateway/gateway.js';
 import type { WorkInbox, WorkItem } from '../humanwork/work-items.js';
-import type { SopRuntime } from '../sop/sop.js';
+import type { SopRuntime, SopVersion } from '../sop/sop.js';
 
 /** A tool implementation (installed connector / replayed procedure). Synchronous like the gateway's call. */
 export type Connector = (params: Record<string, unknown>) => { externalRef?: string; actual?: Record<string, unknown> } | void;
@@ -128,6 +128,21 @@ export class SopExecutor {
     return structuredClone(r);
   }
 
+  /** The run already bound to this claimed instance, if this process has it. */
+  byInstance(tenantId: string, instanceId: string): Execution | null {
+    const found = [...this.runs.values()].find((run) => run.tenantId === tenantId && run.instanceId === instanceId);
+    return found ? structuredClone(found) : null;
+  }
+
+  /** Keep a run loaded from storage. Does not resume it or open another instance. */
+  remember(run: Execution): Execution {
+    const existing = this.byInstance(run.tenantId, run.instanceId);
+    if (existing) return existing;
+    const copy = structuredClone(run);
+    this.runs.set(copy.id, copy);
+    return structuredClone(copy);
+  }
+
   /** Trigger: open a SOP instance for a published version and run until a human step or the end. */
   async start(input: { tenantId: string; versionId: string; eventId: string; startedBy: string; data: Record<string, unknown> }): Promise<Execution> {
     const sop = this.deps.sop();
@@ -153,7 +168,53 @@ export class SopExecutor {
       exceptionItemId: null,
     };
     this.runs.set(run.id, run);
+    return this.settle(run, version, graph);
+  }
 
+  /**
+   * Run an instance another process already claimed and inserted.
+   * Does not call manualStart. A second call for the same instance returns the existing run and does not advance.
+   * commitRun is awaited before any tool call; if it throws, the local run is dropped and nothing is invoked.
+   */
+  async runClaimed(
+    input: { tenantId: string; versionId: string; instanceId: string; eventId: string; startedBy: string; data: Record<string, unknown> },
+    commitRun?: (run: Execution) => Promise<void>,
+  ): Promise<Execution> {
+    const existing = this.byInstance(input.tenantId, input.instanceId);
+    if (existing) return existing;
+    const sop = this.deps.sop();
+    const version = sop.get(input.versionId);
+    if (version.status !== 'published') throw new ExecutionError('not_published', 'only a published SOP version can run');
+    const graph = (version.definition as { graph?: SopGraph }).graph;
+    if (!graph?.nodes.length) throw new ExecutionError('no_graph', 'the SOP version has no flow graph');
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const run: Execution = {
+      id: `run_${input.instanceId}`,
+      tenantId: input.tenantId,
+      sopId: version.sopId,
+      versionId: version.id,
+      versionNumber: version.number,
+      instanceId: input.instanceId,
+      eventId: input.eventId,
+      startedBy: input.startedBy,
+      input: structuredClone(input.data),
+      status: 'running',
+      steps: stepOrder(graph).map((id) => ({ nodeId: id, kind: byId.get(id)!.kind, label: byId.get(id)!.label, status: 'pending', detail: null, workItemId: null, actionId: null, readback: null })),
+      exceptionItemId: null,
+    };
+    this.runs.set(run.id, run);
+    if (commitRun) {
+      try {
+        await commitRun(structuredClone(run));
+      } catch (error) {
+        this.runs.delete(run.id);
+        throw error;
+      }
+    }
+    return this.settle(run, version, graph);
+  }
+
+  private async settle(run: Execution, version: SopVersion, graph: SopGraph): Promise<Execution> {
     const missing = (version.definition.requiredFields ?? []).filter((f) => run.input[f] === undefined || run.input[f] === '');
     if (missing.length) {
       const item = this.deps.inbox().create({ tenantId: run.tenantId, kind: 'supply_info', assigneeUserId: this.deps.reviewerOf(run), payload: { executionId: run.id, title: `补资料：缺少 ${missing.join('、')}（事件 ${run.eventId}）`, missingFields: missing } });
