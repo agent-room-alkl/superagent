@@ -5,12 +5,12 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 | Status | Meaning | Count |
 |---|---|---|
 | e2e | Covered by a Playwright test against the real app | 125 |
-| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 65 |
-| pending | Feature not built yet; the owner task will add the E2E | 67 |
+| unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
+| pending | Feature not built yet; the owner task will add the E2E | 62 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 59, T-45 8
+Pending by owner: T-41 54, T-45 8
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -130,18 +130,18 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 24 | Fixed release is distinct from installation | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 25 | Released tool still requires execution environment deployment | e2e | apps/e2e/tests/tools.spec.ts |
 | 26 | Failed environment check blocks installation | e2e | apps/e2e/tests/tools.spec.ts |
-| 27 | Original business request created only explicitly | pending | T-41 — original-request resume and SOP gates live in the runtime |
+| 27 | Original business request created only explicitly | unit | apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts |
 | 28 | Installed tool remains unavailable while target agent offline | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 29 | Completed deployment shows healthy timestamp summary without checkbox form | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 30 | Redeploy form opens only after explicit action | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 31 | Recording route reaches available only after per-employee check | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 32 | Completed personal binding shows summary instead of empty inputs | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 33 | Redeployment failure returns progress to deployment even after installation | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
-| 34 | Tool availability does not bypass SOP confirmation | pending | T-41 — original-request resume and SOP gates live in the runtime |
+| 34 | Tool availability does not bypass SOP confirmation | unit | apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts |
 | 35 | Unimplemented tool nodes are explicitly blocked | e2e | apps/e2e/tests/superagent.spec.ts |
-| 36 | Manual fallback requires explicit owner choice | pending | T-41 — original-request resume and SOP gates live in the runtime |
-| 37 | Paused original request does not auto-resume | pending | T-41 — original-request resume and SOP gates live in the runtime |
-| 38 | Same original request resumes without duplicate or fabricated execution | pending | T-41 — original-request resume and SOP gates live in the runtime |
+| 36 | Manual fallback requires explicit owner choice | unit | apps/server/src/modules/sop/original-request.test.ts |
+| 37 | Paused original request does not auto-resume | unit | apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts |
+| 38 | Same original request resumes without duplicate or fabricated execution | unit | apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts |
 | 39 | Offline developer cannot be assigned | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 40 | Developer and consuming employee are separately recorded | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 41 | Assigned developer route reaches independently released availability | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |

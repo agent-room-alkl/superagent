@@ -1,11 +1,13 @@
 import { validateSopGraph } from '@superagent/shared';
 import Fastify from 'fastify';
 import { beforeEach, expect, it } from 'vitest';
-import { sopModule, sopState } from './index.js';
+import { originalRequestState, sopModule, sopState } from './index.js';
+import { OriginalRequests } from './original-request.js';
 import { setSopGraphCheck, SopRuntime } from './sop.js';
 
 beforeEach(() => {
   sopState.current = new SopRuntime();
+  originalRequestState.current = new OriginalRequests();
   setSopGraphCheck(null);
 });
 
