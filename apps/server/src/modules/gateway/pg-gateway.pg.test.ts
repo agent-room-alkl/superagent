@@ -84,3 +84,52 @@ live('a second process read-back confirms an unknown write and does not call aga
     await pool.end();
   }
 });
+
+live('a write flushed before the call is not sent by the next process', async () => {
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 4 });
+  const armed = `t41arm_${randomUUID().replace(/-/g, '')}`;
+  const admin = await pool.connect();
+  const db = {
+    async query<T>(sql: string, params: readonly unknown[]): Promise<{ rows: T[] }> {
+      const client = await pool.connect();
+      try {
+        await client.query(`SET search_path TO "${armed}"`);
+        const result = await client.query(sql, params as unknown[]);
+        return { rows: result.rows as T[] };
+      } finally {
+        client.release();
+      }
+    },
+  };
+  try {
+    await admin.query(DDL.replaceAll(`"${schema}"`, `"${armed}"`));
+    const gateway = new ToolGateway();
+    const payload = { amount: 40 };
+    const hash = payloadHash(payload);
+    const reserved = gateway.reserve({
+      tenantId: 't', instanceId: 'inst', stepId: 'write', businessKey: 'invoice-armed',
+      effect: 'write', payload, intended: payload, approvalHash: hash, authorize: () => true,
+      call: () => { throw new Error('the first process has not called yet'); },
+    });
+    expect(reserved.pending).toBe(true);
+    expect(reserved.action.calls).toBe(0);
+    await saveGatewaySnapshot(db, gateway.snapshot());
+
+    const restored = new ToolGateway();
+    restored.load(await loadGatewaySnapshot(db));
+    let calls = 0;
+    const again = restored.execute({
+      tenantId: 't', instanceId: 'inst', stepId: 'write', businessKey: 'invoice-armed',
+      effect: 'write', payload, intended: payload, approvalHash: hash, authorize: () => true,
+      call: () => { calls += 1; return { actual: payload }; },
+    });
+    expect(calls).toBe(0);
+    expect(again.invoked).toBe(false);
+    expect(again.action.status).toBe('outcome_unknown');
+    expect(again.action.reason).toBe('interrupted');
+  } finally {
+    await admin.query(`DROP SCHEMA IF EXISTS "${armed}" CASCADE`);
+    admin.release();
+    await pool.end();
+  }
+});
