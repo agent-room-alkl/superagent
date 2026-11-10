@@ -6,8 +6,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import { flushGateway, gatewayState } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
 import { flushInbox, inboxState, workItemEvents } from '../humanwork/index.js';
-import { insertRun, loadClaimedRuns, loadRunByInstance, loadRuns, saveRuns, updateRun, type Queryable } from './pg-runs.js';
+import { insertWorkItem, loadWorkItemsForRun } from '../humanwork/pg-inbox.js';
+import { insertRun, loadClaimedRuns, loadRunById, loadRunByInstance, loadRuns, saveRuns, updateRun, type Queryable } from './pg-runs.js';
 import { flushSop, sopState } from '../sop/index.js';
+import { loadVersionById } from '../sop/pg-sop.js';
 import { toolsState } from '../tools/index.js';
 import { ExecutionError, SopExecutor, type Connector, type Execution } from './executor.js';
 
@@ -97,6 +99,33 @@ function keep(run: Execution): Execution {
   return settled(run) ? executionState.current.remember(run) : run;
 }
 
+/** Load the instance's pinned version into this process. Does not replace a version already in memory. */
+async function ensurePinned(versionId: string): Promise<void> {
+  try {
+    if (sopState.current.get(versionId).status === 'published') return;
+  } catch {
+    /* This process has not hydrated the SOP runtime. */
+  }
+  if (!runStore) throw new ExecutionError('not_published', 'the pinned version is not loaded');
+  const version = await loadVersionById(runStore, versionId);
+  if (!version || version.status !== 'published') throw new ExecutionError('not_published', 'the pinned version is not published');
+  sopState.current.pin(version);
+}
+
+/** Write only the items of this run. The shared inbox snapshot is left alone. */
+async function persistClaimedItems(run: Execution): Promise<void> {
+  if (!runStore) return;
+  for (const item of inboxState.current.all()) {
+    if (item.payload.executionId !== run.id) continue;
+    await insertWorkItem(runStore, item);
+  }
+}
+
+async function restoreClaimedItems(executionId: string): Promise<void> {
+  if (!runStore) return;
+  for (const item of await loadWorkItemsForRun(runStore, executionId)) inboxState.current.remember(item);
+}
+
 /**
  * Entry for a SOP instance that long-work already claimed and inserted.
  * Does not call manualStart or claim the event again.
@@ -110,8 +139,12 @@ export async function runClaimedInstance(input: {
   startedBy: string;
   data: Record<string, unknown>;
 }): Promise<Execution> {
+  if (runStore) await ensurePinned(input.versionId);
   const local = executionState.current.byInstance(input.tenantId, input.instanceId);
-  if (local) return local;
+  if (local) {
+    await restoreClaimedItems(local.id);
+    return local;
+  }
   if (runStore) {
     const row = await runStore.query<{ sop_version_id: string; status: string }>(
       `SELECT sop_version_id, status FROM sop_instances WHERE id = $1 AND tenant_id = $2`,
@@ -122,7 +155,11 @@ export async function runClaimedInstance(input: {
       throw new ExecutionError('not_started', 'the instance is not a running claim for this version');
     }
     const saved = await loadRunByInstance(runStore, input.tenantId, input.instanceId);
-    if (saved) return keep(saved);
+    if (saved) {
+      const kept = keep(saved);
+      await restoreClaimedItems(kept.id);
+      return kept;
+    }
   }
   try {
     const run = await executionState.current.runClaimed(input, runStore ? async (draft) => {
@@ -133,14 +170,31 @@ export async function runClaimedInstance(input: {
       throw new ClaimLost(winner);
     } : undefined);
     if (runStore) await updateRun(runStore, run);
+    await persistClaimedItems(run);
     return run;
   } catch (error) {
-    if (error instanceof ClaimLost) return keep(error.winner);
+    if (error instanceof ClaimLost) {
+      const kept = keep(error.winner);
+      await restoreClaimedItems(kept.id);
+      return kept;
+    }
     throw error;
   }
 }
 
 workItemEvents.decided.push(async (item) => {
+  const executionId = item.payload.executionId;
+  if (runStore && typeof executionId === 'string') {
+    try {
+      executionState.current.get(item.tenantId, executionId);
+    } catch {
+      const saved = await loadRunById(runStore, executionId);
+      if (saved && saved.tenantId === item.tenantId) {
+        await ensurePinned(saved.versionId);
+        executionState.current.remember(saved);
+      }
+    }
+  }
   const run = await executionState.current.onDecided(item);
   if (!run) return;
   await flushExecutions();

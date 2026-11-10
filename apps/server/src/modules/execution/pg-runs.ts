@@ -35,6 +35,7 @@ WHERE id = $1 AND tenant_id = $2 AND instance_id = $3
 `.trim();
 
 const LOAD_ONE = `SELECT payload FROM execution_run WHERE tenant_id = $1 AND instance_id = $2`;
+const LOAD_BY_ID = `SELECT payload FROM execution_run WHERE id = $1`;
 const LOAD_CLAIMED = `SELECT payload FROM execution_run`;
 
 /** Insert one claimed run. False means another process already owns this instance. */
@@ -50,6 +51,11 @@ export async function updateRun(db: Queryable, run: Execution): Promise<void> {
 
 export async function loadRunByInstance(db: Queryable, tenantId: string, instanceId: string): Promise<Execution | null> {
   const result = await db.query<{ payload: Execution }>(LOAD_ONE, [tenantId, instanceId]);
+  return result.rows[0]?.payload ?? null;
+}
+
+export async function loadRunById(db: Queryable, id: string): Promise<Execution | null> {
+  const result = await db.query<{ payload: Execution }>(LOAD_BY_ID, [id]);
   return result.rows[0]?.payload ?? null;
 }
 

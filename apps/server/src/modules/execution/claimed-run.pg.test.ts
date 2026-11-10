@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import pg from 'pg';
 import { expect, it } from 'vitest';
 import type { Execution } from './executor.js';
-import { insertRun, loadRunByInstance, saveRuns } from './pg-runs.js';
+import { insertRun, loadRunById, loadRunByInstance, saveRuns } from './pg-runs.js';
+import { insertWorkItem, loadInbox, loadWorkItemsForRun, saveInbox, updateWorkItem } from '../humanwork/pg-inbox.js';
+import { WorkInbox, type WorkItem } from '../humanwork/work-items.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const live = databaseUrl ? it : it.skip;
@@ -38,7 +40,7 @@ live('a claimed run stays when another process replaces the shared snapshot', as
   try {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     await admin.query(`SET search_path TO "${schema}"`);
-    for (const file of ['0010_inbox_and_runs.sql', '0011_execution_run.sql']) {
+    for (const file of ['0010_inbox_and_runs.sql', '0011_execution_run.sql', '0012_work_item.sql']) {
       const sql = fs.readFileSync(new URL(`../../../migrations/${file}`, import.meta.url), 'utf8');
       await admin.query(sql.replace(/^GRANT .*$/gm, ''));
     }
@@ -50,6 +52,23 @@ live('a claimed run stays when another process replaces the shared snapshot', as
     const kept = await loadRunByInstance(db, 't', 'mail_1');
     expect(kept?.id).toBe('run_mail_1');
     expect(kept?.status).toBe('waiting_human');
+    const item = {
+      id: 'wi_run_mail_1_h_action_approval', tenantId: 't', kind: 'action_approval', renderer: 'field_diff',
+      projectId: null, assigneeUserId: 'owner-1', payloadVersion: 1, payload: { executionId: 'run_mail_1' },
+      payloadHash: 'h', status: 'open', decision: null, submitCount: 0, actionStatus: null, systemVerified: false,
+      evidenceSource: null, waitingOn: null, draft: null, rows: [],
+    } as WorkItem;
+    await insertWorkItem(db, item);
+    const decided = { ...item, status: 'decided' as const, decision: { by: 'owner-1', payloadHash: 'h' } };
+    await updateWorkItem(db, decided);
+    await insertWorkItem(db, item);
+    await saveInbox(db, { seq: 1, items: [item] });
+    const restored = new WorkInbox();
+    const blob = await loadInbox(db);
+    if (blob) restored.load(blob);
+    for (const row of await loadWorkItemsForRun(db, 'run_mail_1')) restored.remember(row);
+    expect(restored.all()[0]?.status).toBe('decided');
+    expect((await loadRunById(db, 'run_mail_1'))?.id).toBe('run_mail_1');
   } finally {
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     admin.release();

@@ -217,7 +217,7 @@ export class SopExecutor {
   private async settle(run: Execution, version: SopVersion, graph: SopGraph): Promise<Execution> {
     const missing = (version.definition.requiredFields ?? []).filter((f) => run.input[f] === undefined || run.input[f] === '');
     if (missing.length) {
-      const item = this.deps.inbox().create({ tenantId: run.tenantId, kind: 'supply_info', assigneeUserId: this.deps.reviewerOf(run), payload: { executionId: run.id, title: `补资料：缺少 ${missing.join('、')}（事件 ${run.eventId}）`, missingFields: missing } });
+      const item = this.deps.inbox().create({ id: this.itemId(run, run.steps[0]?.nodeId ?? 'start', 'supply_info'), tenantId: run.tenantId, kind: 'supply_info', assigneeUserId: this.deps.reviewerOf(run), payload: { executionId: run.id, title: `补资料：缺少 ${missing.join('、')}（事件 ${run.eventId}）`, missingFields: missing } });
       run.status = 'blocked';
       run.steps[0]!.status = 'blocked';
       run.steps[0]!.detail = `缺少必填字段：${missing.join('，')}`;
@@ -253,6 +253,7 @@ export class SopExecutor {
         const next = this.nextWriteTool(run, graph, step.nodeId);
         const params = this.paramsFor(run);
         const item = this.deps.inbox().create({
+          id: this.itemId(run, step.nodeId, 'action_approval'),
           tenantId: run.tenantId,
           kind: 'action_approval',
           assigneeUserId: this.deps.reviewerOf(run),
@@ -333,6 +334,7 @@ export class SopExecutor {
       run.status = 'outcome_unknown';
       if (approvalItem) this.deps.inbox().markOutcomeUnknown(approvalItem.id);
       const ex = this.deps.inbox().create({
+        id: this.itemId(run, step.nodeId, 'exception_ruling'),
         tenantId: run.tenantId,
         kind: 'exception_ruling',
         assigneeUserId: this.deps.reviewerOf(run),
@@ -343,6 +345,10 @@ export class SopExecutor {
     }
     if (result.action.reason === 'unauthorized') return this.block(run, step, `未授权，未写入：${refusal ?? '执行时鉴权未通过'}`);
     return this.block(run, step, result.action.reason === 'approval_mismatch' ? '批准与写入参数不匹配' : `未执行：${result.action.reason ?? result.action.status}`);
+  }
+
+  private itemId(run: Execution, nodeId: string, kind: string): string | undefined {
+    return run.id.startsWith('run_') ? `wi_${run.id}_${nodeId}_${kind}` : undefined;
   }
 
   private block(run: Execution, step: ExecutionStep, why: string): false {
