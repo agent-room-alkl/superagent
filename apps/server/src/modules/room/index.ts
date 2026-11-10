@@ -213,7 +213,10 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     try {
       const task = roomState.current.task(params.id, viewer);
       const { findRun } = await import('./outcome.js');
-      if (!findRun(task.tenantId, body.runId)) return reply.code(404).send({ error: 'run_not_found' });
+      const run = findRun(task.tenantId, body.runId);
+      // Someone else's run reads as missing: linking it would expose its event and results through this task.
+      const owner = viewer.roles.includes('owner') || viewer.roles.includes('admin');
+      if (!run || (!owner && run.startedBy !== viewer.userId)) return reply.code(404).send({ error: 'run_not_found' });
       const linked = roomState.current.linkRun(params.id, viewer, body.runId);
       await flushRoom();
       return linked;
