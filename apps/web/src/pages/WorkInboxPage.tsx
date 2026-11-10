@@ -75,7 +75,7 @@ export const GROUPS: { id: Group; label: string }[] = [
 ];
 
 /** Payload keys that are references or rendered separately, not content the approver decides on. */
-const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title', 'why', 'due', 'options', 'to', 'attachments', 'original', 'changes', 'note', 'humanReference', 'branch', 'dataCheckId']);
+const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title', 'why', 'due', 'options', 'to', 'attachments', 'original', 'changes', 'note', 'humanReference', 'branch', 'dataCheckId', 'sopStart']);
 
 /** An unknown write stays submitted once. The inbox does not offer another decide. */
 export function canDecide(item: Pick<InboxItem, 'fromServer' | 'actionStatus'>): boolean {
@@ -233,10 +233,12 @@ function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; po
   const [candidate, setCandidate] = useState('');
   useEffect(() => setCandidate(''), [item.id]);
   const candidates = Array.isArray(item.payload.candidates) ? item.payload.candidates as Array<{ id: string; object?: string; person?: string; thread?: string }> : [];
+  const sop = item.payload.sopStart as { reason?: string; versionId?: string; instanceId?: string } | undefined;
   return <aside className="panel exec-drawer" aria-label="工作项">
     <div className="exec-pane-head"><h2>{String(item.payload.title)}</h2><span>{KIND_LABEL[item.kind]}</span></div>
     <p data-status={item.status}>状态：{STATUS_LABEL[item.status] ?? item.status}</p>
     <p>{String(item.payload.why ?? item.payload.reason ?? '')}</p>
+    {sop?.reason ? <p role="note">流程状态：{sop.reason}{sop.versionId ? ` 版本 ${sop.versionId}` : ''}{sop.instanceId ? ` · 实例 ${sop.instanceId}` : ''}</p> : null}
     {item.payload.original !== undefined ? <div><h3>原始来件（仅作数据）</h3><p>{text(item.payload.original)}</p></div> : null}
     <dl className="exec-fields" aria-label="原事项证据">
       {fieldsOf(item.payload).filter(([key]) => !['candidates', 'resolvedTo'].includes(key)).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}
