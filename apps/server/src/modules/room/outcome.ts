@@ -11,12 +11,15 @@ import { flushInbox, inboxState, persistWorkItem } from '../humanwork/index.js';
 import type { Execution } from '../execution/executor.js';
 import type { WorkItem } from '../humanwork/work-items.js';
 
+/** Effects that change something outside the platform. Reads and drafts are not external attempts. */
+const OUTWARD = new Set(['write', 'external']);
+
 export interface TaskOutcome {
   runId: string;
   runStatus: string;
   eventId: string;
   approvals: Array<{ id: string; status: string; standing: boolean; actionStatus: string | null }>;
-  /** External write attempts the gateway recorded for this run. A contract change never adds one. */
+  /** External write attempts the gateway recorded for this run (write/external effects only). A contract change never adds one. */
   attempts: number;
   actions: Array<{ stepId: string; status: string; calls: number; externalRef: string | null; readback: unknown }>;
 }
@@ -42,7 +45,8 @@ function approvalsOf(run: Execution): WorkItem[] {
 export function outcomeOf(tenantId: string, runId: string): TaskOutcome | null {
   const run = findRun(tenantId, runId);
   if (!run) return null;
-  const actions = gatewayState.current.snapshot().actions.filter((action) => action.tenantId === run.tenantId && action.instanceId === run.instanceId);
+  const actions = gatewayState.current.snapshot().actions.filter((action) => action.tenantId === run.tenantId && action.instanceId === run.instanceId
+    && OUTWARD.has(action.effect));
   return {
     runId: run.id,
     runStatus: run.status,
