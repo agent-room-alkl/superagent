@@ -88,16 +88,19 @@ export const sopModule: FastifyPluginAsync = async (app) => {
 
   app.post('/drafts', async (req, reply) => {
     const body = (req.body ?? {}) as { sopId?: string; definition?: SopDefinition };
-    if (!body.sopId || !body.definition) return reply.code(400).send({ error: 'missing_fields' });
-    return commitSop(() => sopState.current.draft(body.sopId, body.definition));
+    const sopId = body.sopId;
+    const definition = body.definition;
+    if (!sopId || !definition) return reply.code(400).send({ error: 'missing_fields' });
+    return commitSop(() => sopState.current.draft(sopId, definition));
   });
 
   app.put('/drafts/:id', async (req, reply) => {
     const params = req.params as { id: string };
     const body = (req.body ?? {}) as { definition?: SopDefinition };
-    if (!body.definition) return reply.code(400).send({ error: 'missing_fields' });
+    const definition = body.definition;
+    if (!definition) return reply.code(400).send({ error: 'missing_fields' });
     try {
-      return await commitSop(() => sopState.current.revise(params.id, body.definition));
+      return await commitSop(() => sopState.current.revise(params.id, definition));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'version_not_found';
       if (message !== 'version_not_found') throw error;
