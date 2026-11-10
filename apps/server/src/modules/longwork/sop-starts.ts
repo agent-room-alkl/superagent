@@ -46,14 +46,18 @@ async function register(db: Queryable, tenant: string, item: LongItem, source?: 
 export function prepareMailSopStarts(sources: readonly MailSource[]): PrepareSop {
   return async (db, tenant, state) => {
     for (const item of state.items) {
+      if (item.sopExecution?.status === 'completed' && item.sopStart?.instanceId)
+        await db.query("UPDATE sop_instances SET status='completed' WHERE id=$1 AND tenant_id=$2 AND status='running'", [item.sopStart.instanceId, tenant]);
       if (item.phase === 'closed' && item.sopStart?.requestId && item.sopStart.status !== 'cancelled') {
+        const mayHaveRun = item.sopExecution?.runId || item.sopExecution?.attempted;
+        const reason = mayHaveRun ? '原事项已关闭，停止新的流程起始；已有执行或未确认结果保留待核对。' : '原事项已关闭，流程起始请求已取消；未执行外部动作。';
         await db.query(`UPDATE longwork_sop_starts SET status='cancelled',reason=$2,updated_at=now() WHERE id=$1`,
-          [item.sopStart.requestId, '原事项已关闭，流程起始请求已取消；未执行外部动作。']);
-        if (item.sopStart.instanceId) {
+          [item.sopStart.requestId, reason]);
+        if (item.sopStart.instanceId && !mayHaveRun) {
           await db.query("UPDATE sop_instances SET status='skipped' WHERE id=$1 AND tenant_id=$2 AND status='running'", [item.sopStart.instanceId, tenant]);
           await db.query("UPDATE sop_events SET disposition='skipped' WHERE event_key=(SELECT event_key FROM sop_instances WHERE id=$1 AND tenant_id=$2)", [item.sopStart.instanceId, tenant]);
         }
-        item.sopStart = { ...item.sopStart, status: 'cancelled', reason: '原事项已关闭，流程起始请求已取消；未执行外部动作。' };
+        item.sopStart = { ...item.sopStart, status: 'cancelled', reason };
       }
       if (!item.events.length || item.phase === 'closed' || item.sopStart?.status === 'blocked_claim' || item.sopStart?.status === 'cancelled') continue;
       const source = sources.find(s => s.id === item.sourceId && s.tenant === tenant);

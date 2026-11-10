@@ -33,6 +33,7 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
       why: i.phase === 'replied' ? '来件已并回同一事项，等待负责人核对；这不是系统验收完成。' : '阶段只表示跟进计划；发送是否成功请核对独立动作记录。',
       phase: i.phase, original: i.original, replies: i.replies, originalItemId: i.id, dateRule: `${i.dateRuleId}@${i.dateRuleVersion}`,
       ...(i.sopStart ? { sopStart: i.sopStart } : {}),
+      ...(i.sopExecution ? { sopExecution: { runId: i.sopExecution.runId, status: i.sopExecution.status, reason: i.sopExecution.reason, updatedAt: i.sopExecution.updatedAt } } : {}),
       ...(i.registrationEvidence ? { registrationEvidence: i.registrationEvidence, evidenceSource: '人工登记，未经系统核验' } : {}) });
     return { ...item, status: i.phase === 'closed' ? 'closed' : 'open', waitingOn: ['closed', 'replied'].includes(i.phase) ? null : i.person,
       canAct: i.assignee === user.userId && i.phase !== 'closed', longwork: { type: 'waiting', id: i.id, projectId: i.projectId } };

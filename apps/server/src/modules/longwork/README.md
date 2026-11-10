@@ -33,11 +33,28 @@ version remains pinned across later publications, process reconstruction and sou
 or changing the source blocks its start without erasing the pin. A conflicting event claim stays visible for
 manual reconciliation. Closing a case cancels its pending start and marks the metadata instance skipped.
 
-The resulting state is **waiting_runtime**: the SOP instance and version exist, while the general graph has not
-run and no external action has occurred. This revision installs no `sop.start` worker handler. A future execution
-consumer must recheck the request's current state/source and provide durable step/approval continuation plus
-write-before-call fencing. It must never treat a metadata instance's `running` registry status as execution proof.
-The unified inbox shows this waiting reason and its version/instance ids. Ordinary reads never prepare new starts.
+The initial state is **waiting_runtime**: the SOP instance and version exist before the graph runs. The worker
+installs the existing executor's claimed-instance adapter after binding its durable stores. Apply migrations
+`0011_execution_run.sql` and `0012_work_item.sql`; worker readiness checks those tables. The adapter checks the
+exact pinned publication and event/tenant/instance binding, uses per-instance execution rows, and leaves human
+approval and write-before-call fencing to the existing executor. It installs no external connector. The unified
+inbox shows the registration and actual execution identity/status separately. Ordinary reads never prepare starts.
+
+`MailSopBridge` provides the guarded consumer boundary. A configured `MailSopConsumer` must use the execution
+owner's durable, already-claimed-instance entry and read-only per-instance lookup. It must check the pinned version
+and current execution eligibility; it must not call the manual trigger or choose a newer publication. Local or
+explicit test configurations that omit this adapter leave requests in the honest `waiting_runtime` state.
+
+The bridge serializes overlapping dispatch with a short durable lease and rechecks the source and open case before
+starting. It first looks for an existing run after every retry/restart, including a lost start response, and never
+advances an existing run. The executor's unique tenant/instance row remains the final fence. Once a run id is known,
+a missing execution record blocks rather than opening a replacement. At most fifty cases are inspected per tick,
+oldest inspection first, so later requests cannot starve behind waiting runs. Approved object fields are captured
+when the mail is accepted; later source edits cannot change those parameters, and the mail body stays nested data.
+Legacy cases without a captured input block for explicit reconciliation. Execution links expose status and stable
+identity separately from the long item's phase; a completed graph is still not human acceptance of external results.
+Closing a case never claims that an already-attempted dispatch did no work or relabels a completed run as skipped.
+An initial all-pending run left by a crashed executor is inspected, not automatically advanced or repeated.
 
 The worker registers a `created` subscription, renews it before expiry and reconciles folder delta pages every
 minute. A webhook only authenticates `subscriptionId` + `clientState` and durably requests a scan. It never treats
@@ -63,8 +80,8 @@ one transaction; repeated requests return its original id. Existing candidates a
 and selecting a new case are mutually exclusive decisions. The new case still uses the server-approved source,
 object, assignee and date rule; a changed object binding blocks rather than silently reinterpreting the mail.
 
-The first mail creates the long-running item and durable SOP start metadata, rather than running the SOP's
-general-purpose tool graph. This delivery does not add a new general-purpose SOP executor. Reminders advance
+The first mail creates the long-running item and durable SOP start metadata atomically; the worker then hands the
+fixed instance to the existing general-purpose SOP executor. Reminders advance
 initial → reminder → final and create **pending send intents**; the phase never claims an email was sent.
 
 ## Dates, batches and collections
@@ -125,6 +142,9 @@ after event claim, original-request recovery after publication/pause, version pi
 `work-inbox.test.ts` and the real-browser `longwork-batch.spec.ts` cover assigned approvals, conflict rows,
 partial outcomes/read-back without resubmission, missing drivers, private responses and cutoff summaries.
 The PostgreSQL restart test also verifies batch selection/assignment and recipient isolation after reconstruction.
+`sop-execution.pg.test.ts` uses the actual production adapter: twelve concurrent consumers, a lost response after
+commit, an empty web process loading a worker-created approval and pinned version, and the same run completing
+through the authenticated decision API. Guard tests cover source changes, closure, captured inputs and fairness.
 
 Graph HTTP and business-tool tests use labeled synthetic adapters. They do not prove a live Microsoft 365 tenant
 has granted consent or that a real email/business write occurred. Existing prototype assertion mappings are not
@@ -133,7 +153,8 @@ The tenant aggregate is intentionally serialized; large mailboxes/high-volume te
 retention work before scaling. The unified inbox also shows assigned waiting cases, original mail, replies and their
 stable case id. Only the assignee can close a case, and an unresolved matching exception blocks closing. Replies,
 closure and collection deadlines cancel pending/approved reminder intents before submission; already uncertain or
-in-flight actions retain their recovery state. General SOP graph execution remains an integration follow-up.
+in-flight actions retain their recovery state. Live connector activation and the pending outcome-page assertions
+remain separate work; registration, graph completion and human acceptance are distinct claims.
 
 Official protocol references:
 

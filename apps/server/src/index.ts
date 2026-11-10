@@ -10,6 +10,7 @@ import { bindExecutionStore, hydrateExecutions } from './modules/execution/index
 import { createKnowledgeDeps, knowledgeReady } from './modules/knowledge/runtime.js';
 import { tickKnowledge } from './modules/knowledge/worker.js';
 import { createLongWorkDeps } from './modules/longwork/runtime.js';
+import { pgMailSopConsumer } from './modules/longwork/execution-adapter.js';
 
 const role = (process.env.APP_ROLE ?? 'web') as AppRole;
 if (!APP_ROLES.includes(role)) {
@@ -75,7 +76,13 @@ if (role === 'web') {
   process.once('SIGTERM', () => controller.abort());
   process.once('SIGINT', () => controller.abort());
   const knowledge = createKnowledgeDeps(runtime);
-  const longwork = createLongWorkDeps(runtime);
+  if (runtime.pool) {
+    const pool = runtime.pool;
+    const db = { query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) };
+    bindExecutionStore(db); bindGatewayStore(db); bindInboxStore(db);
+    try { await hydrateGateway(); } catch (error) { await runtime.close(); throw error; }
+  }
+  const longwork = createLongWorkDeps(runtime, process.env, runtime.pool ? pgMailSopConsumer(runtime.pool) : undefined);
   if (!await longwork.ready()) { await runtime.close(); throw Error('Longwork migrations are required before starting the worker'); }
   if (!await knowledgeReady(knowledge)) { await knowledge.close?.(); await runtime.close(); throw Error('Knowledge migrations are required before starting the worker'); }
   let lastHeartbeat = 0;
