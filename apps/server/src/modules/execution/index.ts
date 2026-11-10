@@ -63,9 +63,9 @@ export const executionModule: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { versionId?: string; eventId?: string; input?: Record<string, unknown> } }>('/', async (req, reply) => {
     const b = req.body ?? {};
     if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
-    reply.code(201);
     const run = executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
     await flushSop();
+    reply.code(201);
     return run;
   });
 
