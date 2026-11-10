@@ -9,7 +9,7 @@ import { api } from '../api';
  */
 type Group = 'action' | 'waiting' | 'internal';
 
-interface BatchRow { id: string; clean: boolean; selected: boolean; executed: boolean }
+interface BatchRow { id: string; clean: boolean; selected: boolean; executed: boolean; projectId?: string | null }
 
 export interface ServerWorkItem {
   id: string;
@@ -142,7 +142,10 @@ export function WorkInboxPage() {
       }
       setFailed(false);
       setItems(r.body.items);
-      if (!project && !exceptionsOnly) setProjects([...new Set(r.body.items.map((i) => i.projectId).filter((p): p is string => !!p))].sort());
+      if (!project && !exceptionsOnly) {
+        const ids = r.body.items.flatMap((i) => [i.projectId, ...(i.rows ?? []).map((row) => row.projectId)]);
+        setProjects([...new Set(ids.filter((p): p is string => !!p))].sort());
+      }
     } catch {
       setFailed(true);
     }
@@ -164,7 +167,7 @@ export function WorkInboxPage() {
   return (
     <section className="exec-inbox" aria-label="待我处理">
       <div className="page-head">
-        <h1>待我处理</h1>
+        <h1 id="page-title">待我处理</h1>
         <p>核对数据、作决定、亲自完成工作；每一步都有证据和下一位责任人。</p>
       </div>
       <div className="exec-toolbar">
@@ -291,7 +294,7 @@ function Drawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: 
           <tbody>
             {item.rows.map((row) => (
               <tr key={row.id} data-row={row.id}>
-                <td>{row.id}</td>
+                <td>{row.projectId ? `${row.projectId} · ` : ''}{row.id}</td>
                 <td><input type="checkbox" aria-label={`勾选 ${row.id}`} checked={row.selected} disabled={!act || !row.clean || row.executed} onChange={(e) => void post(`rows/${row.id}`, { selected: e.target.checked })} /></td>
                 <td>{row.executed ? '已执行' : !row.clean ? '冲突行，不能选，留在例外里' : row.selected ? '已勾选' : '未勾选'}</td>
               </tr>

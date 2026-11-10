@@ -27,6 +27,7 @@ async function as(page: Page, who: string) {
   await page.goto('/#work');
   await page.reload(); // a hash-only goto does not reload; the list must be fetched as the new identity
   await expect(page.getByRole('region', { name: '待我处理' })).toBeVisible();
+  await expect(page.locator('#page-title')).toHaveText('待我处理');
 }
 
 const drawer = (page: Page) => page.getByRole('complementary', { name: '工作项' });
@@ -140,6 +141,24 @@ test('batch: conflict rows cannot be selected, only selected clean rows run, exc
   await expect(rows.locator('[data-row="r3"]')).toContainText('已执行');
   await expect(rows.getByLabel('勾选 r1')).toBeDisabled();
   await expect(rows.locator('[data-row="r2"]')).toContainText('冲突行');
+});
+
+test('project filter hides batch rows that belong to another project', async ({ page }) => {
+  const staff = uid('staff');
+  const batch = await item(page, {
+    kind: 'action_approval', renderer: 'batch_table', assigneeUserId: staff, projectId: 'P-A',
+    rows: [
+      { id: 'c', clean: true, selected: false, projectId: 'P-C' },
+      { id: 'd', clean: false, selected: false, projectId: 'P-D' },
+    ],
+  });
+  await as(page, `${staff}|employee|`);
+  await page.getByLabel('项目筛选').selectOption('P-C');
+  await expect(page.locator(`[data-item="${batch}"]`)).toBeVisible();
+  await openItem(page, batch);
+  await expect(drawer(page).locator('[data-row="c"]')).toContainText('P-C');
+  await expect(drawer(page).locator('[data-row="d"]')).toHaveCount(0);
+  await expect(drawer(page)).not.toContainText('P-D');
 });
 
 test('manual work needs evidence and stays human-reported; waits stay on the case; branch choice is recorded, not an approval', async ({ page }) => {

@@ -266,6 +266,33 @@ it('waiting work stays in the waiting group and a project filter hides the other
   await server.close();
 });
 
+it('a project filter keeps a mixed batch and returns only that project’s rows', async () => {
+  const server = await app();
+  const created = await server.inject({
+    method: 'POST',
+    url: '/api/v1/work-items',
+    headers: owner,
+    payload: {
+      kind: 'action_approval',
+      renderer: 'batch_table',
+      projectId: 'P-A',
+      assigneeUserId: 'alice',
+      rows: [
+        { id: 'c', clean: true, selected: false, projectId: 'P-C' },
+        { id: 'd', clean: false, selected: false, projectId: 'P-D' },
+      ],
+    },
+  });
+  expect(created.statusCode).toBeLessThan(300);
+  const wide = { 'x-user-id': 'alice', 'x-roles': 'employee', 'x-projects': 'P-A,P-C,P-D' };
+  const scoped = await server.inject({ method: 'GET', url: '/api/v1/work-items?project=P-C', headers: wide });
+  expect(scoped.json().items).toHaveLength(1);
+  expect(scoped.json().items[0].rows.map((row: { id: string; projectId?: string }) => row.projectId)).toEqual(['P-C']);
+  const all = await server.inject({ method: 'GET', url: '/api/v1/work-items', headers: wide });
+  expect(all.json().items[0].rows).toHaveLength(2);
+  await server.close();
+});
+
 it('a write approval waits for data confirmation and a later revision revokes it', async () => {
   const server = await app();
   const data = await server.inject({
