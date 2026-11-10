@@ -17,7 +17,7 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
   const exceptions: LongInboxItem[] = state.exceptions.filter(e => visible(e.projectId) && (owner || user.userId === e.assignee || user.roles.includes('reviewer'))).map(e => {
     const incoming = state.actions.find(a => a.batchId === e.id)?.payload.mail;
     const item = base(`long-match:${e.id}`, e.projectId, e.assignee, {
-      title: '来件无法唯一并回原事项', reason: '同一线程和业务对象匹配多个未关闭事项，请核对证据后选择。', original: incoming,
+      title: '来件需要确认原事项', reason: '线程改变或存在多个候选事项，请核对证据后选择。', original: incoming,
       candidates: e.candidates.map(id => { const i = state.items.find(x => x.id === id); return { id, object: i?.objectId, person: i?.person, thread: i?.threadId }; }),
       resolvedTo: e.resolvedTo,
     });
@@ -29,7 +29,8 @@ export async function longInbox(work: LongWork, user: UserContext, query: { proj
   const waiting: LongInboxItem[] = state.items.filter(i => visible(i.projectId) && (owner || i.assignee === user.userId)).map(i => {
     const item = base(`long-item:${i.id}`, i.projectId, i.assignee, { title: `长事项 · ${i.objectId}`, due: i.dueAt,
       why: i.phase === 'replied' ? '来件已并回同一事项，等待负责人核对；这不是系统验收完成。' : '阶段只表示跟进计划；发送是否成功请核对独立动作记录。',
-      phase: i.phase, original: i.original, replies: i.replies, originalItemId: i.id, dateRule: `${i.dateRuleId}@${i.dateRuleVersion}` });
+      phase: i.phase, original: i.original, replies: i.replies, originalItemId: i.id, dateRule: `${i.dateRuleId}@${i.dateRuleVersion}`,
+      ...(i.registrationEvidence ? { registrationEvidence: i.registrationEvidence, evidenceSource: '人工登记，未经系统核验' } : {}) });
     return { ...item, status: i.phase === 'closed' ? 'closed' : 'open', waitingOn: ['closed', 'replied'].includes(i.phase) ? null : i.person,
       canAct: i.assignee === user.userId && i.phase !== 'closed', longwork: { type: 'waiting', id: i.id, projectId: i.projectId } };
   });

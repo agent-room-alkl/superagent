@@ -30,11 +30,17 @@ bounded to three pages per tick; a scan lease avoids overlapping workers and cur
 errors do not commit an unprocessed page cursor. Responses and credentials are never included in error messages.
 
 Receipt identity is `(tenant, source, event, SOP)`. Mail body text is retained as data only. Replies merge into an
-item only when source, SOP, project, object, person and thread match exactly. Multiple candidates create a durable
+item only when source, SOP, project, object, person and a known thread match exactly. Owners can register an explicit
+waiting case with `POST /items/waits` using an approved source id, stable request id, person, thread and evidence
+reference. The reference stays human-reported, not system-verified; registration does not send mail. Duplicate
+request ids return the same case and conflicting payloads are rejected. This allows separate real business waits
+for the same person/object. A reply in a new thread with existing object/person candidates, or multiple exact
+candidates, creates a durable
 `exception_ruling` work item for the configured reviewer, with no automatic choice. Reviewers resolve it through
 the long-item API; resolving twice to the same item is idempotent. These work items are exposed by the long-item
 API and projected into the unified `/api/v1/work-items` list. WorkInboxPage lets the assigned reviewer select the
-original case; owners can inspect another person's exception but cannot decide it on their behalf.
+original case; owners can inspect another person's exception but cannot decide it on their behalf. A reviewed new
+thread becomes an alias of the chosen case, so later replies return to the same id without another guess.
 
 The first mail creates the long-running item associated with the configured SOP, rather than running the SOP's
 general-purpose tool graph. This delivery does not add a new general-purpose SOP executor. Reminders advance

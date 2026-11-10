@@ -6,6 +6,7 @@ export interface LongItem {
   dueAt: string; reminderMs: number; events: string[];
   dateRuleId: string; dateRuleVersion: number;
   original: { body: string; receivedAt: string };
+  waitRequestId?: string; registrationEvidence?: string; threadAliases?: string[];
   replies: Array<{ eventId: string; body: string; receivedAt: string }>;
 }
 export interface Exception { id: string; kind: 'exception_ruling'; renderer: 'issue_list'; assignee: string;

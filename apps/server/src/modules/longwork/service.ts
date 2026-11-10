@@ -28,6 +28,25 @@ export function validateSource(s: MailSource) {
 export class LongWork {
   constructor(readonly store: Store, private now: () => number = Date.now) {}
   snapshot(tenant: string) { return this.store.change(tenant, s => s); }
+  /** Register an explicit business wait; this never sends mail or claims that the evidence was system-verified. */
+  openWaiting(source: MailSource, input: { requestId: string; person: string; threadId: string; evidence: string }) {
+    validateSource(source);
+    if (![input.requestId, input.person, input.threadId].every(x => validText(x)) || !validText(input.evidence, 2048)) throw Error('invalid_wait');
+    return this.store.change(source.tenant, s => {
+      const old = s.items.find(i => i.sourceId === source.id && i.sopId === source.sopId && i.waitRequestId === input.requestId);
+      if (old) {
+        if (old.threadId !== input.threadId || old.person !== input.person.toLowerCase() || old.objectId !== source.objectId || old.projectId !== source.projectId || old.registrationEvidence !== input.evidence) throw Error('wait_request_conflict');
+        return old;
+      }
+      const due = objectDue(source.dueRule, source.fields);
+      const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId, objectId: source.objectId,
+        person: input.person.toLowerCase(), threadId: input.threadId, assignee: source.assignee, phase: 'initial', dueAt: due.dueAt,
+        dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs, events: [], replies: [],
+        original: { body: '人工登记等待；凭证未经系统核验，没有发送邮件。', receivedAt: new Date(this.now()).toISOString() },
+        waitRequestId: input.requestId, registrationEvidence: input.evidence };
+      s.items.push(item); return item;
+    });
+  }
   close(tenant: string, id: string, projectId: string, assignee: string) {
     return this.store.change(tenant, s => {
       const i = s.items.find(i => i.id === id && i.projectId === projectId); if (!i) throw Error('not_found');
@@ -44,10 +63,12 @@ export class LongWork {
     return this.store.change(source.tenant, state => {
       const receipt = key(source.tenant, source.id, mail.id, source.sopId);
       if (state.receipts.includes(receipt)) return { duplicate: true };
-      const candidates = state.items.filter(i => i.sourceId === source.id && i.sopId === source.sopId && i.projectId === source.projectId &&
-        i.objectId === source.objectId && i.person === mail.from.toLowerCase() && i.threadId === mail.threadId && i.phase !== 'closed');
+      const objectCandidates = state.items.filter(i => i.sourceId === source.id && i.sopId === source.sopId && i.projectId === source.projectId &&
+        i.objectId === source.objectId && i.person === mail.from.toLowerCase() && i.phase !== 'closed');
+      const exact = objectCandidates.filter(i => i.threadId === mail.threadId || i.threadAliases?.includes(mail.threadId));
+      const candidates = exact.length ? exact : objectCandidates;
       state.receipts.push(receipt);
-      if (candidates.length > 1) {
+      if (candidates.length > 1 || (candidates.length === 1 && exact.length === 0)) {
         const exception = { id: randomUUID(), kind: 'exception_ruling' as const, renderer: 'issue_list' as const, assignee: source.reviewer,
           eventId: mail.id, candidates: candidates.map(i => i.id), projectId: source.projectId, resolvedTo: null };
         state.exceptions.push(exception);
@@ -92,6 +113,7 @@ export class LongWork {
         const a = s.actions.find(a => a.batchId === exceptionId)!;
         const mail = a.payload.mail as unknown as Incoming;
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
+        if (item.threadId !== mail.threadId && !item.threadAliases?.includes(mail.threadId)) (item.threadAliases ??= []).push(mail.threadId);
         this.cancelPending(s.actions, item.id);
         e.resolvedTo = itemId; a.status = 'succeeded'; a.evidence = 'Reviewer matched incoming data; no external action executed';
       }
