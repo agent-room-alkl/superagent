@@ -7,6 +7,7 @@ import { modules } from './modules/index.js';
 import { createAuthenticate, requireRole, type AuthConfig } from './auth.js';
 import type { SetupDeps } from './modules/setup/service.js';
 import type { KnowledgeDeps } from './modules/knowledge/service.js';
+import { longWorkModule, mailWebhook, type LongWorkDeps } from './modules/longwork/http.js';
 
 export interface ReadinessCheck {
   name: string;
@@ -20,6 +21,7 @@ export interface AppOptions {
   auth?: AuthConfig;
   setupDeps?: SetupDeps;
   knowledgeDeps?: KnowledgeDeps;
+  longWorkDeps?: LongWorkDeps;
   readiness?: ReadinessCheck[];
 }
 
@@ -53,9 +55,11 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   const auth = opts.auth ?? { mode: 'dev' as const, platformTenantId: 'default' };
   const authCfgForBrowser = auth;
   const authenticate = createAuthenticate(auth);
+  await app.register(mailWebhook, { deps: opts.longWorkDeps });
 
   await app.register(async (api) => {
     api.addHook('preHandler', authenticate);
+    await api.register(longWorkModule, { deps: opts.longWorkDeps, prefix: '/api/v1/long-items' });
     // Each module owns a prefix under /api/v1. Owners: see docs/OWNERSHIP.md.
     for (const m of modules) {
       await api.register(async (scoped) => {

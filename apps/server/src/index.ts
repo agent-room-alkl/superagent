@@ -5,6 +5,7 @@ import { bindRuntimeDb, runtimeState } from './modules/runtime/index.js';
 import { bindRoomStore, hydrateRoom } from './modules/room/index.js';
 import { createKnowledgeDeps, knowledgeReady } from './modules/knowledge/runtime.js';
 import { tickKnowledge } from './modules/knowledge/worker.js';
+import { createLongWorkDeps } from './modules/longwork/runtime.js';
 
 const role = (process.env.APP_ROLE ?? 'web') as AppRole;
 if (!APP_ROLES.includes(role)) {
@@ -16,6 +17,7 @@ if (role === 'web') {
   const { createRuntime } = await import('./bootstrap.js');
   const runtime = await createRuntime(process.env); // throws BootstrapError naming missing settings → container exits
   const knowledge = createKnowledgeDeps(runtime);
+  const longwork = createLongWorkDeps(runtime);
   let roomHydrated = !runtime.pool;
   if (runtime.pool) {
     // T-41: command-room rows and the task queue live in the same PostgreSQL as everything else.
@@ -30,8 +32,8 @@ if (role === 'web') {
     });
     void hydrate();
   }
-  const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge,
-    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'room', check: async () => roomHydrated }], serveWeb: true, logger: true });
+  const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge, longWorkDeps: longwork,
+    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'longwork', check: longwork.ready }, { name: 'room', check: async () => roomHydrated }], serveWeb: true, logger: true });
   app.addHook('onClose', async () => { await knowledge.close?.(); await runtime.close(); });
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });
@@ -42,11 +44,14 @@ if (role === 'web') {
   process.once('SIGTERM', () => controller.abort());
   process.once('SIGINT', () => controller.abort());
   const knowledge = createKnowledgeDeps(runtime);
+  const longwork = createLongWorkDeps(runtime);
+  if (!await longwork.ready()) { await runtime.close(); throw Error('Longwork migrations are required before starting the worker'); }
   if (!await knowledgeReady(knowledge)) { await knowledge.close?.(); await runtime.close(); throw Error('Knowledge migrations are required before starting the worker'); }
   let lastHeartbeat = 0;
   try { await runWorker({ runtime, signal: controller.signal, heartbeatMs: 1000,
     ticks: [
       async () => { await tickKnowledge(knowledge, runtime.config.platformTenantId); },
+      async () => { await longwork.tick(); },
       // T-41 queue: one claim per tick for kinds with a registered handler; nothing claimed without one.
       async () => {
         if (!runtime.pool) return;
