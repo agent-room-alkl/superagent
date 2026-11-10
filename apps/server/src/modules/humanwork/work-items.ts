@@ -201,6 +201,15 @@ export class WorkInbox {
     return this.view(item);
   }
 
+  /** Record a read-back on the original approval. The approved payload and its hash stay put, so it cannot be submitted again. */
+  noteReadback(id: string, confirmed: boolean): WorkItem {
+    const item = this.require(id);
+    item.actionStatus = confirmed ? 'confirmed' : 'outcome_unknown';
+    item.systemVerified = confirmed;
+    item.evidenceSource = 'system';
+    return this.view(item);
+  }
+
   /** Unsaved edits block execution. They do not replace the approved payload. */
   stage(id: string, patch: Record<string, unknown>): WorkItem {
     const item = this.require(id);

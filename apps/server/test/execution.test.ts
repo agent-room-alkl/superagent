@@ -29,6 +29,8 @@ let ex: SopExecutor;
 let refuse: string | null;
 let authCalls: [string, string | null][];
 let versionId: string;
+let gateway: ToolGateway;
+let readActual: (toolId: string, params: Record<string, unknown>) => Record<string, unknown> | null;
 
 function publish(def: Record<string, unknown> = {}) {
   const v = sop.draft('invoice-intake', { requiredFields: ['invoiceNo', 'amount'], threshold: { field: 'amount', max: 5000 }, employeeStatus: 'active', graph, ...def } as never);
@@ -48,7 +50,9 @@ beforeEach(() => {
   ]);
   refuse = null;
   authCalls = [];
-  ex = new SopExecutor({ sop: () => sop, inbox: () => inbox, gateway: new ToolGateway(), tools: (id) => tools[id] ?? null, connectors, reviewerOf: () => 'owner-1', authorize: (_r, toolId, emp) => (authCalls.push([toolId, emp]), refuse) });
+  gateway = new ToolGateway();
+  readActual = (_toolId, params) => ({ ...params });
+  ex = new SopExecutor({ sop: () => sop, inbox: () => inbox, gateway, tools: (id) => tools[id] ?? null, connectors, reviewerOf: () => 'owner-1', authorize: (_r, toolId, emp) => (authCalls.push([toolId, emp]), refuse), readBackActual: (toolId, params) => readActual(toolId, params) });
   versionId = publish();
 });
 
@@ -287,6 +291,60 @@ describe('SOP executor main line', () => {
     expect(calls).toEqual([]);
     expect(ex.byInstance('t', 'mail_2')).toBeNull();
     expect(sop.instancesOf('invoice-intake')).toEqual([]);
+  });
+
+  async function unknownRun(eventId = 'mail-readback') {
+    connectors.set('erp.pay', () => { calls.push('pay'); throw new OutcomeUnknownError('timeout'); });
+    const run = await ex.start({ tenantId: 't', versionId, eventId, startedBy: 'owner-1', data: input });
+    const after = (await ex.onDecided(inbox.decide(approvalOf(run.id).id, 'owner-1', 1).item))!;
+    expect(after.status).toBe('outcome_unknown');
+    return after;
+  }
+
+  it('reconcile matches a fresh read without calling the write again, and a second call does not advance', async () => {
+    const run = await unknownRun();
+    const pays = () => calls.filter((c) => c === 'pay').length;
+    expect(pays()).toBe(1);
+    const callsBefore = gateway.snapshot().actions.reduce((n, a) => n + a.calls, 0);
+    const matched = ex.reconcile('t', run.id, 'owner-1');
+    expect(matched.status).toBe('completed');
+    expect(matched.steps.find((s) => s.nodeId === 'w')).toMatchObject({ status: 'done', readback: input });
+    expect(inbox.all().find((i) => i.id === approvalOf(run.id).id)).toMatchObject({ actionStatus: 'confirmed', evidenceSource: 'system', systemVerified: true });
+    expect(pays()).toBe(1);
+    expect(gateway.snapshot().actions.reduce((n, a) => n + a.calls, 0)).toBe(callsBefore);
+    expect(ex.list('t')).toHaveLength(1);
+    const again = ex.reconcile('t', run.id, 'owner-1');
+    expect(again.status).toBe('completed');
+    expect(pays()).toBe(1);
+    expect(inbox.decide(approvalOf(run.id).id, 'owner-1', 1).ok).toBe(false);
+  });
+
+  it('reconcile keeps the unknown run when the read does not match the approval', async () => {
+    const run = await unknownRun();
+    readActual = () => ({ ...input, amount: 1 });
+    const checked = ex.reconcile('t', run.id, 'owner-1');
+    expect(checked.status).toBe('outcome_unknown');
+    expect(checked.steps.find((s) => s.nodeId === 'w')!.readback).toEqual({ ...input, amount: 1 });
+    expect(inbox.all().find((i) => i.id === approvalOf(run.id).id)!.actionStatus).toBe('outcome_unknown');
+    expect(calls.filter((c) => c === 'pay')).toHaveLength(1);
+    expect(ex.list('t')).toHaveLength(1);
+  });
+
+  it('reconcile refuses a paused flow or an unbound tool without writing a result', async () => {
+    const paused = await unknownRun();
+    const before = structuredClone(ex.get('t', paused.id));
+    (sop.get(versionId).definition as { employeeStatus: string }).employeeStatus = 'paused';
+    expect(() => ex.reconcile('t', paused.id, 'owner-1')).toThrow(/暂停/);
+    expect(ex.get('t', paused.id)).toMatchObject({ status: 'outcome_unknown', steps: before.steps });
+    expect(calls.filter((c) => c === 'pay')).toHaveLength(1);
+
+    (sop.get(versionId).definition as { employeeStatus: string }).employeeStatus = 'active';
+    const unbound = await unknownRun('mail-unbound');
+    refuse = '工具 erp.pay 没有为该数字员工安装并绑定账号';
+    expect(() => ex.reconcile('t', unbound.id, 'owner-1')).toThrow(/没有为该数字员工安装并绑定/);
+    expect(ex.get('t', unbound.id).status).toBe('outcome_unknown');
+    expect(calls.filter((c) => c === 'pay')).toHaveLength(2);
+    expect(ex.list('t')).toHaveLength(2);
   });
 
   it('pins a stored version into an empty runtime without opening an instance', () => {

@@ -15,6 +15,8 @@ import { ExecutionError, SopExecutor, type Connector, type Execution } from './e
 
 /** Installed connectors by tool id. Production registers real ones; none registered means tool steps block. */
 export const connectors = new Map<string, Connector>();
+/** Read-only probes for an unknown write. Never the write connector. */
+export const readbacks = new Map<string, (params: Record<string, unknown>) => Record<string, unknown> | null>();
 
 function toolInfo(toolId: string) {
   try {
@@ -59,6 +61,11 @@ export const executionState = {
       }
     },
     commitBeforeCall: () => flushGateway(),
+    readBackActual: (toolId, params) => {
+      const read = readbacks.get(toolId);
+      if (!read) throw new ExecutionError('readback_unavailable', '只读核对暂不可用，没有重新提交外部动作', 503);
+      return read(params);
+    },
   }),
 };
 
@@ -221,6 +228,32 @@ export const executionModule: FastifyPluginAsync = async (app) => {
     return run;
   });
 
-  app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({ executions: executionState.current.list(req.user!.tenantId, req.query.sopId) }));
-  app.get<{ Params: { id: string } }>('/:id', async (req) => executionState.current.get(req.user!.tenantId, req.params.id));
+  app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({
+    executions: executionState.current.list(req.user!.tenantId, req.query.sopId).map((run) => present(run, req.user!.userId)),
+  }));
+  app.post<{ Params: { id: string } }>('/:id/reconcile', async (req) => present(await reconcile(req.user!.tenantId, req.params.id, req.user!.userId), req.user!.userId));
+  app.get<{ Params: { id: string } }>('/:id', async (req) => present(executionState.current.get(req.user!.tenantId, req.params.id), req.user!.userId));
 };
+
+function present(run: Execution, userId: string) {
+  return { ...run, canReconcile: run.status === 'outcome_unknown' && run.startedBy === userId };
+}
+
+/** Load one existing run and read it back. Does not start, claim, or open a second run. */
+export async function reconcile(tenantId: string, runId: string, actorUserId: string): Promise<Execution> {
+  try {
+    executionState.current.get(tenantId, runId);
+  } catch {
+    if (runStore) {
+      const saved = await loadRunById(runStore, runId);
+      if (saved && saved.tenantId === tenantId) {
+        await ensurePinned(saved.versionId);
+        executionState.current.remember(saved);
+      }
+    }
+  }
+  const run = executionState.current.reconcile(tenantId, runId, actorUserId);
+  await flushExecutions();
+  await flushGateway();
+  return run;
+}
