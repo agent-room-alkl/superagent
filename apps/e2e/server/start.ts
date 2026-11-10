@@ -14,6 +14,8 @@ import { connectors } from '../../server/src/modules/execution/index.js';
 import { LongWork } from '../../server/src/modules/longwork/service.js';
 import { MemoryLongWorkStore } from '../../server/src/modules/longwork/store.js';
 import { MailTrigger, type GraphSource } from '../../server/src/modules/longwork/graph.js';
+import type { LongWorkDeps } from '../../server/src/modules/longwork/http.js';
+import { payloadHash } from '../../server/src/modules/gateway/gateway.js';
 import { createCommandRoom, roomState } from '../../server/src/modules/room/index.js';
 
 if (process.env.NODE_ENV === 'production') throw new Error('the E2E server must never run in production');
@@ -51,15 +53,18 @@ function startStubProvider(): Promise<string> {
 const stub = await startStubProvider();
 const knowledge = createKnowledgeFixture();
 const longworkStore = new MemoryLongWorkStore();
-const longwork = new LongWork(longworkStore);
+let longClockOffset = 0;
+const longwork = new LongWork(longworkStore, () => Date.now() + longClockOffset);
 const longSources: GraphSource[] = [];
 const longMail = new MailTrigger(longwork, longSources, 'https://e2e.invalid/integrations/mail', {
   token: async () => { throw Error('Graph networking is not enabled in this fixture'); },
   secret: async () => { throw Error('No real client-state secret in this fixture'); },
 });
+const longDeps: LongWorkDeps = { work: longwork, mail: longMail, ready: async () => true, tick: async () => {} };
+const longLedger = new Map<string, { writes: number; reads: number; value?: Record<string, unknown> }>();
 const app = await buildApp({
   knowledgeDeps: knowledge.deps,
-  longWorkDeps: { work: longwork, mail: longMail, ready: async () => true, tick: async () => {} },
+  longWorkDeps: longDeps,
   serveWeb: true,
   auth: { mode: 'dev', platformTenantId: 'e2e' },
   setupDeps: {
@@ -68,6 +73,30 @@ const app = await buildApp({
     allowlist: new StaticAllowlist({ anthropic: { 'stub-large': { chat: true, tools: true, structured: true, stream: true } } }),
     fetchFn: (url, init) => fetch(String(url).replace('https://api.anthropic.com', stub), init),
   },
+});
+// Explicit synthetic external system for T-65. No network or real mail is used; the normal app API drives it.
+app.post<{ Body: { enabled: boolean } }>('/__e2e/longwork/driver', async req => {
+  if (!req.body.enabled) { delete longDeps.driver; return { enabled: false }; }
+  longDeps.driver = {
+    authorize: async () => true,
+    execute: async action => {
+      const row = longLedger.get(action.id) ?? { writes: 0, reads: 0 }; row.writes++; row.value = structuredClone(action.payload); longLedger.set(action.id, row);
+      if (action.payload.fixtureOutcome === 'unknown') throw Error('Synthetic lost response after submission');
+      return { status: 'succeeded', evidence: 'Synthetic submission receipt' };
+    },
+    readback: async action => {
+      const row = longLedger.get(action.id) ?? { writes: 0, reads: 0 }; row.reads++; longLedger.set(action.id, row);
+      return row.value && payloadHash(row.value) === action.hash
+        ? { status: 'succeeded', evidence: 'Synthetic external record matched the approved payload' }
+        : { status: 'unknown', evidence: 'Synthetic external record not found; no write was retried' };
+    },
+  };
+  return { enabled: true };
+});
+app.get('/__e2e/longwork/ledger', async () => Object.fromEntries(longLedger));
+app.post<{ Body: { ms: number } }>('/__e2e/longwork/advance', async req => {
+  if (!Number.isFinite(req.body.ms) || req.body.ms < 0 || req.body.ms > 86400000) throw Error('invalid_test_time');
+  longClockOffset += req.body.ms; await longwork.tick('e2e'); return { now: Date.now() + longClockOffset };
 });
 // Explicit synthetic waiting cases, only in this test entrypoint. The page and mutations still use the real API.
 app.post<{ Body: { project: string; staff: string; reviewer: string; key: string } }>('/__e2e/longwork/waits', async req => {

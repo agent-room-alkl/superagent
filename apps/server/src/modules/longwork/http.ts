@@ -3,10 +3,19 @@ import { canAccessProject } from '../../auth.js';
 import type { DateRule } from './dates.js';
 import type { ActionDriver, LongWork } from './service.js';
 import type { MailTrigger } from './graph.js';
+import type { Action } from './store.js';
 
 export interface LongWorkDeps { work: LongWork; mail?: MailTrigger; driver?: ActionDriver; ready(): Promise<boolean>; tick(): Promise<void> }
 function manager(req: FastifyRequest) { return req.user?.roles.some(r => r === 'admin' || r === 'owner'); }
 function reviewer(req: FastifyRequest) { return manager(req) || req.user?.roles.includes('reviewer'); }
+function actionVisible(req: FastifyRequest, a: Action) { return manager(req) || a.assigneeUserId === req.user!.userId || (!a.assigneeUserId && reviewer(req)); }
+function actionActor(req: FastifyRequest, a: Action) { return a.assigneeUserId ? a.assigneeUserId === req.user!.userId : reviewer(req); }
+async function batchActor(req: FastifyRequest, deps: LongWorkDeps, id: string, projectId: string) {
+  const rows = (await deps.work.snapshot(req.user!.tenantId)).actions.filter(a => a.batchId === id && a.projectId === projectId && a.payload.kind !== 'ambiguous_incoming');
+  if (!rows.length || !rows.every(a => actionVisible(req, a))) throw Error('not_found');
+  if (!rows.every(a => actionActor(req, a))) throw Error('forbidden');
+  return rows;
+}
 function project(req: FastifyRequest, id: unknown): string {
   if (typeof id !== 'string' || !id || !canAccessProject(req.user!, id)) throw Error('not_found'); return id;
 }
@@ -26,8 +35,9 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
     return {
       items: state.items.filter(i => canAccessProject(req.user!, i.projectId) && (manager(req) || i.assignee === req.user!.userId)),
       exceptions: reviewer(req) ? state.exceptions.filter(e => canAccessProject(req.user!, e.projectId)) : [],
-      actions: reviewer(req) ? state.actions.filter(a => canAccessProject(req.user!, a.projectId)) : [],
-      collections: reviewer(req) ? state.collections.filter(c => canAccessProject(req.user!, c.projectId)) : [],
+      actions: state.actions.filter(a => canAccessProject(req.user!, a.projectId) && actionVisible(req, a)),
+      collections: state.collections.filter(c => canAccessProject(req.user!, c.projectId) && (manager(req) || c.assigneeUserId === req.user!.userId || c.recipients.includes(req.user!.userId)))
+        .map(c => manager(req) || c.assigneeUserId === req.user!.userId ? c : { ...c, recipients: [req.user!.userId], replies: Object.fromEntries(Object.entries(c.replies).filter(([person]) => person === req.user!.userId)), missing: c.missing.filter(person => person === req.user!.userId) }),
     };
   });
   app.post<{ Params: { id: string }; Body: { projectId: string; itemId: string } }>('/exceptions/:id/resolve', async req => {
@@ -64,22 +74,35 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
     if (!Array.isArray(req.body.objects) || req.body.objects.length > 500) throw Error('invalid_objects');
     return deps!.work.dates(req.user!.tenantId, req.body.ruleId, req.body.version, req.body.objects);
   });
-  app.post<{ Body: { id: string; projectId: string; rows: Array<{ id: string; payload: Record<string, unknown> }> } }>('/batches', async req => {
+  app.post<{ Body: { id: string; projectId: string; assigneeUserId?: string; rows: Array<{ id: string; payload: Record<string, unknown>; clean?: boolean }> } }>('/batches', async req => {
     if (!manager(req)) throw Error('forbidden');
-    return deps!.work.createBatch(req.user!.tenantId, req.body.id, project(req, req.body.projectId), req.body.rows);
+    return deps!.work.createBatch(req.user!.tenantId, req.body.id, project(req, req.body.projectId), req.body.rows, req.body.assigneeUserId);
   });
   app.post<{ Params: { id: string }; Body: { projectId: string; selected: Array<{ id: string; hash: string }> } }>('/batches/:id/approve', async req => {
-    if (!reviewer(req)) throw Error('forbidden');
-    return deps!.work.approve(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.body.selected, req.user!.userId);
+    const p = project(req, req.body.projectId); await batchActor(req, deps!, req.params.id, p);
+    return deps!.work.approve(req.user!.tenantId, req.params.id, p, req.body.selected, req.user!.userId);
+  });
+  app.post<{ Params: { id: string }; Body: { projectId: string; selected: string[] } }>('/batches/:id/selection', async req => {
+    const p = project(req, req.body.projectId); await batchActor(req, deps!, req.params.id, p);
+    return deps!.work.selectRows(req.user!.tenantId, req.params.id, p, req.body.selected, req.user!.userId);
+  });
+  for (const mode of ['run-selected', 'readback'] as const) app.post<{ Params: { id: string }; Body: { projectId: string } }>(`/batches/:id/${mode}`, async (req, reply) => {
+    const p = project(req, req.body.projectId); await batchActor(req, deps!, req.params.id, p);
+    if (!deps!.driver) return reply.code(503).send({ error: 'connector_not_configured', message: 'No external action was submitted' });
+    return deps!.work.runSelected(req.user!.tenantId, req.params.id, p, req.user!.userId, deps!.driver, mode === 'readback');
   });
   app.post<{ Params: { id: string }; Body: { projectId: string } }>('/actions/:id/run', async (req, reply) => {
-    if (!reviewer(req)) throw Error('forbidden');
     const p = project(req, req.body.projectId);
+    const a = (await deps!.work.snapshot(req.user!.tenantId)).actions.find(a => a.id === req.params.id && a.projectId === p);
+    if (!a || !actionVisible(req, a)) throw Error('not_found');
+    if (!actionActor(req, a)) throw Error('forbidden');
     if (!deps!.driver) return reply.code(503).send({ error: 'connector_not_configured', message: 'No external action was submitted' });
     return deps!.work.run(req.user!.tenantId, req.params.id, p, deps!.driver);
   });
-  app.post<{ Body: { id: string; projectId: string; deadline: string; recipients: string[] } }>('/collections', async req => {
-    if (!manager(req)) throw Error('forbidden'); return deps!.work.collect(req.user!.tenantId, { ...req.body, projectId: project(req, req.body.projectId) });
+  app.post<{ Body: { id: string; projectId: string; deadline: string; recipients: string[]; assigneeUserId?: string; approverUserId?: string } }>('/collections', async req => {
+    if (!manager(req)) throw Error('forbidden');
+    const b = req.body; const assigneeUserId = b.assigneeUserId ?? req.user!.userId;
+    return deps!.work.collect(req.user!.tenantId, { id: b.id, projectId: project(req, b.projectId), deadline: b.deadline, recipients: b.recipients, assigneeUserId, approverUserId: b.approverUserId ?? assigneeUserId });
   });
   app.post<{ Params: { id: string }; Body: { projectId: string; evidence: string } }>('/collections/:id/reply', async req => {
     // Respondents are the authenticated user. Supplying another person's identity is never accepted.

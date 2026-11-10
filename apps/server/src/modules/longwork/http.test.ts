@@ -18,7 +18,7 @@ it('enforces identity, tenant/project boundaries, reviewer-only approval and res
     expect((await app.inject({ url: '/api/v1/long-items', headers: { 'x-dev-user': 'other|reviewer|other-project' } })).json().actions).toEqual([]);
     expect((await work.snapshot('other-tenant')).actions).toEqual([]);
     const approval = { method: 'POST' as const, url: '/api/v1/long-items/batches/batch/approve', payload: { projectId: 'p', selected: [{ id: 'r', hash: action.hash }] } };
-    expect((await app.inject({ ...approval, headers: staff })).statusCode).toBe(403);
+    expect((await app.inject({ ...approval, headers: staff })).statusCode).toBe(404); // unassigned legacy batch is hidden from staff
     expect((await app.inject({ ...approval, headers: { 'x-dev-user': 'other|reviewer|other-project' } })).statusCode).toBe(404);
     expect((await app.inject({ ...approval, headers: reviewer })).statusCode).toBe(200);
     const run = await app.inject({ method: 'POST', url: `/api/v1/long-items/actions/${action.id}/run`, headers: reviewer, payload: { projectId: 'p' } });

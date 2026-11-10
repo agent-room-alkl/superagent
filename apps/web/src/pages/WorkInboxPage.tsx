@@ -29,7 +29,7 @@ export interface ServerWorkItem {
   evidenceSource?: 'system' | 'human_report' | null;
   waitingOn?: string | null;
   canAct?: boolean;
-  longwork?: { type: 'match' | 'waiting'; id: string; projectId: string };
+  longwork?: { type: 'match' | 'waiting' | 'batch' | 'collection' | 'collection-response'; id: string; projectId: string };
 }
 
 interface InboxItem {
@@ -158,12 +158,16 @@ export function WorkInboxPage() {
 
   async function post(path: string, body: unknown, done?: (data: Record<string, unknown>) => string) {
     if (!open) return;
+    const areas = { match: 'exceptions', waiting: 'items', batch: 'batches', collection: 'collections', 'collection-response': 'collections' };
     const url = open.longwork
-      ? `/api/v1/long-items/${open.longwork.type === 'match' ? 'exceptions' : 'items'}/${open.longwork.id}/${path}`
+      ? `/api/v1/long-items/${areas[open.longwork.type]}/${encodeURIComponent(open.longwork.id)}/${path}`
       : `/api/v1/work-items/${open.id}/${path}`;
     const data = open.longwork ? { ...(body as Record<string, unknown>), projectId: open.longwork.projectId } : body;
-    const r = await api<Record<string, unknown>>(url, { method: 'POST', body: JSON.stringify(data) });
+    let r: { status: number; body: Record<string, unknown> };
+    try { r = await api<Record<string, unknown>>(url, { method: 'POST', body: JSON.stringify(data) }); }
+    catch { setMsg('没能确认处理结果，请核对当前状态；结果未知的动作只做回读。'); await load(); return; }
     if (r.status === 403) setMsg('这不是分给你的事项，只能查看。');
+    else if (r.body.error === 'connector_not_configured') setMsg('未配置可用连接器；没有提交任何外部动作，已批准的行仍保留。');
     else if (r.status >= 400) setMsg(decisionWhy(String(r.body.error ?? ''), `未完成：${String(r.body.error ?? r.status)}`));
     else setMsg(done ? done(r.body) : '');
     await load();
@@ -229,11 +233,14 @@ export function WorkInboxPage() {
   );
 }
 
-function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: (path: string, body: unknown, done?: (data: Record<string, unknown>) => string) => Promise<void> }) {
+type LongPost = (path: string, body: unknown, done?: (data: Record<string, unknown>) => string) => Promise<void>;
+function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: LongPost }) {
   const [candidate, setCandidate] = useState('');
   useEffect(() => setCandidate(''), [item.id]);
   const candidates = Array.isArray(item.payload.candidates) ? item.payload.candidates as Array<{ id: string; object?: string; person?: string; thread?: string }> : [];
   const sop = item.payload.sopStart as { reason?: string; versionId?: string; instanceId?: string } | undefined;
+  if (item.longwork?.type === 'batch') return <LongBatchDrawer item={item} msg={msg} post={post} />;
+  if (item.longwork?.type === 'collection' || item.longwork?.type === 'collection-response') return <CollectionDrawer item={item} msg={msg} post={post} />;
   return <aside className="panel exec-drawer" aria-label="工作项">
     <div className="exec-pane-head"><h2>{String(item.payload.title)}</h2><span>{KIND_LABEL[item.kind]}</span></div>
     <p data-status={item.status}>状态：{STATUS_LABEL[item.status] ?? item.status}</p>
@@ -253,6 +260,71 @@ function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; po
       </fieldset> : null}
     </> : item.canAct ? <button type="button" onClick={() => void post('close', {}, () => '原事项已关闭；没有执行或重复外部调用。')}>关闭原事项</button> : null}
     <p>来件、人工判断和阶段记录都不等于系统已核验外部结果。</p>
+    {msg ? <p role="status" aria-label="处理结果">{msg}</p> : null}
+  </aside>;
+}
+
+interface LongRow { id: string; hash: string; clean: boolean; selected: boolean; state: string; data: Record<string, unknown>; evidence?: string; approvedBy?: string }
+const LONG_STATE: Record<string, string> = { pending: '待批准', approved: '已批准，未提交', executing: '提交中，等待核对', succeeded: '已回读核验', failed: '失败或已取消，不会重发', unknown: '结果未知，只能回读' };
+function LongBatchDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: LongPost }) {
+  const [busy, setBusy] = useState(false);
+  const [optimistic, setOptimistic] = useState<string[] | null>(null);
+  useEffect(() => setOptimistic(null), [item.id]);
+  const rows = (item.payload.actionRows ?? []) as LongRow[];
+  const selected = rows.filter(r => r.selected && r.clean && ['pending', 'approved'].includes(r.state));
+  const act = item.canAct === true && item.status !== 'closed';
+  async function action(path: string, body: unknown, done?: (data: Record<string, unknown>) => string) {
+    setBusy(true); try { await post(path, body, done); } finally { setBusy(false); }
+  }
+  async function choose(next: string[]) {
+    setOptimistic(next); try { await action('selection', { selected: next }); } finally { setOptimistic(null); }
+  }
+  const result = (d: Record<string, unknown>) => {
+    const results = (d.results ?? []) as Array<{ error?: string }>;
+    return results.some(r => r.error) ? '部分行被阻止，请核对逐行状态；成功行不会重复。' : `已处理 ${results.length} 行；请核对逐行回读结果，成功行不会重复。`;
+  };
+  return <aside className="panel exec-drawer" aria-label="工作项" aria-busy={busy}>
+    <div className="exec-pane-head exec-long-head"><h2>{String(item.payload.title)}</h2><span>逐行动作批准</span></div>
+    <p>{String(item.payload.why)}</p>
+    {!item.canAct ? <p className="helper">这不是分给你的事项，只能查看。</p> : null}
+    <table className="exec-long-table" aria-label="持久批量明细"><thead><tr><th>行</th><th>选择</th><th>内容与状态</th></tr></thead><tbody>
+      {rows.map(r => <tr key={r.id} data-long-row={r.id}>
+        <td>{r.id}</td><td><label className="exec-long-select"><input type="checkbox" aria-label={`选择行 ${r.id}`} checked={optimistic && ['pending', 'approved'].includes(r.state) ? optimistic.includes(r.id) : r.selected} disabled={!act || busy || !r.clean || !['pending', 'approved'].includes(r.state)}
+          onChange={e => void choose(e.target.checked ? [...new Set([...selected.map(x => x.id), r.id])] : selected.filter(x => x.id !== r.id).map(x => x.id))} /></label></td>
+        <td><p>{!r.clean ? '冲突行，不能选择' : LONG_STATE[r.state] ?? r.state}</p><p>{text(r.data)}</p>
+          {r.approvedBy ? <p>批准人：{r.approvedBy}</p> : null}{r.evidence ? <p>结果凭证：{r.evidence}</p> : null}</td>
+      </tr>)}
+    </tbody></table>
+    {act ? <div className="stack exec-long-actions">
+      <button className="exec-action" type="button" disabled={busy || !selected.length} onClick={() => void action('approve', { selected: selected.map(r => ({ id: r.id, hash: r.hash })) }, () => '只批准所选行的当前内容，尚未执行。')}>批准所选行</button>
+      <button className="exec-action" type="button" disabled={busy || !rows.some(r => r.selected && r.state === 'approved')} onClick={() => void action('run-selected', {}, result)}>执行已批准的所选行</button>
+      <button className="exec-action" type="button" disabled={busy || !rows.some(r => ['unknown', 'executing'].includes(r.state))} onClick={() => void action('readback', {}, result)}>只回读未知结果</button>
+    </div> : null}
+    <p>失败或取消的行不会重发；修订需要新的批次和批准。未配置连接器时不提交任何外部动作。</p>
+    {msg ? <p role="status" aria-label="处理结果">{msg}</p> : null}
+  </aside>;
+}
+
+function CollectionDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: LongPost }) {
+  const [reply, setReply] = useState(String(item.payload.myResponse ?? ''));
+  useEffect(() => setReply(String(item.payload.myResponse ?? '')), [item.id, item.payload.myResponse]);
+  const personal = item.longwork?.type === 'collection-response';
+  const responses = (item.payload.responses ?? {}) as Record<string, string>;
+  return <aside className="panel exec-drawer" aria-label="工作项">
+    <div className="exec-pane-head"><h2>{String(item.payload.title)}</h2><span>{personal ? '我的回复' : '收集汇总'}</span></div>
+    <p>截止：{String(item.payload.due)} · {item.payload.collectionState === 'summarized' ? '已截止，汇总固定' : '收集中'}</p>
+    <p>{String(item.payload.why)}</p>
+    {personal ? <>
+      {item.payload.myResponse ? <p>我的已存回复（人工回报，未经系统核验）：{String(item.payload.myResponse)}</p> : <p>尚未回复。</p>}
+      {item.canAct ? <form className="stack exec-long-form" aria-label="我的收集回复" onSubmit={e => { e.preventDefault(); void post('reply', { evidence: reply }, () => '你的回复已保存；仍是人工回报，未经系统核验。'); }}>
+        <label className="field"><span>我的回复凭证</span><textarea aria-label="我的回复凭证" value={reply} onChange={e => setReply(e.target.value)} /></label>
+        <button className="exec-action" type="submit" disabled={!reply.trim()}>保存我的回复</button>
+      </form> : <p>截止后不能再改回复。</p>}
+    </> : <>
+      <p>已回读核验的请求发送：{String(item.payload.verifiedSends)} / {String(item.payload.requestCount)}。仅创建收集不代表请求已发送。</p>
+      <p>{item.payload.collectionState === 'summarized' ? '截止时未回复' : '尚未回复'}：{((item.payload.missing ?? []) as string[]).join('、') || '无'}</p>
+      <h3>收到的人工回复（未经系统核验）</h3><dl>{Object.entries(responses).map(([person, evidence]) => <div key={person}><dt>{person}</dt><dd>{evidence}</dd></div>)}</dl>
+    </>}
     {msg ? <p role="status" aria-label="处理结果">{msg}</p> : null}
   </aside>;
 }

@@ -84,9 +84,28 @@ An in-flight lease blocks an overlapping writer; after a crash or unknown result
 only**, never a second write. Successful submission is followed by authorized read-back before success is recorded.
 Other pending/failed rows and completed rows remain separate, so continuing a batch cannot resend its successes.
 
+Assigned batches are now shown as one parent in the unified inbox, with durable per-row selection, conflict/unknown
+rows first and success evidence on each row. `POST /batches` accepts `assigneeUserId`; an owner can inspect another
+person's batch but cannot act for them. Unassigned legacy batches remain role-protected in the backend and are
+read-only in the inbox until a workflow assigns responsibility. `selection`, `approve`, `run-selected` and
+`readback` routes recheck tenant/project/assignee on the server. A selected row cannot bypass its clean flag or
+approved payload hash. Completed rows are never selected for execution again; unknown rows use the separate
+read-only recovery action. A missing driver leaves approved rows untouched with an explicit unavailable result.
+
+Selection is optimistic only while its server save is pending; controls wait for that save before accepting the
+next decision. A rejected save reloads server state. Adapter failures are mapped to public error codes rather than
+echoing private backend details. Collection/internal reminder batch ids are reserved and cannot collide with an
+owner-created ordinary batch.
+
 Collections create one pending request intent per recipient, retain responses, and freeze the missing-recipient
 summary at the deadline. Responses are human evidence, not a claim of system verification. Request intents still
 show their independent delivery state; opening a collection is not proof that its requests were delivered.
+`assigneeUserId` identifies the collector and `approverUserId` identifies who decides the request-send batch. The
+collector sees the aggregate and actual verified-send count; recipients get a separate personal reply item and
+never receive another participant's evidence. Other participants' replies are removed from both the unified inbox
+and direct collection API views. The authenticated user id supplies the respondent identity, regardless of a body
+field. Deadline summaries are frozen by the worker; pending unsent requests are canceled. Response evidence remains
+explicitly human-reported and does not authorize a business action.
 
 `ActionDriver` is a trusted server adapter with call-time `authorize`, `execute`, and read-only `readback`. No driver
 is installed by default: `/actions/:id/run` returns 503 `connector_not_configured` without changing the approved
@@ -103,6 +122,9 @@ redirect prevention and simultaneous scans. `http.test.ts`: real authenticated F
 unknown write recovered with exactly one read and no repeated submission.
 `sop-starts.pg.test.ts`: independent publication/worker objects, concurrent atomic acceptance, injected failure
 after event claim, original-request recovery after publication/pause, version pinning and source revocation.
+`work-inbox.test.ts` and the real-browser `longwork-batch.spec.ts` cover assigned approvals, conflict rows,
+partial outcomes/read-back without resubmission, missing drivers, private responses and cutoff summaries.
+The PostgreSQL restart test also verifies batch selection/assignment and recipient isolation after reconstruction.
 
 Graph HTTP and business-tool tests use labeled synthetic adapters. They do not prove a live Microsoft 365 tenant
 has granted consent or that a real email/business write occurred. Existing prototype assertion mappings are not
