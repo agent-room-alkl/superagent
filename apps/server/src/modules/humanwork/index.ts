@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkItemKind, WorkItemRenderer } from '@superagent/shared';
 import { viewerFrom } from '../room/index.js';
-import { loadInbox, loadWorkItems, saveInbox, type Queryable } from './pg-inbox.js';
+import { loadInbox, loadWorkItems, saveInbox, updateWorkItem, type Queryable } from './pg-inbox.js';
 import { WorkInbox, type WorkItem } from './work-items.js';
 import type { LongWorkDeps } from '../longwork/http.js';
 import { longInbox } from '../longwork/inbox.js';
@@ -110,6 +110,7 @@ export const humanworkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = asyn
     const body = (req.body ?? {}) as { expectedVersion?: number };
     if (typeof body.expectedVersion !== 'number') return reply.code(400).send({ error: 'missing_version' });
     const result = inboxState.current.decide(who.id, who.userId, body.expectedVersion);
+    if (result.ok && inboxStore && typeof result.item.payload.executionId === 'string') await updateWorkItem(inboxStore, result.item);
     if (result.ok) for (const listener of workItemEvents.decided) await listener(result.item);
     return result;
   });

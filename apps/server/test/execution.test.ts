@@ -264,8 +264,11 @@ describe('SOP executor main line', () => {
     expect(run.instanceId).toBe('mail_1');
     expect(run.status).toBe('waiting_human');
     expect(approvalOf(run.id).id).toBe('wi_run_mail_1_h_action_approval');
-    inbox.remember({ ...approvalOf(run.id), status: 'decided' });
-    expect(approvalOf(run.id).status).toBe('open');
+    const open = approvalOf(run.id);
+    inbox.remember({ ...open, status: 'decided', decision: { by: 'owner-1', payloadHash: open.payloadHash } });
+    expect(approvalOf(run.id).status).toBe('decided');
+    inbox.remember({ ...open, status: 'open', decision: null });
+    expect(approvalOf(run.id).status).toBe('decided');
     expect(calls).toEqual(['lookup:INV-480']);
 
     const again = await ex.runClaimed(

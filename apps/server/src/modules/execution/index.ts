@@ -7,7 +7,7 @@ import { flushGateway, gatewayState } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
 import { flushInbox, inboxState, workItemEvents } from '../humanwork/index.js';
 import { insertWorkItem, loadWorkItemsForRun } from '../humanwork/pg-inbox.js';
-import { insertRun, loadClaimedRuns, loadRunByInstance, loadRuns, saveRuns, updateRun, type Queryable } from './pg-runs.js';
+import { insertRun, loadClaimedRuns, loadRunById, loadRunByInstance, loadRuns, saveRuns, updateRun, type Queryable } from './pg-runs.js';
 import { flushSop, sopState } from '../sop/index.js';
 import { loadVersionById } from '../sop/pg-sop.js';
 import { toolsState } from '../tools/index.js';
@@ -183,6 +183,18 @@ export async function runClaimedInstance(input: {
 }
 
 workItemEvents.decided.push(async (item) => {
+  const executionId = item.payload.executionId;
+  if (runStore && typeof executionId === 'string') {
+    try {
+      executionState.current.get(item.tenantId, executionId);
+    } catch {
+      const saved = await loadRunById(runStore, executionId);
+      if (saved && saved.tenantId === item.tenantId) {
+        await ensurePinned(saved.versionId);
+        executionState.current.remember(saved);
+      }
+    }
+  }
   const run = await executionState.current.onDecided(item);
   if (!run) return;
   await flushExecutions();
