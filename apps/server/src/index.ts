@@ -5,6 +5,8 @@ import { bindRuntimeDb, runtimeState } from './modules/runtime/index.js';
 import { bindRoomStore, hydrateRoom } from './modules/room/index.js';
 import { bindSopStore, hydrateSop } from './modules/sop/index.js';
 import { bindGatewayStore, hydrateGateway } from './modules/gateway/index.js';
+import { bindInboxStore, hydrateInbox } from './modules/humanwork/index.js';
+import { bindExecutionStore, hydrateExecutions } from './modules/execution/index.js';
 import { createKnowledgeDeps, knowledgeReady } from './modules/knowledge/runtime.js';
 import { tickKnowledge } from './modules/knowledge/worker.js';
 import { createLongWorkDeps } from './modules/longwork/runtime.js';
@@ -22,6 +24,8 @@ if (role === 'web') {
   const longwork = createLongWorkDeps(runtime);
   let roomHydrated = !runtime.pool;
   let sopHydrated = !runtime.pool;
+  let inboxHydrated = !runtime.pool;
+  let executionHydrated = !runtime.pool;
   if (runtime.pool) {
     // T-41: command-room rows, the task queue, and published SOP versions share one PostgreSQL.
     const pool = runtime.pool;
@@ -30,6 +34,8 @@ if (role === 'web') {
     bindRuntimeDb(db);
     bindSopStore(db);
     bindGatewayStore(db);
+    bindInboxStore(db);
+    bindExecutionStore(db);
     // Never crash the web role on an unreachable database: retry in the background and stay not-ready until done.
     const hydrate = () => hydrateRoom().then(() => { roomHydrated = true; }, (e: unknown) => {
       console.log(JSON.stringify({ msg: 'room hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
@@ -46,9 +52,19 @@ if (role === 'web') {
       setTimeout(hydrateGatewayRows, 5000).unref();
     });
     void hydrateGatewayRows();
+    const hydrateInboxRows = () => hydrateInbox().then(() => { inboxHydrated = true; }, (e: unknown) => {
+      console.log(JSON.stringify({ msg: 'inbox hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
+      setTimeout(hydrateInboxRows, 5000).unref();
+    });
+    void hydrateInboxRows();
+    const hydrateExecutionRows = () => hydrateExecutions().then(() => { executionHydrated = true; }, (e: unknown) => {
+      console.log(JSON.stringify({ msg: 'execution hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
+      setTimeout(hydrateExecutionRows, 5000).unref();
+    });
+    void hydrateExecutionRows();
   }
   const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge, longWorkDeps: longwork,
-    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'longwork', check: longwork.ready }, { name: 'room', check: async () => roomHydrated }, { name: 'sop', check: async () => sopHydrated }], serveWeb: true, logger: true });
+    readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'longwork', check: longwork.ready }, { name: 'room', check: async () => roomHydrated }, { name: 'sop', check: async () => sopHydrated }, { name: 'inbox', check: async () => inboxHydrated }, { name: 'execution', check: async () => executionHydrated }], serveWeb: true, logger: true });
   app.addHook('onClose', async () => { await knowledge.close?.(); await runtime.close(); });
   const port = Number(process.env.PORT ?? 8080);
   await app.listen({ host: '0.0.0.0', port });

@@ -62,6 +62,13 @@ export interface ExecutorDeps {
    * Returns null when allowed, otherwise the reason. The gateway refuses and nothing is invoked when it is not null.
    */
   authorize: (execution: Execution, toolId: string, employeeId: string | null) => string | null;
+  /** Who is bound to this tool at the moment of the call. Omitted in tests that do not check the snapshot. */
+  identityOf?: (employeeId: string, toolId: string) => { userId: string; toolInstallationId: string } | null;
+  /**
+   * Persist the gateway snapshot after a row is marked executing and before the connector runs.
+   * Absent in unit tests, which call the tool without a database.
+   */
+  commitBeforeCall?: () => Promise<void>;
 }
 
 export class ExecutionError extends Error {
@@ -93,6 +100,23 @@ export class SopExecutor {
 
   constructor(private deps: ExecutorDeps) {}
 
+  snapshot(): { runs: Execution[]; seq: number } {
+    return { runs: [...this.runs.values()].map((run) => structuredClone(run)), seq: this.seq };
+  }
+
+  /** Replaces the in-memory runs. The inbox and SOP version must already be loaded. */
+  load(saved: { runs: Execution[]; seq: number }): void {
+    this.runs.clear();
+    let seq = saved.seq;
+    for (const run of saved.runs) {
+      const copy = structuredClone(run);
+      this.runs.set(copy.id, copy);
+      const n = Number(/^ex_(\d+)$/.exec(copy.id)?.[1] ?? 0);
+      if (n > seq) seq = n;
+    }
+    this.seq = seq;
+  }
+
   /** Runs of one tenant only; another tenant's run is indistinguishable from a missing one. */
   list(tenantId: string, sopId?: string): Execution[] {
     return [...this.runs.values()].filter((r) => r.tenantId === tenantId && (!sopId || r.sopId === sopId)).map((r) => structuredClone(r));
@@ -105,7 +129,7 @@ export class SopExecutor {
   }
 
   /** Trigger: open a SOP instance for a published version and run until a human step or the end. */
-  start(input: { tenantId: string; versionId: string; eventId: string; startedBy: string; data: Record<string, unknown> }): Execution {
+  async start(input: { tenantId: string; versionId: string; eventId: string; startedBy: string; data: Record<string, unknown> }): Promise<Execution> {
     const sop = this.deps.sop();
     const version = sop.get(input.versionId);
     if (version.status !== 'published') throw new ExecutionError('not_published', 'only a published SOP version can run');
@@ -139,12 +163,12 @@ export class SopExecutor {
       run.steps[0]!.workItemId = item.id;
       return structuredClone(run);
     }
-    this.advance(run, graph);
+    await this.advance(run, graph);
     return structuredClone(run);
   }
 
   /** Called when a work item is decided. Resumes the run whose approval it is; ignores everything else. */
-  onDecided(item: WorkItem): Execution | null {
+  async onDecided(item: WorkItem): Promise<Execution | null> {
     const executionId = typeof item.payload.executionId === 'string' ? item.payload.executionId : null;
     if (!executionId || item.kind !== 'action_approval') return null;
     const run = this.runs.get(executionId);
@@ -154,11 +178,11 @@ export class SopExecutor {
     if (!review) return null;
     review.status = 'done';
     review.detail = `已由 ${item.decision?.by ?? '审核人'} 批准`;
-    this.advance(run, graph);
+    await this.advance(run, graph);
     return structuredClone(run);
   }
 
-  private advance(run: Execution, graph: SopGraph): void {
+  private async advance(run: Execution, graph: SopGraph): Promise<void> {
     run.status = 'running';
     for (const step of run.steps) {
       if (step.status === 'done') continue;
@@ -180,7 +204,7 @@ export class SopExecutor {
         return;
       }
       if (node.kind === 'tool') {
-        if (!this.runTool(run, step, node.ref ?? '')) return;
+        if (!(await this.runTool(run, step, node.ref ?? ''))) return;
         continue;
       }
       step.status = 'done'; // trigger / agent / employee: routing only
@@ -188,7 +212,7 @@ export class SopExecutor {
     run.status = 'completed';
   }
 
-  private runTool(run: Execution, step: ExecutionStep, toolId: string): boolean {
+  private async runTool(run: Execution, step: ExecutionStep, toolId: string): Promise<boolean> {
     const tool = this.deps.tools(toolId);
     const connector = this.deps.connectors.get(toolId);
     if (!tool || !tool.available) return this.block(run, step, `工具 ${toolId} 不可用（未发布、未部署或未完成账号绑定）`);
@@ -206,8 +230,13 @@ export class SopExecutor {
       approvalHash = payloadHash(params);
     }
     const employeeId = this.employeeFor(run, step.nodeId);
+    const bound = employeeId && this.deps.identityOf ? this.deps.identityOf(employeeId, toolId) : null;
     let refusal: string | null = null;
-    const result = this.deps.gateway.execute({
+    const call = () => {
+      const r = connector(params);
+      return r ?? undefined;
+    };
+    const reserved = this.deps.gateway.reserve({
       tenantId: run.tenantId,
       instanceId: run.instanceId,
       stepId: step.nodeId,
@@ -216,12 +245,20 @@ export class SopExecutor {
       payload: params,
       intended: write ? params : undefined,
       approvalHash,
+      identity: employeeId && bound ? { employeeId, userId: bound.userId, toolInstallationId: bound.toolInstallationId } : undefined,
       authorize: () => (refusal = this.deps.authorize(structuredClone(run), toolId, employeeId)) === null,
-      call: () => {
-        const r = connector(params);
-        return r ?? undefined;
-      },
+      call,
     });
+    if (reserved.pending && this.deps.commitBeforeCall) {
+      try {
+        await this.deps.commitBeforeCall();
+      } catch (error) {
+        this.deps.gateway.abort(reserved.action.idempotencyKey);
+        const message = error instanceof Error ? error.message : 'commit_failed';
+        return this.block(run, step, `动作尚未落盘，未调用外部系统：${message}`);
+      }
+    }
+    const result = reserved.pending ? this.deps.gateway.finish(reserved.action.idempotencyKey, call) : reserved;
     step.actionId = result.action.id;
     step.readback = result.action.readback;
     if (result.action.status === 'confirmed') {

@@ -5,7 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { flushGateway, gatewayState } from '../gateway/index.js';
 import { employeesState } from '../employees/index.js';
-import { inboxState, workItemEvents } from '../humanwork/index.js';
+import { flushInbox, inboxState, workItemEvents } from '../humanwork/index.js';
+import { loadRuns, saveRuns, type Queryable } from './pg-runs.js';
 import { flushSop, sopState } from '../sop/index.js';
 import { toolsState } from '../tools/index.js';
 import { ExecutionError, SopExecutor, type Connector } from './executor.js';
@@ -46,12 +47,41 @@ export const executionState = {
     connectors,
     reviewerOf: (run) => run.startedBy,
     authorize,
+    identityOf: (employeeId, toolId) => {
+      const bound = toolsState.current.callable(employeeId).find((t) => t.toolId === toolId);
+      if (!bound) return null;
+      try {
+        return { userId: employeesState.current.get(employeeId).owner, toolInstallationId: `${toolId}:${employeeId}@${bound.version}+${bound.bindingVersion}` };
+      } catch {
+        return null;
+      }
+    },
+    commitBeforeCall: () => flushGateway(),
   }),
 };
 
-workItemEvents.decided.push((item) => {
-  const run = executionState.current.onDecided(item);
-  if (run) void flushGateway();
+let runStore: Queryable | null = null;
+
+export function bindExecutionStore(db: Queryable | null): void {
+  runStore = db;
+}
+
+export async function flushExecutions(): Promise<void> {
+  if (runStore) await saveRuns(runStore, executionState.current.snapshot());
+}
+
+export async function hydrateExecutions(): Promise<void> {
+  if (!runStore) return;
+  const saved = await loadRuns(runStore);
+  if (saved) executionState.current.load(saved);
+}
+
+workItemEvents.decided.push(async (item) => {
+  const run = await executionState.current.onDecided(item);
+  if (!run) return;
+  await flushExecutions();
+  await flushInbox();
+  await flushGateway();
 });
 
 export const executionModule: FastifyPluginAsync = async (app) => {
@@ -64,8 +94,10 @@ export const executionModule: FastifyPluginAsync = async (app) => {
   app.post<{ Body: { versionId?: string; eventId?: string; input?: Record<string, unknown> } }>('/', async (req, reply) => {
     const b = req.body ?? {};
     if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
-    const run = executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
+    const run = await executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
     await flushSop();
+    await flushExecutions();
+    await flushInbox();
     await flushGateway();
     reply.code(201);
     return run;
