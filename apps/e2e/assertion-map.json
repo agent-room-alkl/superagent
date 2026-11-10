@@ -5,9 +5,8 @@
    "id": "qa-human-work#1",
    "suite": "qa-human-work",
    "assertion": "Queue title expanded",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#2",
@@ -259,9 +258,8 @@
    "id": "qa-human-work#37",
    "suite": "qa-human-work",
    "assertion": "Project filter also scopes batch contents",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "not proven by the T-57 inbox page (queue title wording; batch rows have no per-row project)"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/work-inbox.spec.ts"
   },
   {
    "id": "qa-human-work#38",
@@ -781,9 +779,9 @@
    "id": "qa-enablement#27",
    "suite": "qa-enablement",
    "assertion": "Original business request created only explicitly",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "original-request resume and SOP gates live in the runtime"
+   "status": "unit",
+   "ref": "apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts",
+   "e2eOwner": "T-41 original-request page (follow-up E2E when that screen ships)"
   },
   {
    "id": "qa-enablement#28",
@@ -837,9 +835,9 @@
    "id": "qa-enablement#34",
    "suite": "qa-enablement",
    "assertion": "Tool availability does not bypass SOP confirmation",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "original-request resume and SOP gates live in the runtime"
+   "status": "unit",
+   "ref": "apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts",
+   "e2eOwner": "T-41 original-request page (follow-up E2E when that screen ships)"
   },
   {
    "id": "qa-enablement#35",
@@ -852,25 +850,25 @@
    "id": "qa-enablement#36",
    "suite": "qa-enablement",
    "assertion": "Manual fallback requires explicit owner choice",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "original-request resume and SOP gates live in the runtime"
+   "status": "unit",
+   "ref": "apps/server/src/modules/sop/original-request.test.ts",
+   "e2eOwner": "T-41 original-request page (follow-up E2E when that screen ships)"
   },
   {
    "id": "qa-enablement#37",
    "suite": "qa-enablement",
    "assertion": "Paused original request does not auto-resume",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "original-request resume and SOP gates live in the runtime"
+   "status": "unit",
+   "ref": "apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts",
+   "e2eOwner": "T-41 original-request page (follow-up E2E when that screen ships)"
   },
   {
    "id": "qa-enablement#38",
    "suite": "qa-enablement",
    "assertion": "Same original request resumes without duplicate or fabricated execution",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "original-request resume and SOP gates live in the runtime"
+   "status": "unit",
+   "ref": "apps/server/src/modules/sop/original-request.test.ts / apps/server/src/modules/sop/original-request.http.test.ts",
+   "e2eOwner": "T-41 original-request page (follow-up E2E when that screen ships)"
   },
   {
    "id": "qa-enablement#39",

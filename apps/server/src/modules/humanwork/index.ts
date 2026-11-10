@@ -57,7 +57,7 @@ export const humanworkModule: FastifyPluginAsync = async (app) => {
       payload?: Record<string, unknown>;
       waitingOn?: string;
       assigneeUserId?: string;
-      rows?: Array<{ id: string; clean: boolean; selected: boolean }>;
+      rows?: Array<{ id: string; clean: boolean; selected: boolean; projectId?: string | null }>;
     };
     if (!body.kind || !KINDS.has(body.kind)) return reply.code(400).send({ error: 'bad_kind' });
     if (body.renderer && !RENDERERS.has(body.renderer)) return reply.code(400).send({ error: 'bad_renderer' });
