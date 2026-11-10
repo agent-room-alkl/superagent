@@ -1,6 +1,7 @@
 import { validateSopGraph } from '@superagent/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import { toolsState } from '../tools/index.js';
+import { loadSopSnapshot, saveSopSnapshot, type Queryable } from './pg-sop.js';
 import { OriginalRequests } from './original-request.js';
 import { setSopGraphCheck, SopRuntime, type SopDefinition, type SopGraphContext } from './sop.js';
 
@@ -8,6 +9,25 @@ setSopGraphCheck((graph, context) => validateSopGraph(graph, context as Paramete
 
 export const sopState = { current: new SopRuntime() };
 export const originalRequestState = { current: new OriginalRequests() };
+
+let sopStore: Queryable | null = null;
+
+export function bindSopStore(db: Queryable | null): void {
+  sopStore = db;
+}
+
+/** Writes the process cache. A worker reads the tables; it does not trust this process's memory. */
+export async function flushSop(): Promise<void> {
+  if (sopStore) await saveSopSnapshot(sopStore, sopState.current.snapshot());
+}
+
+/** Replaces the process cache when Postgres already has versions, instances, or claimed events. */
+export async function hydrateSop(): Promise<void> {
+  if (!sopStore) return;
+  const saved = await loadSopSnapshot(sopStore);
+  if (saved.versions.length === 0 && saved.instances.length === 0 && saved.eventKeys.length === 0) return;
+  sopState.current = SopRuntime.restore(saved);
+}
 
 /** Latest version must itself be published. A newer draft means the flow is no longer the confirmed one. */
 function resumeFacts(toolId: string, target: string): { sopConfirmed: boolean; toolUsable: boolean } {
@@ -47,7 +67,9 @@ export const sopModule: FastifyPluginAsync = async (app) => {
   app.post('/drafts', async (req, reply) => {
     const body = (req.body ?? {}) as { sopId?: string; definition?: SopDefinition };
     if (!body.sopId || !body.definition) return reply.code(400).send({ error: 'missing_fields' });
-    return sopState.current.draft(body.sopId, body.definition);
+    const version = sopState.current.draft(body.sopId, body.definition);
+    await flushSop();
+    return version;
   });
 
   app.put('/drafts/:id', async (req, reply) => {
@@ -55,7 +77,9 @@ export const sopModule: FastifyPluginAsync = async (app) => {
     const body = (req.body ?? {}) as { definition?: SopDefinition };
     if (!body.definition) return reply.code(400).send({ error: 'missing_fields' });
     try {
-      return sopState.current.revise(params.id, body.definition);
+      const version = sopState.current.revise(params.id, body.definition);
+      await flushSop();
+      return version;
     } catch (error) {
       return reply.code(404).send({ error: error instanceof Error ? error.message : 'version_not_found' });
     }
@@ -83,7 +107,9 @@ export const sopModule: FastifyPluginAsync = async (app) => {
       tools?: SopGraphContext['tools'];
     };
     try {
-      return sopState.current.validate(params.id, { employees: body.employees ?? {}, tools: body.tools ?? {} });
+      const result = sopState.current.validate(params.id, { employees: body.employees ?? {}, tools: body.tools ?? {} });
+      await flushSop();
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'validation_failed';
       return reply.code(message === 'version_not_found' ? 404 : 409).send({ error: message });
@@ -98,7 +124,9 @@ export const sopModule: FastifyPluginAsync = async (app) => {
       tools?: SopGraphContext['tools'];
     };
     try {
-      return sopState.current.publish(params.id, body.effectiveAt, { employees: body.employees ?? {}, tools: body.tools ?? {} });
+      const version = sopState.current.publish(params.id, body.effectiveAt, { employees: body.employees ?? {}, tools: body.tools ?? {} });
+      await flushSop();
+      return version;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'validation_failed';
       const issues = (error as { issues?: unknown }).issues;

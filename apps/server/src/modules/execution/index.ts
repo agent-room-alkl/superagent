@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { ToolGateway } from '../gateway/gateway.js';
 import { employeesState } from '../employees/index.js';
 import { inboxState, workItemEvents } from '../humanwork/index.js';
-import { sopState } from '../sop/index.js';
+import { flushSop, sopState } from '../sop/index.js';
 import { toolsState } from '../tools/index.js';
 import { ExecutionError, SopExecutor, type Connector } from './executor.js';
 
@@ -64,7 +64,9 @@ export const executionModule: FastifyPluginAsync = async (app) => {
     const b = req.body ?? {};
     if (!b.versionId || !b.eventId || typeof b.input !== 'object' || b.input === null) return reply.code(400).send({ error: 'missing_fields' });
     reply.code(201);
-    return executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
+    const run = executionState.current.start({ tenantId: req.user!.tenantId, versionId: b.versionId, eventId: b.eventId, startedBy: req.user!.userId, data: b.input });
+    await flushSop();
+    return run;
   });
 
   app.get<{ Querystring: { sopId?: string } }>('/', async (req) => ({ executions: executionState.current.list(req.user!.tenantId, req.query.sopId) }));
