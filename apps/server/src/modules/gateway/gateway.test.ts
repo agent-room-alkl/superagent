@@ -145,3 +145,31 @@ it('an unknown write is resolved by read-back only, and the identity snapshot st
   assert.equal(matched.action.calls, 1);
   assert.equal(calls, 1);
 });
+
+it('a reloaded gateway read-back does not send the write again', () => {
+  const gateway = new ToolGateway();
+  const hash = payloadHash(base.payload);
+  const key = `${base.tenantId}:${base.instanceId}:${base.stepId}:${base.businessKey}`;
+  gateway.execute({
+    ...base,
+    approvalHash: hash,
+    authorize: () => true,
+    call: () => { throw new OutcomeUnknownError(); },
+  });
+  const restored = new ToolGateway();
+  restored.load(gateway.snapshot());
+  let calls = 0;
+  const again = restored.execute({
+    ...base,
+    approvalHash: hash,
+    authorize: () => true,
+    call: () => { calls += 1; return { actual: { amount: 40 } }; },
+  });
+  assert.equal(again.invoked, false);
+  assert.equal(again.action.status, 'outcome_unknown');
+  const read = restored.readBack(key, { amount: 40 });
+  assert.equal(read.invoked, false);
+  assert.equal(read.action.status, 'confirmed');
+  assert.equal(read.action.calls, 1);
+  assert.equal(calls, 0);
+});

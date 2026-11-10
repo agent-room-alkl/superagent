@@ -21,6 +21,28 @@ export async function flushSop(): Promise<void> {
   if (sopStore) await saveSopSnapshot(sopStore, sopState.current.snapshot());
 }
 
+/**
+ * Applies a change and then writes it. If the write fails, or the change throws after mutating the runtime,
+ * the process cache returns to the snapshot from before the call. A failed database write must not look published.
+ */
+export async function commitSop<T>(change: () => T): Promise<T> {
+  const before = sopStore ? sopState.current.snapshot() : null;
+  let result: T;
+  try {
+    result = change();
+  } catch (error) {
+    if (before) sopState.current = SopRuntime.restore(before);
+    throw error;
+  }
+  try {
+    await flushSop();
+  } catch (error) {
+    if (before) sopState.current = SopRuntime.restore(before);
+    throw error;
+  }
+  return result;
+}
+
 /** Replaces the process cache when Postgres already has versions, instances, or claimed events. */
 export async function hydrateSop(): Promise<void> {
   if (!sopStore) return;
@@ -67,9 +89,7 @@ export const sopModule: FastifyPluginAsync = async (app) => {
   app.post('/drafts', async (req, reply) => {
     const body = (req.body ?? {}) as { sopId?: string; definition?: SopDefinition };
     if (!body.sopId || !body.definition) return reply.code(400).send({ error: 'missing_fields' });
-    const version = sopState.current.draft(body.sopId, body.definition);
-    await flushSop();
-    return version;
+    return commitSop(() => sopState.current.draft(body.sopId, body.definition));
   });
 
   app.put('/drafts/:id', async (req, reply) => {
@@ -77,11 +97,11 @@ export const sopModule: FastifyPluginAsync = async (app) => {
     const body = (req.body ?? {}) as { definition?: SopDefinition };
     if (!body.definition) return reply.code(400).send({ error: 'missing_fields' });
     try {
-      const version = sopState.current.revise(params.id, body.definition);
-      await flushSop();
-      return version;
+      return await commitSop(() => sopState.current.revise(params.id, body.definition));
     } catch (error) {
-      return reply.code(404).send({ error: error instanceof Error ? error.message : 'version_not_found' });
+      const message = error instanceof Error ? error.message : 'version_not_found';
+      if (message !== 'version_not_found') throw error;
+      return reply.code(404).send({ error: message });
     }
   });
 
@@ -107,11 +127,10 @@ export const sopModule: FastifyPluginAsync = async (app) => {
       tools?: SopGraphContext['tools'];
     };
     try {
-      const result = sopState.current.validate(params.id, { employees: body.employees ?? {}, tools: body.tools ?? {} });
-      await flushSop();
-      return result;
+      return await commitSop(() => sopState.current.validate(params.id, { employees: body.employees ?? {}, tools: body.tools ?? {} }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'validation_failed';
+      if (message !== 'version_not_found' && message !== 'already_published' && message !== 'graph_context_missing') throw error;
       return reply.code(message === 'version_not_found' ? 404 : 409).send({ error: message });
     }
   });
@@ -124,11 +143,10 @@ export const sopModule: FastifyPluginAsync = async (app) => {
       tools?: SopGraphContext['tools'];
     };
     try {
-      const version = sopState.current.publish(params.id, body.effectiveAt, { employees: body.employees ?? {}, tools: body.tools ?? {} });
-      await flushSop();
-      return version;
+      return await commitSop(() => sopState.current.publish(params.id, body.effectiveAt, { employees: body.employees ?? {}, tools: body.tools ?? {} }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'validation_failed';
+      if (!['version_not_found', 'validation_stale', 'bad_effective_at', 'graph_invalid', 'graph_context_missing'].includes(message)) throw error;
       const issues = (error as { issues?: unknown }).issues;
       return reply.code(message === 'version_not_found' ? 404 : 409).send(issues ? { error: message, issues } : { error: message });
     }

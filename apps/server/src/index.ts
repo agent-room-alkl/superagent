@@ -4,6 +4,7 @@ import { dispatchBound, runWorker } from './worker.js';
 import { bindRuntimeDb, runtimeState } from './modules/runtime/index.js';
 import { bindRoomStore, hydrateRoom } from './modules/room/index.js';
 import { bindSopStore, hydrateSop } from './modules/sop/index.js';
+import { bindGatewayStore, hydrateGateway } from './modules/gateway/index.js';
 import { createKnowledgeDeps, knowledgeReady } from './modules/knowledge/runtime.js';
 import { tickKnowledge } from './modules/knowledge/worker.js';
 import { createLongWorkDeps } from './modules/longwork/runtime.js';
@@ -28,6 +29,7 @@ if (role === 'web') {
     bindRoomStore(db);
     bindRuntimeDb(db);
     bindSopStore(db);
+    bindGatewayStore(db);
     // Never crash the web role on an unreachable database: retry in the background and stay not-ready until done.
     const hydrate = () => hydrateRoom().then(() => { roomHydrated = true; }, (e: unknown) => {
       console.log(JSON.stringify({ msg: 'room hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
@@ -39,6 +41,11 @@ if (role === 'web') {
       setTimeout(hydrateSopRows, 5000).unref();
     });
     void hydrateSopRows();
+    const hydrateGatewayRows = () => hydrateGateway().then(() => undefined, (e: unknown) => {
+      console.log(JSON.stringify({ msg: 'gateway hydration failed; retrying', error: e instanceof Error ? e.message : String(e) }));
+      setTimeout(hydrateGatewayRows, 5000).unref();
+    });
+    void hydrateGatewayRows();
   }
   const app = await buildApp({ ...runtime.app, knowledgeDeps: knowledge, longWorkDeps: longwork,
     readiness: [...runtime.app.readiness, { name: 'knowledge', check: () => knowledgeReady(knowledge) }, { name: 'longwork', check: longwork.ready }, { name: 'room', check: async () => roomHydrated }, { name: 'sop', check: async () => sopHydrated }], serveWeb: true, logger: true });
