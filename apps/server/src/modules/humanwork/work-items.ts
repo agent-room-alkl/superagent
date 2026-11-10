@@ -117,16 +117,26 @@ export class WorkInbox {
     return [...this.items.values()].map((item) => this.view(item));
   }
 
+  /** Detached item for a caller that has already passed actor/visibility checks. */
+  get(id: string): WorkItem { return this.view(this.require(id)); }
+
   snapshot(): { items: WorkItem[]; seq: number } {
     return { items: [...this.items.values()].map((item) => structuredClone(item)), seq: this.seq };
   }
 
-  /** Add an item stored for one run. A decided or newer row replaces an open copy already in memory. */
+  /** Add an item stored for one run. A decided row replaces an open copy. A system read-back on the same version replaces an unverified copy and leaves the approved payload in place. */
   remember(item: WorkItem): WorkItem {
     const existing = this.items.get(item.id);
     const incomingDecided = item.status === 'decided' || item.decision !== null;
     const existingOpen = existing && existing.status === 'open' && !existing.decision;
-    if (existing && !(incomingDecided && existingOpen) && item.payloadVersion <= existing.payloadVersion) return this.view(existing);
+    if (existing && !(incomingDecided && existingOpen) && item.payloadVersion <= existing.payloadVersion) {
+      if (item.payloadVersion === existing.payloadVersion && item.payloadHash === existing.payloadHash && item.systemVerified && !existing.systemVerified) {
+        existing.actionStatus = item.actionStatus;
+        existing.systemVerified = true;
+        existing.evidenceSource = item.evidenceSource;
+      }
+      return this.view(existing);
+    }
     const copy = structuredClone(item);
     this.items.set(copy.id, copy);
     const n = Number(/^wi_(\d+)$/.exec(copy.id)?.[1] ?? 0);

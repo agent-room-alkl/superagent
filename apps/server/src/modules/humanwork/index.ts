@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkItemKind, WorkItemRenderer } from '@superagent/shared';
 import { viewerFrom } from '../room/index.js';
-import { loadInbox, loadWorkItems, saveInbox, updateWorkItem, type Queryable } from './pg-inbox.js';
+import { loadInbox, loadWorkItems, loadWorkItemsForRun, saveInbox, updateWorkItem, type Queryable } from './pg-inbox.js';
 import { WorkInbox, type WorkItem } from './work-items.js';
 import type { LongWorkDeps } from '../longwork/http.js';
 import { longInbox } from '../longwork/inbox.js';
@@ -114,8 +114,29 @@ export const humanworkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = asyn
     if (!who) return reply;
     const body = (req.body ?? {}) as { expectedVersion?: number };
     if (typeof body.expectedVersion !== 'number') return reply.code(400).send({ error: 'missing_version' });
+    const original = inboxState.current.get(who.id);
+    const executionId = typeof original.payload.executionId === 'string' ? original.payload.executionId : null;
+    let durable: WorkItem | undefined;
+    if (inboxStore && executionId) {
+      durable = (await loadWorkItemsForRun(inboxStore, executionId)).find(item => item.id === who.id);
+      // Claimed runs require their own row; legacy manual runs can still use the shared inbox snapshot.
+      if (!durable && executionId.startsWith('run_')) return reply.code(409).send({ ok: false, reason: 'approval_not_durable' });
+      if (durable) {
+        inboxState.current.remember(durable);
+        if (!acting(req, reply)) return reply;
+        if (durable.payloadVersion !== body.expectedVersion || durable.payloadHash !== original.payloadHash)
+          return reply.code(409).send({ ok: false, reason: 'version_conflict' });
+      }
+    }
     const result = inboxState.current.decide(who.id, who.userId, body.expectedVersion);
-    if (result.ok && inboxStore && typeof result.item.payload.executionId === 'string') await updateWorkItem(inboxStore, result.item);
+    if (result.ok && inboxStore && executionId) {
+      const wrote = await updateWorkItem(inboxStore, result.item);
+      if (!wrote && (durable || executionId.startsWith('run_'))) {
+        const fresh = (await loadWorkItemsForRun(inboxStore, executionId)).find(item => item.id === who.id);
+        if (fresh) inboxState.current.remember(fresh);
+        return reply.code(409).send({ ok: false, reason: 'version_conflict' });
+      }
+    }
     if (result.ok) for (const listener of workItemEvents.decided) await listener(result.item);
     return result;
   });

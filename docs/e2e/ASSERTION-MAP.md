@@ -199,22 +199,22 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 25 | Tool release leaked to other employee | unit | apps/server/test/tools.test.ts |
 | 26 | Summary leaks other owner | pending | T-41 |
 | 27 | Employee navigation expanded | e2e | apps/e2e/tests/command-room.spec.ts |
-| 28 | Write rehearsal auto-approved | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 28 | Write rehearsal auto-approved | e2e | apps/e2e/tests/mainline.spec.ts — A real published SOP stops for human approval; the external ledger stays empty before the decision. |
 | 29 | Approval does not bind parameters | unit | apps/server/test/execution.test.ts |
 | 30 | Timeout marked complete/retried | unit | apps/server/test/execution.test.ts |
 | 31 | Unknown write can be accepted | e2e | apps/e2e/tests/mainline.spec.ts |
 | 32 | Unknown readback retried write | unit | apps/server/test/execution.test.ts |
 | 33 | Mismatched write accepted or repeated | e2e | apps/e2e/tests/mainline.spec.ts |
 | 34 | Mismatched result review enabled | e2e | apps/e2e/tests/mainline.spec.ts |
-| 35 | Corrected external data could not be reread without a second write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 35 | Corrected external data could not be reread without a second write | e2e | apps/e2e/tests/mainline.spec.ts — An independent external correction is reread on the same run; the write connector count stays one. |
 | 36 | Matching readback did not verify original request | e2e | apps/e2e/tests/mainline.spec.ts |
 | 37 | Changed contract retains old action approval/acceptance | e2e | apps/e2e/tests/mainline.spec.ts — contract revision on the command-room task retires the linked run's approval and the human acceptance |
 | 38 | Contract revision repeats write | e2e | apps/e2e/tests/mainline.spec.ts — the run keeps one gateway call and one ledger entry after the revision |
 | 39 | Offline rehearsal discarded original task | e2e | apps/e2e/tests/command-room.spec.ts — a paused employee holds the same task as 等待连接 |
 | 40 | Manual reconnect failed to resume original task | e2e | apps/e2e/tests/command-room.spec.ts — the owner resumes the employee, then resumes the same task id |
 | 41 | Existing client incorrectly promises remote start | n/a | prototype copy about the desktop client; no such client in the product |
-| 42 | Manual pause bypassed during readback | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
-| 43 | Paused readback repeated/finished external write | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
+| 42 | Manual pause bypassed during readback | e2e | apps/e2e/tests/mainline.spec.ts — A paused employee is denied before the read-only probe; the probe count remains zero. |
+| 43 | Paused readback repeated/finished external write | e2e | apps/e2e/tests/mainline.spec.ts — Denied paused reconciliation keeps the original run unknown and the external write count at one. |
 | 44 | Async report erased SOP input | pending | T-41 |
 | 45 | Async report replaced or lost workflow draft | pending | T-41 |
 | 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
