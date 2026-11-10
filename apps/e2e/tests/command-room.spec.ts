@@ -418,3 +418,47 @@ test('an employee that disconnects keeps the same task waiting; the owner reconn
   expect((await report(page, staffHeader(staff), task!.id, '客户资料已核对')).status()).toBe(200);
   expect((await tasksOf(page, OWNER))[0]).toMatchObject({ id: task!.id, status: 'reported' });
 });
+
+test('an async report leaves the SOP draft and the field being edited', async ({ page }) => {
+  await page.setExtraHTTPHeaders({ 'x-dev-user': OWNER });
+  const staff = `e2e-room-staff-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  const task = (await post(page, OWNER, `@${sales.name} 请整理询价草稿`)).task!;
+  const sopId = `e2e.keep-draft-${tag()}`;
+  const step = '保持正在编辑的业务步骤';
+  expect((await page.request.post('/api/v1/sop/drafts', {
+    data: {
+      sopId,
+      definition: {
+        requiredFields: ['发票号'],
+        employeeStatus: 'active',
+        graph: { nodes: [{ id: 't', kind: 'trigger', label: '原草稿步骤', ref: 'date:month-end' }], edges: [] },
+      },
+    },
+  })).status()).toBe(200);
+
+  await page.goto('/#brain');
+  await page.getByLabel('选择流程').selectOption(sopId);
+  const field = page.getByLabel('必填字段');
+  const name = page.getByLabel('节点名称');
+  await expect(field).toHaveValue('发票号');
+  await field.fill(step);
+  await name.fill(step);
+  await field.evaluate((el) => {
+    const mark = window as unknown as { __sopField?: Element; __sopForm?: Element | null };
+    mark.__sopField = el;
+    mark.__sopForm = el.closest('fieldset');
+  });
+
+  expect((await report(page, staffHeader(staff), task.id, '询价草稿已放在对话里，尚未发送')).status()).toBe(200);
+  await page.waitForTimeout(1200);
+
+  await expect(field).toHaveValue(step);
+  await expect(name).toHaveValue(step);
+  await expect(page.getByRole('group', { name: '流程图' })).toContainText('原草稿步骤');
+  expect(await page.evaluate(() => {
+    const mark = window as unknown as { __sopField?: Element; __sopForm?: Element | null };
+    const current = document.querySelector('[aria-label="必填字段"]');
+    return current === mark.__sopField && current?.closest('fieldset') === mark.__sopForm;
+  })).toBe(true);
+});

@@ -1323,17 +1323,15 @@
    "id": "qa-outcomes#44",
    "suite": "qa-outcomes",
    "assertion": "Async report erased SOP input",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#45",
    "suite": "qa-outcomes",
    "assertion": "Async report replaced or lost workflow draft",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#46",

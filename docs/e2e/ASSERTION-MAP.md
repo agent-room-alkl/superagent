@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 183 |
+| e2e | Covered by a Playwright test against the real app | 185 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 4 |
+| pending | Feature not built yet; the owner task will add the E2E | 2 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 4
+Pending by owner: T-41 2
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -215,8 +215,8 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 41 | Existing client incorrectly promises remote start | n/a | prototype copy about the desktop client; no such client in the product |
 | 42 | Manual pause bypassed during readback | e2e | apps/e2e/tests/mainline.spec.ts — A paused employee is denied before the read-only probe; the probe count remains zero. |
 | 43 | Paused readback repeated/finished external write | e2e | apps/e2e/tests/mainline.spec.ts — Denied paused reconciliation keeps the original run unknown and the external write count at one. |
-| 44 | Async report erased SOP input | pending | T-41 |
-| 45 | Async report replaced or lost workflow draft | pending | T-41 |
+| 44 | Async report erased SOP input | e2e | apps/e2e/tests/command-room.spec.ts |
+| 45 | Async report replaced or lost workflow draft | e2e | apps/e2e/tests/command-room.spec.ts |
 | 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
 | 47 | Baseline validation missing regression cases | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
