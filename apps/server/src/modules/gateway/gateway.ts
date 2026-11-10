@@ -70,6 +70,11 @@ export interface ExecuteResult {
   invoked: boolean;
 }
 
+/** Process restart contract for the outbox. The idempotency key is the stable action identity. */
+export interface GatewaySnapshot {
+  actions: ActionRecord[];
+}
+
 const WRITE_EFFECTS = new Set<ToolEffect>(['write', 'external']);
 
 /**
@@ -170,6 +175,24 @@ export class ToolGateway {
   getByKey(key: string): ActionRecord | undefined {
     const action = this.byKey.get(key);
     return action ? this.clone(action) : undefined;
+  }
+
+  snapshot(): GatewaySnapshot {
+    return { actions: [...this.byKey.values()].map((action) => structuredClone(action)) };
+  }
+
+  /** Replaces this gateway's rows. Call it on the instance the executor already holds. */
+  load(saved: GatewaySnapshot): void {
+    this.byKey.clear();
+    let seq = 0;
+    for (const action of saved.actions) {
+      const copy = structuredClone(action);
+      this.byKey.set(copy.idempotencyKey, copy);
+      const match = /^act_(\d+)$/.exec(copy.id);
+      const n = match ? Number(match[1]) : 0;
+      if (n > seq) seq = n;
+    }
+    this.seq = seq;
   }
 
   private mustNotCallAgain(action: ActionRecord): boolean {
