@@ -121,10 +121,12 @@ export class WorkInbox {
     return { items: [...this.items.values()].map((item) => structuredClone(item)), seq: this.seq };
   }
 
-  /** Add an item stored for one run. An id already in this inbox stays, so a newer decision is not replaced. */
+  /** Add an item stored for one run. A decided or newer row replaces an open copy already in memory. */
   remember(item: WorkItem): WorkItem {
     const existing = this.items.get(item.id);
-    if (existing) return this.view(existing);
+    const incomingDecided = item.status === 'decided' || item.decision !== null;
+    const existingOpen = existing && existing.status === 'open' && !existing.decision;
+    if (existing && !(incomingDecided && existingOpen) && item.payloadVersion <= existing.payloadVersion) return this.view(existing);
     const copy = structuredClone(item);
     this.items.set(copy.id, copy);
     const n = Number(/^wi_(\d+)$/.exec(copy.id)?.[1] ?? 0);

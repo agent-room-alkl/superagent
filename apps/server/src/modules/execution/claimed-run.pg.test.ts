@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import pg from 'pg';
 import { expect, it } from 'vitest';
 import type { Execution } from './executor.js';
-import { insertRun, loadRunByInstance, saveRuns } from './pg-runs.js';
-import { insertWorkItem, loadWorkItemsForRun, saveInbox } from '../humanwork/pg-inbox.js';
-import type { WorkItem } from '../humanwork/work-items.js';
+import { insertRun, loadRunById, loadRunByInstance, saveRuns } from './pg-runs.js';
+import { insertWorkItem, loadInbox, loadWorkItemsForRun, saveInbox, updateWorkItem } from '../humanwork/pg-inbox.js';
+import { WorkInbox, type WorkItem } from '../humanwork/work-items.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const live = databaseUrl ? it : it.skip;
@@ -59,8 +59,16 @@ live('a claimed run stays when another process replaces the shared snapshot', as
       evidenceSource: null, waitingOn: null, draft: null, rows: [],
     } as WorkItem;
     await insertWorkItem(db, item);
-    await saveInbox(db, { seq: 1, items: [] });
-    expect((await loadWorkItemsForRun(db, 'run_mail_1')).map((row) => row.id)).toEqual([item.id]);
+    const decided = { ...item, status: 'decided' as const, decision: { by: 'owner-1', payloadHash: 'h' } };
+    await updateWorkItem(db, decided);
+    await insertWorkItem(db, item);
+    await saveInbox(db, { seq: 1, items: [item] });
+    const restored = new WorkInbox();
+    const blob = await loadInbox(db);
+    if (blob) restored.load(blob);
+    for (const row of await loadWorkItemsForRun(db, 'run_mail_1')) restored.remember(row);
+    expect(restored.all()[0]?.status).toBe('decided');
+    expect((await loadRunById(db, 'run_mail_1'))?.id).toBe('run_mail_1');
   } finally {
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     admin.release();
