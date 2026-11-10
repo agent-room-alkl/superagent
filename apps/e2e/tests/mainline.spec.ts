@@ -196,4 +196,36 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     const ledger = await json<Record<string, { amount: number }>>(page.request.get('/__e2e/erp/ledger'));
     expect(Object.keys(ledger)).toEqual(['INV-480', 'INV-990']); // exactly one write attempt for INV-990
   });
+
+  await test.step('paused read-back cannot finish or repeat the original external write', async () => {
+    await json(page.request.post(`/api/v1/employees/${employeeId}/pause`));
+    await page.goto('/#brain'); await page.getByLabel('选择流程').selectOption(SOP);
+    const run = page.getByRole('region', { name: '运行记录' }).locator('li[data-run]').filter({ hasText: 'INV-990' });
+    const originalRunId = await run.getAttribute('data-run');
+    await run.getByRole('button', { name: '只回读核对外部结果' }).click();
+    await expect(run.getByRole('status', { name: '回读核对结果' })).toContainText('不允许回读');
+    await expect(run.locator('[data-run-status]')).toHaveText('结果未知（已冻结）');
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/write-counts')))['INV-990']).toBe(1);
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/read-counts')))['INV-990'] ?? 0).toBe(0);
+    expect(await run.getAttribute('data-run')).toBe(originalRunId);
+    await run.screenshot({ path: test.info().outputPath('paused-readback.png') });
+    await json(page.request.post(`/api/v1/employees/${employeeId}/resume`));
+  });
+
+  await test.step('corrected external data is reread on the same run without another write', async () => {
+    const run = page.getByRole('region', { name: '运行记录' }).locator('li[data-run]').filter({ hasText: 'INV-990' });
+    const originalRunId = await run.getAttribute('data-run');
+    await run.getByRole('button', { name: '只回读核对外部结果' }).click();
+    await expect(run.getByRole('status', { name: '回读核对结果' })).toContainText('结果仍待确认');
+    await expect(run.locator('[data-run-status]')).toHaveText('结果未知（已冻结）');
+    await json(page.request.post('/__e2e/erp/correct', { data: { invoiceNo: 'INV-990', amount: 990 } }));
+    await run.getByRole('button', { name: '只回读核对外部结果' }).click();
+    await expect(run.getByRole('status', { name: '回读核对结果' })).toContainText('回读已匹配原批准内容');
+    await expect(run.locator('[data-run-status]')).toHaveText('已完成');
+    await expect(run.locator('[data-step="w"] .readback')).toContainText('"amount":990');
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/write-counts')))['INV-990']).toBe(1);
+    expect((await json<Record<string, number>>(page.request.get('/__e2e/erp/read-counts')))['INV-990']).toBe(2);
+    expect(await run.getAttribute('data-run')).toBe(originalRunId);
+    await run.screenshot({ path: test.info().outputPath('matched-readback.png') });
+  });
 });
