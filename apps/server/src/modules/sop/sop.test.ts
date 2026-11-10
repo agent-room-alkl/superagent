@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { it } from 'vitest';
-import { SopRuntime, staleSourceNodes, type SopDefinition } from './sop.js';
+import { SopRuntime, sopEventKey, staleSourceNodes, type SopDefinition } from './sop.js';
 import { formatInTimeZone, localStamp, zonedTimeToUtc } from './zoned-time.js';
 
 const ready: SopDefinition = {
@@ -108,4 +108,20 @@ it('a date trigger fires once across a daylight-saving fold and records misses o
   assert.equal(runtime.evaluateDate(trigger, { year: 2026, month: 4, day: 4 }, stale + 3 * 60 * 60 * 1000), 'missed');
   assert.equal(runtime.instancesOf('sop-5').length, 1);
   assert.equal(runtime.evaluateDate({ ...trigger, enabled: false }, { year: 2026, month: 4, day: 6 }, nominal), 'disabled');
+});
+
+it('restoring a snapshot keeps the published version and the claimed event', () => {
+  const runtime = new SopRuntime();
+  const version = runtime.draft('sop-keep', ready);
+  assert.equal(runtime.validate(version.id).status, 'passed');
+  runtime.publish(version.id);
+  const opened = runtime.manualStart('tenant', version.id, 'evt-9', true);
+  assert.ok(opened);
+  const restored = SopRuntime.restore(runtime.snapshot());
+  assert.equal(restored.list()[0]?.latest.status, 'published');
+  assert.equal(restored.manualStart('tenant', version.id, 'evt-9', true), null);
+  assert.equal(restored.instancesOf('sop-keep').length, 1);
+  assert.equal(restored.instancesOf('sop-keep')[0]?.eventKey, sopEventKey('tenant', 'manual', 'evt-9', 'sop-keep'));
+  const again = restored.draft('sop-keep', ready);
+  assert.equal(again.number, 2);
 });
