@@ -41,6 +41,10 @@ the long-item API; resolving twice to the same item is idempotent. These work it
 API and projected into the unified `/api/v1/work-items` list. WorkInboxPage lets the assigned reviewer select the
 original case; owners can inspect another person's exception but cannot decide it on their behalf. A reviewed new
 thread becomes an alias of the chosen case, so later replies return to the same id without another guess.
+The assigned reviewer can instead choose **另立新事项**. The service creates that case and records the decision in
+one transaction; repeated requests return its original id. Existing candidates are unchanged. Selecting a merge
+and selecting a new case are mutually exclusive decisions. The new case still uses the server-approved source,
+object, assignee and date rule; a changed object binding blocks rather than silently reinterpreting the mail.
 
 The first mail creates the long-running item associated with the configured SOP, rather than running the SOP's
 general-purpose tool graph. This delivery does not add a new general-purpose SOP executor. Reminders advance

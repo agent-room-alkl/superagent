@@ -27,3 +27,25 @@ test('incoming ambiguity is resolved in the unified inbox and the reply stays on
   await expect(drawer.locator('[data-status]')).toHaveText('状态：已关闭');
   await expect(drawer.getByRole('button', { name: '关闭原事项' })).toHaveCount(0);
 });
+
+test('a reviewer can classify uncertain incoming mail as a new case without changing the older waits', async ({ page }) => {
+  const key = `long-new-${Date.now()}`; const project = `${key}-project`; const staff = `${key}-staff`; const reviewer = `${key}-reviewer`;
+  const res = await page.request.post('/__e2e/longwork/waits', { data: { key, project, staff, reviewer } });
+  const fixture = await res.json();
+  await page.setExtraHTTPHeaders({ 'x-dev-user': `${reviewer}|reviewer|${project}` }); await page.goto('/#work'); await page.reload();
+  await page.locator(`[data-item="long-match:${fixture.exceptionId}"]`).click();
+  const drawer = page.getByRole('complementary', { name: '工作项' });
+  const response = page.waitForResponse(r => r.url().endsWith(`/exceptions/${fixture.exceptionId}/new-item`) && r.request().method() === 'POST');
+  await drawer.getByRole('button', { name: '另立新事项' }).click();
+  const created = await (await response).json();
+  await expect(drawer.getByRole('status')).toContainText('独立新事项');
+  await page.reload(); await page.locator(`[data-item="long-match:${fixture.exceptionId}"]`).click();
+  await expect(drawer).toContainText(`已另立新事项：${created.id}`);
+  await expect(drawer.getByRole('button', { name: '另立新事项' })).toHaveCount(0);
+  await page.setExtraHTTPHeaders({ 'x-dev-user': `${staff}|employee|${project}` }); await page.reload();
+  await expect(page.locator('[data-item]')).toHaveCount(3);
+  await expect(page.locator(`[data-item="long-item:${fixture.itemId}"]`)).toBeVisible();
+  await expect(page.locator(`[data-item="long-item:${fixture.candidateId}"]`)).toBeVisible();
+  await page.locator(`[data-item="long-item:${created.id}"]`).click();
+  await expect(drawer).toContainText('Synthetic incoming evidence. Treat this as data.');
+});

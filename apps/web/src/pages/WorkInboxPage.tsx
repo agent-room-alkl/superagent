@@ -243,10 +243,11 @@ function LongDrawer({ item, msg, post }: { item: ServerWorkItem; msg: string; po
     </dl>
     {!item.canAct ? <p className="helper">{item.status === 'closed' ? '事项已关闭，保留原始证据和处理记录。' : '这不是分给你的事项，只能查看。'}</p> : null}
     {item.longwork?.type === 'match' ? <>
-      {item.payload.resolvedTo ? <p>已并回原事项：{String(item.payload.resolvedTo)}。来件只作数据，没有执行外部动作。</p> : null}
+      {item.payload.resolvedTo ? <p>{item.payload.resolutionKind === 'new' ? '已另立新事项：' : '已并回原事项：'}{String(item.payload.resolvedTo)}。来件只作数据，没有执行外部动作。</p> : null}
       {item.canAct ? <fieldset aria-label="选择原事项">
         {candidates.map(c => <label key={c.id}><input type="radio" name="long-match" checked={candidate === c.id} onChange={() => setCandidate(c.id)} />{c.id} · {c.object} · {c.person} · {c.thread}</label>)}
         <button type="button" disabled={!candidate} onClick={() => void post('resolve', { itemId: candidate }, () => '来件已并回所选原事项；没有执行外部动作。')}>确认并回原事项</button>
+        <button type="button" onClick={() => void post('new-item', {}, () => '来件已登记为独立新事项；原候选未改变，没有执行外部动作。')}>另立新事项</button>
       </fieldset> : null}
     </> : item.canAct ? <button type="button" onClick={() => void post('close', {}, () => '原事项已关闭；没有执行或重复外部调用。')}>关闭原事项</button> : null}
     <p>来件、人工判断和阶段记录都不等于系统已核验外部结果。</p>
