@@ -221,6 +221,9 @@ export class WorkInbox {
     item.draft = null;
     // closed, not withdrawn: a withdrawn item can be decided again, a retired approval never can
     item.status = 'closed';
+    // A new version with the same payload and hash: the stored row's version guard then refuses a late write of the
+    // older, still-approved copy from another process, and an old expectedVersion no longer matches.
+    item.payloadVersion += 1;
     return this.view(item);
   }
 

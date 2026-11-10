@@ -133,6 +133,8 @@ it('a retired approval no longer stands, keeps its evidence, and an executed app
   const retired = inbox.retireDecision(item.id);
   assert.equal(retired.decision, null);
   assert.equal(retired.status, 'closed');
+  assert.equal(retired.payloadVersion, item.payloadVersion + 1); // a late save of the older approved copy loses the version guard
+  assert.equal(retired.payloadHash, item.payloadHash);
   assert.equal(inbox.decide(item.id, 'owner', 1).reason, 'retired'); // never decided again, even before any read-back
   const executed = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'owner', payload: { title: '批准写入', amount: 20 } });
   inbox.decide(executed.id, 'owner', 1);
