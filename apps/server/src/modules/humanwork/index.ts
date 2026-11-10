@@ -2,6 +2,8 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkItemKind, WorkItemRenderer } from '@superagent/shared';
 import { viewerFrom } from '../room/index.js';
 import { WorkInbox, type WorkItem } from './work-items.js';
+import type { LongWorkDeps } from '../longwork/http.js';
+import { longInbox } from '../longwork/inbox.js';
 
 export const inboxState = { current: new WorkInbox() };
 
@@ -40,13 +42,15 @@ function attempt<T>(reply: FastifyReply, run: () => T): T | FastifyReply {
   }
 }
 
-export const humanworkModule: FastifyPluginAsync = async (app) => {
+export const humanworkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async (app, { deps }) => {
   app.get('/', async (req) => {
     const query = req.query as { exceptions?: string; project?: string };
     const viewer = viewerFrom(req.headers, req.user);
     const items = inboxState.current.list(viewer, { exceptionsOnly: query.exceptions === '1', projectId: query.project, tenantId: tenantOf(req) });
     // canAct comes from the same guard the mutations use, so the page never offers a control the server would refuse
-    return { items: items.map((item) => ({ ...item, canAct: inboxState.current.actor(item.id, viewer, tenantOf(req)).ok })) };
+    const ordinary = items.map((item) => ({ ...item, canAct: inboxState.current.actor(item.id, viewer, tenantOf(req)).ok }));
+    const long = deps && req.user ? await longInbox(deps.work, req.user, query) : [];
+    return { items: [...ordinary, ...long] };
   });
 
   app.post('/', async (req, reply) => {

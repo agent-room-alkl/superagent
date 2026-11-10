@@ -3,6 +3,7 @@ import { LongWork, validateSource } from './service.js';
 import { MemoryLongWorkStore, PgLongWorkStore } from './store.js';
 import { MailTrigger, type GraphSource } from './graph.js';
 import type { LongWorkDeps } from './http.js';
+import { prepareMailSopStarts } from './sop-starts.js';
 
 export function sourceConfig(raw: string | undefined, tenant: string): GraphSource[] {
   if (!raw) return [];
@@ -20,9 +21,9 @@ export function sourceConfig(raw: string | undefined, tenant: string): GraphSour
 }
 
 export function createLongWorkDeps(runtime: Runtime, env = process.env): LongWorkDeps {
-  const store = runtime.pool ? new PgLongWorkStore(runtime.pool) : new MemoryLongWorkStore();
-  const work = new LongWork(store);
   const sources = sourceConfig(env.MAIL_TRIGGERS_JSON, runtime.config.platformTenantId);
+  const store = runtime.pool ? new PgLongWorkStore(runtime.pool, prepareMailSopStarts(sources)) : new MemoryLongWorkStore();
+  const work = new LongWork(store);
   let mail: MailTrigger | undefined;
   if (sources.length) {
     if (!env.MAIL_NOTIFICATION_URL) throw Error('MAIL_NOTIFICATION_URL is required');
@@ -38,7 +39,11 @@ export function createLongWorkDeps(runtime: Runtime, env = process.env): LongWor
   }
   return {
     work, ...(mail ? { mail } : {}),
-    ready: async () => !runtime.pool || !!(await runtime.pool.query("SELECT to_regclass('longwork_state') AS name")).rows[0]?.name,
+    ready: async () => {
+      if (!runtime.pool) return true;
+      const row = (await runtime.pool.query("SELECT to_regclass('longwork_state') AS name, to_regclass('longwork_sop_starts') AS starts, to_regclass('sop_versions') AS versions, to_regclass('sop_instances') AS instances, to_regclass('sop_events') AS events")).rows[0];
+      return !!row?.name && !!row.starts && !!row.versions && !!row.instances && !!row.events;
+    },
     tick: async () => {
       await work.tick(runtime.config.platformTenantId);
       // A bad mailbox must not prevent other approved sources being scanned. Emit no source bodies or secrets.

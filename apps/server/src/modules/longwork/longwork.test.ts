@@ -42,14 +42,16 @@ describe('long-lived mail items', () => {
   });
   it('keeps ambiguous matching in a reviewer exception without picking a case', async () => {
     const f = fixture(); await f.work.ingest(source, incoming);
-    await f.store.change(source.tenant, s => { s.items.push({ ...structuredClone(s.items[0]!), id: 'second' }); });
-    const r = await f.work.ingest(source, { ...incoming, id: 'ambiguous' });
+    const second = await f.work.openWaiting(source, { requestId: 'second-wait', threadId: 'thread-2', person: incoming.from, evidence: 'Synthetic prior request reference' });
+    const r = await f.work.ingest(source, { ...incoming, id: 'ambiguous', threadId: 'new-thread' });
     expect(r.exception?.candidates).toHaveLength(2);
     expect((await f.work.snapshot(source.tenant)).items.every(i => i.phase === 'initial')).toBe(true);
     await expect(f.work.resolve(source.tenant, r.exception!.id, 'not-a-candidate', source.projectId)).rejects.toThrow('not_found');
-    await f.work.resolve(source.tenant, r.exception!.id, 'second', source.projectId);
-    await f.work.resolve(source.tenant, r.exception!.id, 'second', source.projectId);
-    expect((await f.work.snapshot(source.tenant)).items.find(i => i.id === 'second')!.replies).toHaveLength(1);
+    await f.work.resolve(source.tenant, r.exception!.id, second.id, source.projectId);
+    await f.work.resolve(source.tenant, r.exception!.id, second.id, source.projectId);
+    const followup = await f.work.ingest(source, { ...incoming, id: 'later-reply', threadId: 'new-thread' });
+    expect(followup.merged).toBe(true); expect(followup.item!.id).toBe(second.id);
+    expect((await f.work.snapshot(source.tenant)).items.find(i => i.id === second.id)!.replies).toHaveLength(2);
   });
   it('advances initial → reminder → final once, recording unapproved send intents', async () => {
     const f = fixture(); await f.work.ingest(source, incoming); f.set(Date.parse('2026-09-28T00:00:00Z'));
@@ -58,6 +60,20 @@ describe('long-lived mail items', () => {
     f.advance(60000); await f.work.tick(source.tenant); f.advance(60000); await f.work.tick(source.tenant);
     s = await f.work.snapshot(source.tenant); expect(s.items[0]!.phase).toBe('final'); expect(s.actions).toHaveLength(2);
     expect(s.actions.every(a => a.status === 'pending' && a.approval === null)).toBe(true);
+  });
+  it('allows an uncertain reply to be explicitly classified as a new case, once, without changing the old wait', async () => {
+    const f = fixture(); const old = await f.work.openWaiting(source, { requestId: 'prior', threadId: 'old-thread', person: incoming.from, evidence: 'Request reference' });
+    const mail = { ...incoming, threadId: 'new-thread' };
+    const result = await f.work.ingest(source, mail); expect(result.exception!.candidates).toEqual([old.id]);
+    await expect(f.work.resolveAsNew({ ...source, objectId: 'changed-object' }, result.exception!.id)).rejects.toThrow('source_changed_conflict');
+    const created = await f.work.resolveAsNew(source, result.exception!.id);
+    expect((await f.work.resolveAsNew(source, result.exception!.id)).id).toBe(created.id);
+    expect(created.id).not.toBe(old.id); expect(created.original.body).toBe(incoming.body);
+    const s = await f.work.snapshot(source.tenant); expect(s.items).toHaveLength(2);
+    expect(s.items.find(i => i.id === old.id)!.events).toEqual([]);
+    expect(s.items.find(i => i.id === old.id)!.phase).toBe('initial');
+    await expect(f.work.resolve(source.tenant, result.exception!.id, old.id, source.projectId)).rejects.toThrow('already_resolved');
+    const later = await f.work.ingest(source, { ...mail, id: 'follow-new' }); expect(later.item!.id).toBe(created.id);
   });
 });
 
