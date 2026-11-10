@@ -26,8 +26,10 @@ live('real PostgreSQL serializes duplicate mail, persists restart recovery and r
     expect(new Set(waits.map(w => w.id)).size).toBe(1);
     const changedThread = await work.ingest(source, { ...mail, id: 'changed-thread-mail', threadId: 'third-thread' });
     expect(changedThread.exception!.candidates).toHaveLength(2);
+    const newCases = await Promise.all(Array.from({ length: 6 }, () => work.resolveAsNew(source, changedThread.exception!.id)));
+    expect(new Set(newCases.map(i => i.id)).size).toBe(1);
     await expect(store.change('t', s => { s.items.length = 0; throw Error('rollback'); })).rejects.toThrow('rollback');
-    expect((await work.snapshot('t')).items).toHaveLength(2);
+    expect((await work.snapshot('t')).items).toHaveLength(3);
     const [a] = await work.createBatch('t', 'b', 'p', [{ id: 'one', payload: { amount: 10 } }, { id: 'two', payload: { amount: 20 } }]);
     await work.approve('t', 'b', 'p', [{ id: 'one', hash: a!.hash }], 'reviewer');
     let writes = 0; let reads = 0;

@@ -55,5 +55,11 @@ it('registers real waiting items through approved sources, deduplicates request 
     const result = await work.ingest(source, { id: 'new-mail', threadId: 'new-thread', from: input.payload.person, receivedAt: '2026-09-02T00:00:00Z', body: 'Incoming data' });
     expect(result.exception!.candidates.sort()).toEqual([first.json().id, second.json().id].sort());
     expect((await work.snapshot('t')).items).toHaveLength(2);
+    const newCase = { method: 'POST' as const, url: `/api/v1/long-items/exceptions/${result.exception!.id}/new-item`, payload: { projectId: 'p' } };
+    expect((await app.inject({ ...newCase, headers: { 'x-dev-user': 'owner|owner|' } })).statusCode).toBe(403);
+    expect((await app.inject({ ...newCase, headers: { 'x-dev-user': 'reviewer|reviewer|different' } })).statusCode).toBe(404);
+    const created = await app.inject({ ...newCase, headers: { 'x-dev-user': 'reviewer|reviewer|p' } }); expect(created.statusCode).toBe(200);
+    expect((await app.inject({ ...newCase, headers: { 'x-dev-user': 'reviewer|reviewer|p' } })).json().id).toBe(created.json().id);
+    expect((await work.snapshot('t')).items).toHaveLength(3);
   } finally { await app.close(); }
 });

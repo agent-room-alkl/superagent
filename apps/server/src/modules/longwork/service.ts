@@ -70,7 +70,7 @@ export class LongWork {
       state.receipts.push(receipt);
       if (candidates.length > 1 || (candidates.length === 1 && exact.length === 0)) {
         const exception = { id: randomUUID(), kind: 'exception_ruling' as const, renderer: 'issue_list' as const, assignee: source.reviewer,
-          eventId: mail.id, candidates: candidates.map(i => i.id), projectId: source.projectId, resolvedTo: null };
+          eventId: mail.id, candidates: candidates.map(i => i.id), projectId: source.projectId, sourceId: source.id, sopId: source.sopId, resolvedTo: null };
         state.exceptions.push(exception);
         // Keep the incoming data until a reviewer decides; do not choose by fuzzy content.
         return { exception, incoming: this.addReplyAction(state.actions, source, mail, exception.id) };
@@ -115,8 +115,33 @@ export class LongWork {
         item.events.push(mail.id); item.replies.push({ eventId: mail.id, body: mail.body, receivedAt: mail.receivedAt }); item.phase = 'replied';
         if (item.threadId !== mail.threadId && !item.threadAliases?.includes(mail.threadId)) (item.threadAliases ??= []).push(mail.threadId);
         this.cancelPending(s.actions, item.id);
-        e.resolvedTo = itemId; a.status = 'succeeded'; a.evidence = 'Reviewer matched incoming data; no external action executed';
+        e.resolvedTo = itemId; e.resolutionKind = 'existing'; a.status = 'succeeded'; a.evidence = 'Reviewer matched incoming data; no external action executed';
       }
+      return item;
+    });
+  }
+
+  resolveAsNew(source: MailSource, exceptionId: string) {
+    validateSource(source);
+    return this.store.change(source.tenant, s => {
+      const e = s.exceptions.find(e => e.id === exceptionId && e.projectId === source.projectId);
+      if (!e) throw Error('not_found');
+      const candidate = s.items.find(i => e.candidates.includes(i.id));
+      if ((e.sourceId ?? candidate?.sourceId) !== source.id || (e.sopId ?? candidate?.sopId) !== source.sopId) throw Error('not_found');
+      if (candidate && candidate.objectId !== source.objectId) throw Error('source_changed_conflict');
+      if (e.resolvedTo) {
+        if (e.resolutionKind !== 'new') throw Error('already_resolved');
+        return s.items.find(i => i.id === e.resolvedTo)!;
+      }
+      const action = s.actions.find(a => a.batchId === exceptionId)!;
+      const mail = action.payload.mail as unknown as Incoming;
+      const due = objectDue(source.dueRule, source.fields);
+      const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
+        objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee,
+        phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
+        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
+      s.items.push(item); e.resolvedTo = item.id; e.resolutionKind = 'new';
+      action.status = 'succeeded'; action.evidence = 'Reviewer classified incoming data as a new case; no external action executed';
       return item;
     });
   }

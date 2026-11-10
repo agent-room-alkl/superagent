@@ -40,6 +40,16 @@ export const longWorkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = async
   });
   app.post<{ Params: { id: string }; Body: { projectId: string } }>('/items/:id/close', async req =>
     deps!.work.close(req.user!.tenantId, req.params.id, project(req, req.body.projectId), req.user!.userId));
+  app.post<{ Params: { id: string }; Body: { projectId: string } }>('/exceptions/:id/new-item', async req => {
+    if (!reviewer(req)) throw Error('forbidden'); const p = project(req, req.body.projectId);
+    const state = await deps!.work.snapshot(req.user!.tenantId);
+    const e = state.exceptions.find(e => e.id === req.params.id && e.projectId === p); if (!e) throw Error('not_found');
+    if (e.assignee !== req.user!.userId) throw Error('forbidden');
+    const candidate = state.items.find(i => e.candidates.includes(i.id));
+    const source = deps!.mail?.sources.find(s => s.id === (e.sourceId ?? candidate?.sourceId) && s.tenant === req.user!.tenantId && s.projectId === p);
+    if (!source) throw Error('not_found');
+    return deps!.work.resolveAsNew(source, e.id);
+  });
   app.post<{ Body: { sourceId: string; requestId: string; person: string; threadId: string; evidence: string } }>('/items/waits', async req => {
     if (!manager(req)) throw Error('forbidden');
     const s = deps!.mail?.sources.find(s => s.id === req.body.sourceId && s.tenant === req.user!.tenantId);
