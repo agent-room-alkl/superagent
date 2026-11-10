@@ -117,6 +117,9 @@ export class WorkInbox {
     return [...this.items.values()].map((item) => this.view(item));
   }
 
+  /** Detached item for a caller that has already passed actor/visibility checks. */
+  get(id: string): WorkItem { return this.view(this.require(id)); }
+
   snapshot(): { items: WorkItem[]; seq: number } {
     return { items: [...this.items.values()].map((item) => structuredClone(item)), seq: this.seq };
   }
