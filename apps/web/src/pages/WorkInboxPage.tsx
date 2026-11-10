@@ -79,12 +79,14 @@ const INTERNAL_FIELDS = new Set(['executionId', 'stepId', 'title', 'why', 'due',
 
 /** An unknown write stays submitted once. The inbox does not offer another decide. */
 export function canDecide(item: Pick<InboxItem, 'fromServer' | 'actionStatus'>): boolean {
-  return item.fromServer && item.actionStatus !== 'outcome_unknown';
+  return item.fromServer && item.actionStatus !== 'outcome_unknown' && item.actionStatus !== 'confirmed';
 }
 
 export function decisionWhy(reason: string | undefined, current: string): string {
   if (reason === 'version_conflict') return '版本已变，请按新版本再决定。';
   if (reason === 'no_resubmit') return '结果未知，不能再次提交。';
+  if (reason === 'retired') return '任务的验收契约已修订，这条批准已作废，不能再用。';
+  if (reason === 'already_executed') return '这次外部动作已执行并回读一致，这条批准不能再用；新的动作需要新的批准。';
   if (reason === 'invalid_amount') return '金额无效，不能确认。';
   if (reason === 'waiting_data_confirmation') return '上游的数据核对还没确认，不能批准写入。';
   if (reason === 'conflict') return '这一项已经决定过了。';
@@ -341,8 +343,9 @@ function Drawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: 
   const unknown = item.actionStatus === 'outcome_unknown';
   const current = !!item.decision && item.decision.payloadHash === item.payloadHash;
   const act = item.canAct === true;
-  const editable = act && (item.kind === 'data_check' || item.kind === 'action_approval') && item.renderer === 'field_diff' && !unknown;
-  const decidable = act && canDecide({ fromServer: true, actionStatus: item.actionStatus }) && !item.decision && !item.draft && !['manual_execution', 'branch_choice', 'supply_info'].includes(item.kind);
+  const editable = act && item.status !== 'closed' && (item.kind === 'data_check' || item.kind === 'action_approval') && item.renderer === 'field_diff' && !unknown;
+  // a closed item (finished, or an approval retired by a contract change) is never decided again
+  const decidable = act && item.status !== 'closed' && canDecide({ fromServer: true, actionStatus: item.actionStatus }) && !item.decision && !item.draft && !['manual_execution', 'branch_choice', 'supply_info'].includes(item.kind);
   const options = Array.isArray(item.payload.options) ? (item.payload.options as unknown[]).map(String) : [];
   const attachments = Array.isArray(item.payload.attachments) ? (item.payload.attachments as Array<{ name?: string; id?: string }>) : [];
   /** Numbers typed as numbers stay numbers (amounts); everything else is text. */

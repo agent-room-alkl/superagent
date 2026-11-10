@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  actorLabel, CommandRoomPage, draftStorageKey, insertMention, mergeRoomMessages, messageKindLabel, nextRoomCursor,
+  actorLabel, approvalLine, attemptsLine, CommandRoomPage, draftStorageKey, insertMention, mergeRoomMessages, messageKindLabel, nextRoomCursor,
   roomDraftKey, roomEventsFromSse, taskActions, taskLine, taskReports, taskStatusLabel,
   type ApiMessage, type ApiTask, type RosterEmployee,
 } from './CommandRoomPage';
@@ -100,12 +100,24 @@ describe('execution pages reuse the v12 copy', () => {
   });
 
   it('offers only the task actions this person may take', () => {
-    expect(taskActions(task({}), null)).toEqual({ report: false, review: false, cancel: false, followup: false });
-    expect(taskActions(task({}), OWNER)).toEqual({ report: false, review: false, cancel: true, followup: true });
-    expect(taskActions(task({}), SALES)).toEqual({ report: true, review: false, cancel: false, followup: true });
-    expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true });
+    expect(taskActions(task({}), null)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
+    expect(taskActions(task({}), OWNER)).toEqual({ report: false, review: false, cancel: true, followup: true, resume: false, contract: true });
+    expect(taskActions(task({}), SALES)).toEqual({ report: true, review: false, cancel: false, followup: true, resume: false, contract: false });
+    expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true, resume: false, contract: true });
     expect(taskActions(task({ status: 'reviewed' }), SALES).report).toBe(false);
-    expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false });
+    expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
+    // what counts as done is changed by whoever asked for the work
+    expect(taskActions(task({ status: 'reviewed' }), OWNER).contract).toBe(true);
+    expect(approvalLine({ id: 'a', status: 'decided', standing: true, actionStatus: null })).toBe('批准有效');
+    expect(approvalLine({ id: 'a', status: 'closed', standing: false, actionStatus: null })).toBe('批准已作废');
+    expect(approvalLine({ id: 'a', status: 'open', standing: false, actionStatus: null })).toBe('尚未批准');
+    expect(attemptsLine({ attempts: 1, actions: [{ stepId: 'w', status: 'confirmed', calls: 1, externalRef: 'ERP-1', readback: {} }] })).toBe('外部提交 1 次，回读一致。修改验收契约不会重新提交。');
+    expect(attemptsLine({ attempts: 0, actions: [] })).toBe('外部提交 0 次。修改验收契约不会重新提交。');
+    // a task held for its disconnected employee is resumed by whoever asked for it, not by the assignee
+    const held = task({ status: 'waiting', waitingReason: '等待连接' });
+    expect(taskActions(held, OWNER).resume).toBe(true);
+    expect(taskActions(held, SALES).resume).toBe(false);
+    expect(taskActions(task({ status: 'waiting', waitingReason: '等待模型' }), OWNER).resume).toBe(false);
   });
 
   it('gives an employee-only sign-in the two daily pages and everyone else the full menu', () => {
@@ -137,6 +149,8 @@ describe('execution pages reuse the v12 copy', () => {
     expect(canDecide({ fromServer: true, actionStatus: 'outcome_unknown' })).toBe(false);
     expect(canDecide({ fromServer: true, actionStatus: null })).toBe(true);
     expect(canDecide({ fromServer: false, actionStatus: null })).toBe(false);
+    expect(canDecide({ fromServer: true, actionStatus: 'confirmed' })).toBe(false);
+    expect(decisionWhy('already_executed', '')).toContain('新的动作需要新的批准');
     expect(decisionWhy('no_resubmit', '原来的说明')).toBe('结果未知，不能再次提交。');
     expect(decisionWhy('invalid_amount', '原来的说明')).toBe('金额无效，不能确认。');
     expect(decisionWhy('version_conflict', '原来的说明')).toBe('版本已变，请按新版本再决定。');

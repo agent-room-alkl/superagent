@@ -1,4 +1,4 @@
-import type { MessageKind, PromptSnapshot, RoomSnapshot, RoomTask } from './room.js';
+import type { MessageKind, PromptSnapshot, RoomSnapshot, RoomTask, TaskContract } from './room.js';
 import {
   LOAD_MEMBERS_SQL,
   LOAD_MESSAGES_SQL,
@@ -46,9 +46,11 @@ interface TaskContext {
   promptSnapshot?: PromptSnapshot | null;
   approval?: RoomTask['approval'];
   reviewedByUserId?: string | null;
+  contract?: TaskContract | null;
+  runId?: string | null;
 }
 
-const KINDS = new Set<MessageKind>(['message', 'reply', 'report', 'review', 'cancel']);
+const KINDS = new Set<MessageKind>(['message', 'reply', 'report', 'review', 'cancel', 'hold', 'resume', 'contract']);
 
 function asContext(value: unknown): TaskContext {
   const parsed = typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
@@ -100,6 +102,8 @@ export async function saveRoomRows(db: Queryable, snapshot: RoomSnapshot): Promi
         promptSnapshot: task.promptSnapshot,
         approval: task.approval,
         reviewedByUserId: task.reviewedByUserId,
+        contract: task.contract,
+        runId: task.runId,
       } satisfies TaskContext),
     ]);
   }
@@ -155,6 +159,8 @@ export async function loadRoomRows(db: Queryable): Promise<RoomSnapshot> {
         promptSnapshot: context.promptSnapshot ?? null,
         approval: context.approval === 'required' ? 'required' : 'none',
         reviewedByUserId: context.reviewedByUserId ?? null,
+        contract: context.contract ?? null,
+        runId: context.runId ?? null,
       };
     }),
     members: [...byRoom.entries()].map(([roomId, userIds]) => ({ roomId, userIds })),

@@ -170,3 +170,67 @@ it('a snapshot written before tasks carried context still loads, and reports kee
   expect(reloaded.listTasks(owner)[0]).toMatchObject({ approval: 'none', followupTo: null, promptSnapshot: null, reviewedByUserId: null });
   expect(CommandRoom.restore(employees, saved).listTasks(owner)[0]?.promptSnapshot?.promptVersion).toBe(3);
 });
+
+it('an employee that goes offline holds its task as the same waiting task; the asker resumes it only once it is back', () => {
+  const live: EmployeeRef[] = employees.map((employee) => ({ ...employee }));
+  const service = new CommandRoom(() => live, () => new Date('2026-11-10T00:00:00.000Z'));
+  const posted = say(service, owner, '@销售员工 请核对客户资料');
+  const id = posted.task!.id;
+  expect(service.holdDisconnected()).toEqual([]); // nothing to do while the employee is online
+
+  live[0]!.status = 'paused';
+  const held = service.holdDisconnected();
+  expect(held).toHaveLength(1);
+  expect(held[0]).toMatchObject({ kind: 'hold', taskIds: [id] });
+  expect(service.holdDisconnected()).toEqual([]); // held once
+  expect(service.listTasks(owner)).toHaveLength(1);
+  expect(service.listTasks(owner)[0]).toMatchObject({ id, status: 'waiting', waitingReason: '等待连接', messageId: posted.message.id });
+
+  expect(() => service.resume(id, owner, 'r1')).toThrow(/employee_offline/);
+  expect(() => service.resume(id, sales, 'r2')).toThrow(/forbidden/); // the assignee did not ask for it
+  expect(() => service.resume(id, finance, 'r3')).toThrow(/task_not_found/);
+
+  live[0]!.status = 'active';
+  expect(service.holdDisconnected()).toEqual([]); // coming back does not resume anything by itself
+  expect(service.listTasks(owner)[0]?.status).toBe('waiting');
+  const resumed = service.resume(id, owner, 'r4');
+  expect(resumed).toMatchObject({ kind: 'resume', taskIds: [id] });
+  expect(service.resume(id, owner, 'r4').id).toBe(resumed.id);
+  expect(() => service.resume(id, owner, 'r5')).toThrow(/not_waiting/);
+  expect(service.listTasks(owner)).toEqual([expect.objectContaining({ id, status: 'assigned', waitingReason: null, messageId: posted.message.id })]);
+  // a task waiting for the model is not something reconnecting can fix
+  const model = service.post({ roomId: 'room-1', tenantId: 't', authorUserId: 'user-owner', body: '@销售员工 整理报价', clientMessageId: 'm-down', modelAvailable: false });
+  expect(() => service.resume(model.task!.id, owner, 'r6')).toThrow(/not_waiting/);
+});
+
+it('revising the acceptance contract voids the earlier acceptance and keeps the task, its reports and its run', () => {
+  const service = room();
+  const posted = say(service, owner, '@销售员工 请登记付款 INV-555');
+  const id = posted.task!.id;
+  expect(posted.task).toMatchObject({ contract: null, runId: null, approval: 'required' });
+  expect(() => service.reviseContract(id, sales, '核对金额', 'k0')).toThrow(/forbidden/); // the assignee did not ask
+  expect(() => service.reviseContract(id, owner, '   ', 'k1')).toThrow(/invalid_contract/);
+
+  const first = service.reviseContract(id, owner, '核对金额与供应商', 'k2');
+  expect(first).toMatchObject({ revised: false, task: { contract: { version: 1, criteria: '核对金额与供应商' } } });
+  expect(first.message).toMatchObject({ kind: 'contract', taskIds: [id] });
+  expect(service.reviseContract(id, owner, '核对金额与供应商', 'k2').message.id).toBe(first.message.id); // same click
+  expect(() => service.reviseContract(id, owner, '核对金额与供应商', 'k3')).toThrow(/contract_unchanged/);
+
+  service.linkRun(id, owner, 'run_1');
+  expect(service.linkRun(id, owner, 'run_1').runId).toBe('run_1');
+  expect(() => service.linkRun(id, owner, 'run_2')).toThrow(/run_already_linked/);
+  service.report(id, 'user-sales', '已登记，回读一致', 'rep');
+  service.review(id, owner, 'rev');
+  expect(service.task(id, owner)).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-owner' });
+
+  const revised = service.reviseContract(id, owner, '必须核对金额、供应商和产品编号，负责人独立复核', 'k4');
+  expect(revised.revised).toBe(true);
+  expect(revised.message.body).toContain('第 2 版');
+  expect(revised.task).toMatchObject({ id, status: 'reported', reviewedByUserId: null, runId: 'run_1', messageId: posted.message.id, contract: { version: 2 } });
+  expect(service.listTasks(owner)).toHaveLength(1);
+  // acceptance is against the new contract: the person reviews again
+  expect(service.review(id, owner, 'rev-2').kind).toBe('review');
+  const reloaded = CommandRoom.restore(employees, service.snapshot());
+  expect(reloaded.task(id, owner)).toMatchObject({ runId: 'run_1', contract: { version: 2 }, status: 'reviewed' });
+});

@@ -197,3 +197,71 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     expect(Object.keys(ledger)).toEqual(['INV-480', 'INV-990']); // exactly one write attempt for INV-990
   });
 });
+
+/**
+ * qa-outcomes #37/#38: the person who asked revises a task's acceptance contract after its external write went out.
+ * The earlier acceptance and the run's action approval are void; the same task, the run, the one external write
+ * and its read-back evidence stay; nothing is written again. Runs on the SOP, tool and employee the main line set up.
+ */
+test('revising a task contract voids acceptance and the old approval, and never repeats the external write', async ({ page }) => {
+  await json(page.request.post('/__e2e/erp/mode', { data: { mode: 'ok' } }));
+  await page.goto('/#brain');
+  await page.getByLabel('选择流程').selectOption(SOP);
+  const runs = page.getByRole('region', { name: '运行记录' });
+  await runs.getByLabel('事件编号').fill('INV-777');
+  await runs.getByLabel('输入数据').fill(JSON.stringify({ invoiceNo: 'INV-777', amount: 777 }));
+  await runs.getByRole('button', { name: '按已发布版本触发' }).click();
+  await expect(page.getByLabel('触发结果')).toContainText('等待人工');
+  await page.goto('/#work');
+  await page.getByRole('button', { name: /批准写入「付款登记」（事件 INV-777）/ }).click();
+  await page.getByRole('complementary', { name: '工作项' }).getByRole('button', { name: /按版本 1 决定/ }).click();
+  await expect.poll(async () => (await json<Record<string, unknown>>(page.request.get('/__e2e/erp/ledger')))['INV-777']).toEqual({ invoiceNo: 'INV-777', amount: 777 });
+  const run = (await json<{ executions: { id: string; eventId: string; status: string }[] }>(page.request.get(`/api/v1/executions/?sopId=${SOP}`))).executions.find((r) => r.eventId === 'INV-777')!;
+  expect(run.status).toBe('completed');
+
+  // the task in the command room, linked to that run (as the runtime would), reported by the person answering for the employee
+  const posted = await json<{ task: { id: string } }>(page.request.post('/api/v1/room/messages', { data: { roomId: 'room-1', body: '@财务专员 请登记付款 INV-777', clientMessageId: `e2e-contract-${Date.now()}` } }));
+  const taskId = posted.task.id;
+  await json(page.request.post(`/api/v1/room/tasks/${taskId}/run`, { data: { runId: run.id } }));
+  await json(page.request.post(`/api/v1/room/tasks/${taskId}/report`, { data: { body: '付款已登记，ERP 回读一致', clientMessageId: `e2e-contract-report-${Date.now()}` } }));
+
+  await page.goto('/#room');
+  await page.locator(`[data-task="${taskId}"]`).click();
+  const drawer = page.getByRole('complementary', { name: '任务详情' });
+  await expect(drawer.locator('[data-run]')).toContainText('事件 INV-777 · 已完成');
+  await expect(drawer.locator('[data-attempts]')).toHaveAttribute('data-attempts', '1');
+  await expect(drawer.locator('[data-attempts]')).toContainText('外部提交 1 次，回读一致');
+  await expect(drawer.locator('[data-approval-item]')).toHaveText(['批准有效']);
+
+  // contract v1, then a person accepts the result against it
+  await drawer.getByLabel('写验收契约').fill('核对金额与供应商');
+  await drawer.getByRole('button', { name: '保存契约' }).click();
+  await expect(drawer.locator('[data-contract]')).toHaveText('第 1 版：核对金额与供应商');
+  await drawer.getByRole('button', { name: '复核通过' }).click();
+  await expect(drawer.locator('[data-status]')).toHaveText('已复核');
+
+  // the contract changes: acceptance and the old approval are void, the write and its evidence stay, nothing reruns
+  await drawer.getByLabel('修改验收契约').fill('必须核对金额、供应商和产品编号，负责人独立复核');
+  await drawer.getByRole('button', { name: '保存契约' }).click();
+  await expect(drawer.locator('[data-contract]')).toHaveText('第 2 版：必须核对金额、供应商和产品编号，负责人独立复核');
+  await expect(drawer.locator('[data-status]')).toHaveText('已回报，待复核');
+  await expect(drawer.locator('[data-approval-item]')).toHaveText(['批准已作废']);
+  await expect(drawer.locator('[data-attempts]')).toHaveAttribute('data-attempts', '1');
+  await expect(drawer.locator('[data-attempts]')).toContainText('回读一致');
+  await expect(drawer.locator('[data-run]')).toContainText('已完成');
+  await expect(page.locator('.exec-stream [data-kind="contract"]').last()).toContainText('不会自动重新执行');
+
+  const room = await json<{ tasks: { id: string; status: string; runId: string; reviewedByUserId: string | null }[] }>(page.request.get('/api/v1/room/tasks?roomId=room-1'));
+  expect(room.tasks.filter((t) => t.id === taskId)).toEqual([expect.objectContaining({ status: 'reported', runId: run.id, reviewedByUserId: null })]);
+  const outcome = await json<{ outcome: { approvals: { id: string; standing: boolean }[]; attempts: number } }>(page.request.get(`/api/v1/room/tasks/${taskId}/outcome`));
+  expect(outcome.outcome.attempts).toBe(1);
+  // the old approval cannot be used again, on the page or through the API
+  const decided = await json<{ ok: boolean; reason: string }>(page.request.post(`/api/v1/work-items/${outcome.outcome.approvals[0]!.id}/decide`, { data: { expectedVersion: 1 } }));
+  expect(decided).toMatchObject({ ok: false, reason: 'retired' });
+  await page.goto('/#work');
+  await page.getByRole('button', { name: /批准写入「付款登记」（事件 INV-777）/ }).click();
+  await expect(page.getByRole('complementary', { name: '工作项' }).getByRole('button', { name: /决定/ })).toHaveCount(0);
+  const ledger = await json<Record<string, unknown>>(page.request.get('/__e2e/erp/ledger'));
+  expect(Object.keys(ledger).filter((key) => key === 'INV-777')).toHaveLength(1);
+  expect((await json<{ executions: { eventId: string }[] }>(page.request.get(`/api/v1/executions/?sopId=${SOP}`))).executions.filter((r) => r.eventId === 'INV-777')).toHaveLength(1);
+});
