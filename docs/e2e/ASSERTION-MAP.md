@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 127 |
+| e2e | Covered by a Playwright test against the real app | 162 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 60 |
+| pending | Feature not built yet; the owner task will add the E2E | 25 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 52, T-45 8
+Pending by owner: T-41 17, T-45 8
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -69,36 +69,36 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 |---|---|---|---|
 | 1 | Old one-goal form remains | n/a | regression guard for an earlier prototype UI that the product never had |
 | 2 | Manual fixed advance remains | n/a | regression guard for an earlier prototype UI that the product never had |
-| 3 | Chat boot creates arbitrary tasks | pending | T-41 — command room conversation / dispatch |
-| 4 | Greeting forced task | pending | T-41 — command room conversation / dispatch |
-| 5 | Availability question forced task | pending | T-41 — command room conversation / dispatch |
-| 6 | Discussion not clarified | pending | T-41 — command room conversation / dispatch |
-| 7 | Mention picker not open | pending | T-41 — command room conversation / dispatch |
-| 8 | Mention insertion wrong | pending | T-41 — command room conversation / dispatch |
-| 9 | Conversation did not create one task | pending | T-41 — command room conversation / dispatch |
-| 10 | Assignment/source/prompt snapshot absent | pending | T-41 — command room conversation / dispatch |
-| 11 | Employee did not report | pending | T-41 — command room conversation / dispatch |
-| 12 | Dispatch/report not visible | pending | T-41 — command room conversation / dispatch |
-| 13 | Completed unreviewed task disappeared | pending | T-41 — command room conversation / dispatch |
-| 14 | Task evidence unlinked | pending | T-41 — command room conversation / dispatch |
-| 15 | New sent message stayed in old history | pending | T-41 — command room conversation / dispatch |
-| 16 | Follow-up lost original context/capability | pending | T-41 — command room conversation / dispatch |
+| 3 | Chat boot creates arbitrary tasks | e2e | apps/e2e/tests/command-room.spec.ts |
+| 4 | Greeting forced task | e2e | apps/e2e/tests/command-room.spec.ts |
+| 5 | Availability question forced task | e2e | apps/e2e/tests/command-room.spec.ts |
+| 6 | Discussion not clarified | e2e | apps/e2e/tests/command-room.spec.ts |
+| 7 | Mention picker not open | e2e | apps/e2e/tests/command-room.spec.ts |
+| 8 | Mention insertion wrong | e2e | apps/e2e/tests/command-room.spec.ts |
+| 9 | Conversation did not create one task | e2e | apps/e2e/tests/command-room.spec.ts |
+| 10 | Assignment/source/prompt snapshot absent | e2e | apps/e2e/tests/command-room.spec.ts |
+| 11 | Employee did not report | e2e | apps/e2e/tests/command-room.spec.ts — the report arrives through the report API from the person answering for the employee (the runtime will call the same route) |
+| 12 | Dispatch/report not visible | e2e | apps/e2e/tests/command-room.spec.ts |
+| 13 | Completed unreviewed task disappeared | e2e | apps/e2e/tests/command-room.spec.ts |
+| 14 | Task evidence unlinked | e2e | apps/e2e/tests/command-room.spec.ts |
+| 15 | New sent message stayed in old history | e2e | apps/e2e/tests/command-room.spec.ts |
+| 16 | Follow-up lost original context/capability | e2e | apps/e2e/tests/command-room.spec.ts — follow-up is started from the task (追问), not guessed from wording |
 | 17 | Missing tool fake-executed | unit | apps/server/test/tools.test.ts |
-| 18 | External action did not ask parameters | pending | T-41 — command room conversation / dispatch |
-| 19 | Cancel failed | pending | T-41 — command room conversation / dispatch |
-| 20 | Async replies erased draft | pending | T-41 — command room conversation / dispatch |
-| 21 | Readonly finance work incorrectly needs payment approval | pending | T-41 — command room conversation / dispatch |
-| 22 | Private draft leaked identity | pending | T-41 — command room conversation / dispatch |
-| 23 | Employee has private coordinator config | pending | T-41 — command room conversation / dispatch |
-| 24 | Other employee task leaked | pending | T-41 — command room conversation / dispatch |
-| 25 | Employee can assign another human agent | pending | T-41 — command room conversation / dispatch |
-| 26 | Employee own-scope work blocked | pending | T-41 — command room conversation / dispatch |
-| 27 | Mention menu leaks other employee | pending | T-41 — command room conversation / dispatch |
-| 28 | Owner draft not restored | pending | T-41 — command room conversation / dispatch |
-| 29 | Chat not principal scroll area | pending | T-41 — command room conversation / dispatch |
+| 18 | External action did not ask parameters | e2e | apps/e2e/tests/command-room.spec.ts |
+| 19 | Cancel failed | e2e | apps/e2e/tests/command-room.spec.ts — cancelled from the task drawer |
+| 20 | Async replies erased draft | e2e | apps/e2e/tests/command-room.spec.ts |
+| 21 | Readonly finance work incorrectly needs payment approval | e2e | apps/e2e/tests/command-room.spec.ts |
+| 22 | Private draft leaked identity | e2e | apps/e2e/tests/command-room.spec.ts |
+| 23 | Employee has private coordinator config | e2e | apps/e2e/tests/command-room.spec.ts |
+| 24 | Other employee task leaked | e2e | apps/e2e/tests/command-room.spec.ts |
+| 25 | Employee can assign another human agent | e2e | apps/e2e/tests/command-room.spec.ts |
+| 26 | Employee own-scope work blocked | e2e | apps/e2e/tests/command-room.spec.ts |
+| 27 | Mention menu leaks other employee | e2e | apps/e2e/tests/command-room.spec.ts |
+| 28 | Owner draft not restored | e2e | apps/e2e/tests/command-room.spec.ts |
+| 29 | Chat not principal scroll area | e2e | apps/e2e/tests/command-room.spec.ts — checked at the desktop viewport |
 | 30 | Offline file conversation fails | n/a | prototype opened from file://; product is served over HTTPS |
-| 31 | Shift+Enter unexpectedly sent | pending | T-41 — command room conversation / dispatch |
-| 32 | Enter did not send | pending | T-41 — command room conversation / dispatch |
+| 31 | Shift+Enter unexpectedly sent | e2e | apps/e2e/tests/command-room.spec.ts |
+| 32 | Enter did not send | e2e | apps/e2e/tests/command-room.spec.ts |
 
 ## qa-enablement
 
@@ -174,16 +174,16 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 |---|---|---|---|
 | 1 | Primary navigation changed | e2e | apps/e2e/tests/shell.spec.ts |
 | 2 | Empty summary invents work | pending | T-41 |
-| 3 | Greeting forced business form/task | pending | T-41 |
-| 4 | Async employee report replaced composer | pending | T-41 |
-| 5 | Draft incorrectly marked human-accepted | pending | T-41 |
+| 3 | Greeting forced business form/task | e2e | apps/e2e/tests/command-room.spec.ts |
+| 4 | Async employee report replaced composer | e2e | apps/e2e/tests/command-room.spec.ts |
+| 5 | Draft incorrectly marked human-accepted | e2e | apps/e2e/tests/command-room.spec.ts — a reported task is not accepted until a person reviews it |
 | 6 | Draft boundary missing | pending | T-41 |
 | 7 | Execution identity untraceable | e2e | apps/e2e/tests/mainline.spec.ts |
 | 8 | Raw implementation JSON in result | pending | T-41 |
 | 9 | Verified result cannot be reviewed | pending | T-41 |
 | 10 | Malformed evidence passed | pending | T-41 |
 | 11 | Failed evidence can be accepted | pending | T-41 |
-| 12 | Human result acceptance missing | pending | T-41 |
+| 12 | Human result acceptance missing | e2e | apps/e2e/tests/command-room.spec.ts |
 | 13 | Missing information fake-executed | e2e | apps/e2e/tests/mainline.spec.ts |
 | 14 | Empty supplement accepted | pending | T-41 |
 | 15 | Supplement restarted/replaced task | pending | T-41 |
@@ -198,7 +198,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 24 | Executing version differs from approved version | unit | apps/server/test/tools.test.ts |
 | 25 | Tool release leaked to other employee | unit | apps/server/test/tools.test.ts |
 | 26 | Summary leaks other owner | pending | T-41 |
-| 27 | Employee navigation expanded | pending | T-41 — employee navigation (simulated view) ships with the command room |
+| 27 | Employee navigation expanded | e2e | apps/e2e/tests/command-room.spec.ts |
 | 28 | Write rehearsal auto-approved | pending | T-45 — long-running items, approvals bound to parameters, read-back (with T-41) |
 | 29 | Approval does not bind parameters | unit | apps/server/test/execution.test.ts |
 | 30 | Timeout marked complete/retried | unit | apps/server/test/execution.test.ts |
@@ -328,8 +328,8 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | # | Assertion | Status | Where / owner |
 |---|---|---|---|
 | 1 | Desktop heading and subtitle vertically centered in same row | e2e | apps/e2e/tests/shell.spec.ts |
-| 2 | Employee header uses same single row | pending | T-41 — employee view of the room header is built with the command room |
-| 3 | Employee subtitle retained | pending | T-41 — employee view of the room header is built with the command room |
+| 2 | Employee header uses same single row | e2e | apps/e2e/tests/command-room.spec.ts |
+| 3 | Employee subtitle retained | e2e | apps/e2e/tests/command-room.spec.ts |
 | 4 | No browser errors | e2e | apps/e2e/tests/fixtures.ts (every test fails on page/console errors) |
 
 ## qa-source-guide

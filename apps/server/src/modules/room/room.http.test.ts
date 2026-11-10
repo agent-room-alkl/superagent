@@ -4,11 +4,17 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import { beforeEach, expect, it } from 'vitest';
 import { bindRoomStore, createCommandRoom, hydrateRoom, loadRoom, reloadRoom, roomModule, roomState, saveRoom } from './index.js';
+import type { EmployeeRef } from './room.js';
 import { LOAD_MEMBERS_SQL, LOAD_MESSAGES_SQL, LOAD_TASKS_SQL, UPSERT_MEMBER_SQL, UPSERT_MESSAGE_SQL, UPSERT_TASK_SQL } from './sql.js';
+
+const EMPLOYEES: EmployeeRef[] = [
+  { id: 'emp-sales', name: '销售员工', ownerUserId: 'user-sales', status: 'active' },
+  { id: 'emp-ops', name: '运营员工', ownerUserId: 'user-ops', status: 'offline' },
+];
 
 beforeEach(() => {
   bindRoomStore(null);
-  roomState.current = createCommandRoom();
+  roomState.current = createCommandRoom(EMPLOYEES);
 });
 
 it('serves the command room: no task for a greeting, one row per client id, and a role-filtered task list', async () => {
@@ -131,7 +137,7 @@ it('a room saved to disk comes back with the same task after load', async () => 
     payload: { roomId: 'room-1', projectId: 'p1', body: '@销售员工 整理询价草稿', clientMessageId: 'disk-1' },
   });
   saveRoom(file);
-  roomState.current = createCommandRoom();
+  roomState.current = createCommandRoom(EMPLOYEES);
   loadRoom(file);
   const tasks = await app.inject({
     method: 'GET',
@@ -160,7 +166,7 @@ it('wiping the process and hydrating from the row store keeps the task and the d
     headers: { 'x-user-id': 'user-sales', 'x-roles': 'employee', 'x-projects': 'p1' },
     payload: { body: '询价草稿已整理', clientMessageId: 'report-1' },
   });
-  roomState.current = createCommandRoom();
+  roomState.current = createCommandRoom(EMPLOYEES);
   await hydrateRoom();
   const tasks = await app.inject({
     method: 'GET',
@@ -242,6 +248,48 @@ it('a report from anyone but the assignee is refused and does not enter the tran
     headers: { 'x-user-id': 'user-sales', 'x-roles': 'employee', 'x-projects': 'p1' },
   });
   expect(tasks.json().tasks[0].status).toBe('assigned');
+  await app.close();
+});
+
+it('roster, cancel and review answer by who is asking; a task someone cannot see is 404 for them', async () => {
+  const app = Fastify();
+  await app.register(roomModule, { prefix: '/api/v1/room' });
+  const owner = { 'x-user-id': 'user-owner', 'x-roles': 'owner' };
+  const sales = { 'x-user-id': 'user-sales', 'x-roles': 'employee' };
+  const ops = { 'x-user-id': 'user-ops', 'x-roles': 'employee' };
+
+  const all = await app.inject({ method: 'GET', url: '/api/v1/room/roster', headers: owner });
+  expect(all.json().viewer).toEqual({ userId: 'user-owner', roles: ['owner'], owner: true });
+  expect(all.json().employees.map((employee: { id: string }) => employee.id)).toEqual(['emp-sales', 'emp-ops']);
+  const mine = await app.inject({ method: 'GET', url: '/api/v1/room/roster', headers: sales });
+  expect(mine.json().viewer.owner).toBe(false);
+  expect(mine.json().employees.map((employee: { id: string }) => employee.id)).toEqual(['emp-sales']);
+
+  const posted = await app.inject({
+    method: 'POST', url: '/api/v1/room/messages', headers: owner,
+    payload: { roomId: 'room-1', body: '@销售员工 整理询价草稿', clientMessageId: 'act-1' },
+  });
+  const taskId = posted.json().task.id as string;
+  const call = (action: string, headers: Record<string, string>, clientMessageId: string) =>
+    app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/${action}`, headers, payload: { clientMessageId } });
+
+  expect((await call('review', owner, 'rv-0')).json()).toEqual({ error: 'not_reported' });
+  expect((await call('cancel', ops, 'cx-0')).statusCode).toBe(404);
+  expect((await call('review', ops, 'rv-1')).statusCode).toBe(404);
+  expect((await call('cancel', sales, 'cx-1')).statusCode).toBe(403); // the assignee sees it but did not ask for it
+  expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/cancel`, headers: owner, payload: {} })).statusCode).toBe(400);
+
+  await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/report`, headers: sales, payload: { body: '询价草稿已整理', clientMessageId: 'rp-1' } });
+  expect((await call('cancel', owner, 'cx-2')).statusCode).toBe(409); // reported work is reviewed, not cancelled
+  const accepted = await call('review', owner, 'rv-2');
+  expect(accepted.statusCode).toBe(200);
+  expect(accepted.json()).toMatchObject({ kind: 'review', taskIds: [taskId] });
+  const closed = await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/report`, headers: sales, payload: { body: '再报一次', clientMessageId: 'rp-2' } });
+  expect(closed.statusCode).toBe(409);
+  expect(closed.json()).toEqual({ error: 'task_closed' });
+
+  const other = await app.inject({ method: 'GET', url: '/api/v1/room/tasks?roomId=room-2', headers: owner });
+  expect(other.json().tasks).toEqual([]);
   await app.close();
 });
 

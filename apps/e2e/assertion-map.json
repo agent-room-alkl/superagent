@@ -330,113 +330,101 @@
    "id": "qa-conversation#3",
    "suite": "qa-conversation",
    "assertion": "Chat boot creates arbitrary tasks",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#4",
    "suite": "qa-conversation",
    "assertion": "Greeting forced task",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#5",
    "suite": "qa-conversation",
    "assertion": "Availability question forced task",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#6",
    "suite": "qa-conversation",
    "assertion": "Discussion not clarified",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#7",
    "suite": "qa-conversation",
    "assertion": "Mention picker not open",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#8",
    "suite": "qa-conversation",
    "assertion": "Mention insertion wrong",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#9",
    "suite": "qa-conversation",
    "assertion": "Conversation did not create one task",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#10",
    "suite": "qa-conversation",
    "assertion": "Assignment/source/prompt snapshot absent",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#11",
    "suite": "qa-conversation",
    "assertion": "Employee did not report",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "the report arrives through the report API from the person answering for the employee (the runtime will call the same route)"
   },
   {
    "id": "qa-conversation#12",
    "suite": "qa-conversation",
    "assertion": "Dispatch/report not visible",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#13",
    "suite": "qa-conversation",
    "assertion": "Completed unreviewed task disappeared",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#14",
    "suite": "qa-conversation",
    "assertion": "Task evidence unlinked",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#15",
    "suite": "qa-conversation",
    "assertion": "New sent message stayed in old history",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#16",
    "suite": "qa-conversation",
    "assertion": "Follow-up lost original context/capability",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "follow-up is started from the task (追问), not guessed from wording"
   },
   {
    "id": "qa-conversation#17",
@@ -450,97 +438,87 @@
    "id": "qa-conversation#18",
    "suite": "qa-conversation",
    "assertion": "External action did not ask parameters",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#19",
    "suite": "qa-conversation",
    "assertion": "Cancel failed",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "cancelled from the task drawer"
   },
   {
    "id": "qa-conversation#20",
    "suite": "qa-conversation",
    "assertion": "Async replies erased draft",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#21",
    "suite": "qa-conversation",
    "assertion": "Readonly finance work incorrectly needs payment approval",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#22",
    "suite": "qa-conversation",
    "assertion": "Private draft leaked identity",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#23",
    "suite": "qa-conversation",
    "assertion": "Employee has private coordinator config",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#24",
    "suite": "qa-conversation",
    "assertion": "Other employee task leaked",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#25",
    "suite": "qa-conversation",
    "assertion": "Employee can assign another human agent",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#26",
    "suite": "qa-conversation",
    "assertion": "Employee own-scope work blocked",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#27",
    "suite": "qa-conversation",
    "assertion": "Mention menu leaks other employee",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#28",
    "suite": "qa-conversation",
    "assertion": "Owner draft not restored",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#29",
    "suite": "qa-conversation",
    "assertion": "Chat not principal scroll area",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "checked at the desktop viewport"
   },
   {
    "id": "qa-conversation#30",
@@ -553,17 +531,15 @@
    "id": "qa-conversation#31",
    "suite": "qa-conversation",
    "assertion": "Shift+Enter unexpectedly sent",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-conversation#32",
    "suite": "qa-conversation",
    "assertion": "Enter did not send",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "command room conversation / dispatch"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-enablement#1",
@@ -1042,25 +1018,23 @@
    "id": "qa-outcomes#3",
    "suite": "qa-outcomes",
    "assertion": "Greeting forced business form/task",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#4",
    "suite": "qa-outcomes",
    "assertion": "Async employee report replaced composer",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#5",
    "suite": "qa-outcomes",
    "assertion": "Draft incorrectly marked human-accepted",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "a reported task is not accepted until a person reviews it"
   },
   {
    "id": "qa-outcomes#6",
@@ -1113,9 +1087,8 @@
    "id": "qa-outcomes#12",
    "suite": "qa-outcomes",
    "assertion": "Human result acceptance missing",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#13",
@@ -1232,9 +1205,8 @@
    "id": "qa-outcomes#27",
    "suite": "qa-outcomes",
    "assertion": "Employee navigation expanded",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "employee navigation (simulated view) ships with the command room"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-outcomes#28",
@@ -2125,17 +2097,15 @@
    "id": "qa-room-header#2",
    "suite": "qa-room-header",
    "assertion": "Employee header uses same single row",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "employee view of the room header is built with the command room"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-room-header#3",
    "suite": "qa-room-header",
    "assertion": "Employee subtitle retained",
-   "status": "pending",
-   "owner": "T-41",
-   "note": "employee view of the room header is built with the command room"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-room-header#4",

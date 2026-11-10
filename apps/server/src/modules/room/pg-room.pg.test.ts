@@ -21,6 +21,7 @@ CREATE TABLE "${SCHEMA}".room_messages (
   client_message_id text NOT NULL,
   mentions jsonb NOT NULL,
   task_ids jsonb NOT NULL,
+  kind text,
   UNIQUE (room_id, client_message_id)
 );
 CREATE TABLE "${SCHEMA}".room_tasks (
@@ -33,7 +34,8 @@ CREATE TABLE "${SCHEMA}".room_tasks (
   employee_id text NOT NULL,
   title text NOT NULL,
   status text NOT NULL,
-  waiting_reason text
+  waiting_reason text,
+  context jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE TABLE "${SCHEMA}".room_members (
   room_id text NOT NULL,
@@ -43,7 +45,7 @@ CREATE TABLE "${SCHEMA}".room_members (
 `;
 
 const employees: EmployeeRef[] = [
-  { id: 'emp-sales', name: '销售员工', ownerUserId: 'user-sales', status: 'active' },
+  { id: 'emp-sales', name: '销售员工', ownerUserId: 'user-sales', status: 'active', promptVersion: 2, modelTier: 'default' },
 ];
 
 async function withDatabase<T>(run: (pool: pg.Pool) => Promise<T>): Promise<T> {
@@ -91,13 +93,32 @@ live('a restarted room reloads the conversation from Postgres and keeps the clie
     service.report(posted.task!.id, 'user-sales', '询价草稿已整理', 'report-1');
     await saveRoomRows(db, service.snapshot());
     await saveRoomRows(db, service.snapshot());
+    // a row written before migration 0006 has no kind; the room works it out on load
+    await db.query(`UPDATE room_messages SET kind = NULL WHERE client_message_id = $1`, ['report-1']);
 
     const restored = CommandRoom.restore(employees, await loadRoomRows(db));
     const owner = { userId: 'user-owner', roles: ['owner' as const], projectScopes: [] };
     const messages = restored.eventsAfter('room-1', 0, owner);
-    expect(messages.map((message) => message.body)).toEqual(['@销售员工 整理询价草稿', '已交给 @销售员工：@销售员工 整理询价草稿', '询价草稿已整理']);
+    expect(messages.map((message) => message.body)).toEqual(['@销售员工 整理询价草稿', '已交给 @销售员工：整理询价草稿', '询价草稿已整理']);
+    expect(messages.map((message) => message.kind)).toEqual(['message', 'reply', 'report']);
     expect(restored.listTasks(owner)).toHaveLength(1);
-    expect(restored.listTasks(owner)[0]?.status).toBe('reported');
+    expect(restored.listTasks(owner)[0]).toMatchObject({
+      status: 'reported',
+      title: '整理询价草稿',
+      createdByUserId: 'user-owner',
+      followupTo: null,
+      approval: 'none',
+      reviewedByUserId: null,
+      promptSnapshot: { employeeId: 'emp-sales', promptVersion: 2, modelTier: 'default' },
+    });
+    // the accepted result and a follow-up survive the next restart too
+    restored.review(posted.task!.id, owner, 'review-1');
+    const followup = restored.post({ roomId: 'room-1', tenantId: 't', authorUserId: 'user-owner', body: '请补充交期', clientMessageId: 'c3', followupTo: posted.task!.id });
+    await saveRoomRows(db, restored.snapshot());
+    const second = CommandRoom.restore(employees, await loadRoomRows(db));
+    expect(second.listTasks(owner).find((task) => task.id === posted.task!.id)).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-owner' });
+    expect(second.listTasks(owner).find((task) => task.id === followup.task!.id)).toMatchObject({ followupTo: posted.task!.id, projectId: 'p1' });
+    expect(second.eventsAfter('room-1', 0, owner).find((message) => message.clientMessageId === 'review-1')?.kind).toBe('review');
     const again = restored.post({
       roomId: 'room-1',
       tenantId: 't',
