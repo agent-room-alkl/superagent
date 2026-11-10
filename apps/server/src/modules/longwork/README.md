@@ -22,6 +22,23 @@ Set `MAIL_NOTIFICATION_URL` to the deployed HTTPS `/integrations/mail` route (no
 identity needs mailbox-limited Graph `Mail.Read`; the knowledge plugin's configuration does not grant this trigger
 authorization. No `Mail.Send` or mailbox write operation is requested. Empty configuration means no Graph traffic.
 
+Apply `0009_longwork_sop_starts.sql` together with the existing SOP migrations before this revision. Longwork
+readiness checks all required tables. Production receipt acceptance uses the same PostgreSQL transaction for the
+receipt, long item, SOP event claim, pinned version and start-instance metadata. The bridge reuses the SOP module's
+`loadPublishedVersion` and `claimSopEvent` ports; it does not depend on the web process's singleton.
+
+An unpublished/invalid or paused version leaves a durable request on the original item. The worker's normal tick
+rechecks it, and a later eligible publication registers exactly one instance for that original event. The accepted
+version remains pinned across later publications, process reconstruction and source disable/re-enable. Disabling
+or changing the source blocks its start without erasing the pin. A conflicting event claim stays visible for
+manual reconciliation. Closing a case cancels its pending start and marks the metadata instance skipped.
+
+The resulting state is **waiting_runtime**: the SOP instance and version exist, while the general graph has not
+run and no external action has occurred. This revision installs no `sop.start` worker handler. A future execution
+consumer must recheck the request's current state/source and provide durable step/approval continuation plus
+write-before-call fencing. It must never treat a metadata instance's `running` registry status as execution proof.
+The unified inbox shows this waiting reason and its version/instance ids. Ordinary reads never prepare new starts.
+
 The worker registers a `created` subscription, renews it before expiry and reconciles folder delta pages every
 minute. A webhook only authenticates `subscriptionId` + `clientState` and durably requests a scan. It never treats
 notification bodies as business instructions. Delta URLs must remain on the approved Graph mailbox/folder;
@@ -46,7 +63,7 @@ one transaction; repeated requests return its original id. Existing candidates a
 and selecting a new case are mutually exclusive decisions. The new case still uses the server-approved source,
 object, assignee and date rule; a changed object binding blocks rather than silently reinterpreting the mail.
 
-The first mail creates the long-running item associated with the configured SOP, rather than running the SOP's
+The first mail creates the long-running item and durable SOP start metadata, rather than running the SOP's
 general-purpose tool graph. This delivery does not add a new general-purpose SOP executor. Reminders advance
 initial → reminder → final and create **pending send intents**; the phase never claims an email was sent.
 
@@ -84,6 +101,8 @@ deadlines. `graph.test.ts`: subscription requests, approved delta scopes, replay
 redirect prevention and simultaneous scans. `http.test.ts`: real authenticated Fastify routes and access boundaries.
 `store.pg.test.ts`: real PostgreSQL, 12 concurrent copies of one mail, rollback, a new service instance and an
 unknown write recovered with exactly one read and no repeated submission.
+`sop-starts.pg.test.ts`: independent publication/worker objects, concurrent atomic acceptance, injected failure
+after event claim, original-request recovery after publication/pause, version pinning and source revocation.
 
 Graph HTTP and business-tool tests use labeled synthetic adapters. They do not prove a live Microsoft 365 tenant
 has granted consent or that a real email/business write occurred. Existing prototype assertion mappings are not

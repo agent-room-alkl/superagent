@@ -53,7 +53,7 @@ export class LongWork {
       if (i.assignee !== assignee) throw Error('forbidden');
       if (s.exceptions.some(e => !e.resolvedTo && e.candidates.includes(id))) throw Error('unresolved_exception_conflict');
       i.phase = 'closed'; this.cancelPending(s.actions, i.id); return i;
-    });
+    }, { prepareSop: true });
   }
 
   async ingest(source: MailSource, mail: Incoming) {
@@ -88,7 +88,7 @@ export class LongWork {
         original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
       state.items.push(item);
       return { item, merged: false };
-    });
+    }, { prepareSop: true });
   }
 
   private addReplyAction(actions: Action[], source: MailSource, mail: Incoming, exceptionId: string) {
@@ -143,7 +143,7 @@ export class LongWork {
       s.items.push(item); e.resolvedTo = item.id; e.resolutionKind = 'new';
       action.status = 'succeeded'; action.evidence = 'Reviewer classified incoming data as a new case; no external action executed';
       return item;
-    });
+    }, { prepareSop: true });
   }
 
   saveRule(tenant: string, rule: DateRule) {
@@ -258,6 +258,6 @@ export class LongWork {
         this.cancelPending(s.actions, `collection:${c.id}`);
       }
       return { items: s.items, collections: s.collections };
-    });
+    }, { prepareSop: true });
   }
 }
