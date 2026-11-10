@@ -37,7 +37,7 @@ export class LongWork {
       const receipt = key(source.tenant, source.id, mail.id, source.sopId);
       if (state.receipts.includes(receipt)) return { duplicate: true };
       const candidates = state.items.filter(i => i.sourceId === source.id && i.sopId === source.sopId && i.projectId === source.projectId &&
-        i.objectId === source.objectId && i.person === mail.from.toLowerCase() && i.threadId === mail.threadId && !['closed', 'replied'].includes(i.phase));
+        i.objectId === source.objectId && i.person === mail.from.toLowerCase() && i.threadId === mail.threadId && i.phase !== 'closed');
       state.receipts.push(receipt);
       if (candidates.length > 1) {
         const exception = { id: randomUUID(), kind: 'exception_ruling' as const, renderer: 'issue_list' as const, assignee: source.reviewer,
@@ -54,7 +54,8 @@ export class LongWork {
       const due = objectDue(source.dueRule, source.fields);
       const item: LongItem = { id: randomUUID(), sourceId: source.id, sopId: source.sopId, projectId: source.projectId,
         objectId: source.objectId, person: mail.from.toLowerCase(), threadId: mail.threadId, assignee: source.assignee,
-        phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs, events: [mail.id], replies: [] };
+        phase: 'initial', dueAt: due.dueAt, dateRuleId: due.ruleId, dateRuleVersion: due.ruleVersion, reminderMs: source.reminderMs,
+        original: { body: mail.body, receivedAt: mail.receivedAt }, events: [mail.id], replies: [] };
       state.items.push(item);
       return { item, merged: false };
     });

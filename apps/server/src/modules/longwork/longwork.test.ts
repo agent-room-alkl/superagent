@@ -25,12 +25,16 @@ describe('long-lived mail items', () => {
     const state = await restarted.snapshot(source.tenant);
     expect(state.items).toHaveLength(1); expect(state.actions).toHaveLength(0);
     expect(state.receipts).toHaveLength(1); expect(state.items[0]!.events).toEqual(['message-1']);
+    expect(state.items[0]!.original.body).toBe(incoming.body);
     expect((await work.snapshot('other-tenant')).items).toHaveLength(0);
   });
   it('merges only an exact waiting thread + project/object/person and cancels further reminders', async () => {
     const f = fixture(); await f.work.ingest(source, incoming);
     const result = await f.work.ingest(source, { ...incoming, id: 'reply-1' });
     expect(result.merged).toBe(true); expect(result.item!.replies[0]!.body).toBe(incoming.body);
+    await f.work.ingest(source, { ...incoming, id: 'reply-2' });
+    expect((await f.work.snapshot(source.tenant)).items).toHaveLength(1);
+    expect((await f.work.snapshot(source.tenant)).items[0]!.replies).toHaveLength(2);
     f.set(Date.parse('2026-10-01T00:00:00Z')); await f.work.tick(source.tenant);
     expect((await f.work.snapshot(source.tenant)).actions).toHaveLength(0);
     await f.work.ingest({ ...source, objectId: 'different' }, { ...incoming, id: 'reply-other' });
