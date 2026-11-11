@@ -24,6 +24,36 @@ const contract = {
 
 test.describe.configure({ mode: 'serial' });
 
+test('an empty catalogue shows an empty state and no sample tool', async ({ page }) => {
+  await page.route('**/api/v1/tools/', (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.goto('/#tools');
+  await expect(page.getByText('还没有工具。', { exact: true })).toBeVisible();
+  await expect(page.getByRole('list', { name: '工具列表' })).toHaveCount(0);
+});
+
+test('[qa-enablement#49] the tool list shows the same current step as the card', async ({ page, request }) => {
+  const id = 'e2e.list.progress';
+  const created = await request.post('/api/v1/tools/', {
+    data: { name: 'List progress', contract: { ...contract, toolId: id }, acceptanceCases: ['normal', 'missing lot'], consumers: ['emp-1'] },
+  });
+  expect(created.status()).toBe(200);
+  await page.goto('/#tools');
+  const row = page.getByRole('list', { name: '工具列表' }).getByRole('listitem').filter({ hasText: id });
+  await expect(row.locator('[aria-current="step"]')).toContainText('占位');
+  await row.getByRole('button', { name: id }).click();
+  const cardSteps = page.getByRole('list', { name: '工具进度' });
+  await expect(cardSteps.locator('[aria-current="step"]')).toContainText('占位');
+
+  expect((await request.post(`/api/v1/tools/${id}/confirm`)).status()).toBe(200);
+  await page.reload();
+  await expect(row.locator('[aria-current="step"]')).toContainText('获取');
+  await row.getByRole('button', { name: id }).click();
+  await expect(cardSteps.locator('[aria-current="step"]')).toContainText('获取');
+});
+
 async function card(page: import('@playwright/test').Page) {
   await page.goto('/#tools');
   await page.getByRole('textbox').first().fill(TOOL);

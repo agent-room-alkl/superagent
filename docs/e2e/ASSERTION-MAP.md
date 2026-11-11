@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 186 |
+| e2e | Covered by a Playwright test against the real app | 187 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 1 |
+| pending | Feature not built yet; the owner task will add the E2E | 0 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-39 1
+Pending by owner: 
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -152,7 +152,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 46 | Account binding changes invalidate availability | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 47 | Unsaved contract changes cannot use previous test approval | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 48 | Saved contract revision invalidates candidate and tests | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
-| 49 | Tool list exposes same compact lifecycle progress | pending | T-39 — 没有工具列表页。员工工具页只能按 ID 打开单张卡。 |
+| 49 | Tool list exposes same compact lifecycle progress | e2e | apps/e2e/tests/tools.spec.ts ([qa-enablement#49]) |
 | 50 | Reanalysis preserves explicit role deletion instead of recreating it | e2e | apps/e2e/tests/knowledge.spec.ts ([qa-enablement#50]) — Passed real React/Fastify/knowledge service/gateway browser case; external source, model and database drivers explicitly synthetic. |
 | 51 | Unused unimplemented tool can be explicitly cancelled without deleting published versions | unit | apps/server/test/tools.test.ts / apps/server/test/sandbox.test.ts |
 | 52 | No browser errors or imported script execution | e2e | apps/e2e/tests/knowledge.spec.ts ([qa-enablement#52]) |

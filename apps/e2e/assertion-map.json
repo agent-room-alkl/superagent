@@ -928,9 +928,8 @@
    "id": "qa-enablement#49",
    "suite": "qa-enablement",
    "assertion": "Tool list exposes same compact lifecycle progress",
-   "status": "pending",
-   "owner": "T-39",
-   "note": "没有工具列表页。员工工具页只能按 ID 打开单张卡。"
+   "status": "e2e",
+   "ref": "apps/e2e/tests/tools.spec.ts ([qa-enablement#49])"
   },
   {
    "id": "qa-enablement#50",
