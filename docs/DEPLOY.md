@@ -8,7 +8,7 @@ stored in Key Vault by the app itself.
 
 | Resource | Purpose | Notes |
 |---|---|---|
-| Container Apps environment | Hosts web, worker and jobs | Logs to Log Analytics. Optional `existingContainerAppsEnvironmentId` reuses one instead of creating it |
+| Container Apps environment | Hosts web, worker and jobs | Logs to Log Analytics. Optional `existingManagedEnvironmentId` reuses one instead of creating it |
 | `sa-<env>-web` | Workbench + API | Scales 0–3; external HTTPS ingress |
 | `sa-<env>-worker` | Queue, schedules, sync, model calls | **minReplicas = 1** — no ingress, so it must never scale to zero |
 | `sa-<env>-migrate` (Job) | Applies `apps/server/migrations/*.sql` | Started by the deploy workflow before smoke test |
@@ -54,11 +54,14 @@ Production hardening (both optional parameters):
    `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`,
    `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `PG_ADMIN_GROUP_ID`, `PG_ADMIN_GROUP_NAME`.
    Optional: `LOCATION`, `DOC_INTEL_LOCATION`. Leave both unset for staging.
-   Staging also sets `EXISTING_CONTAINERAPPS_ENVIRONMENT_ID` to the existing environment
+   Staging also sets `EXISTING_CAE_ID` to the existing environment
    `cae-innopro-3aenup` in `rg-innopro-prod` (Australia East). This subscription allows only one Container Apps
    environment, so a second one cannot be created in any region. Superagent still creates its own PostgreSQL, Key Vault,
    storage, registry and Document Intelligence in `rg-superagent-staging`. It does not modify `innopro-api`. Isolation
    from that app is only at the container-app layer: they share the environment, its VNet and its environment logs.
+   Container logs therefore go to innopro's Log Analytics workspace. The deployment identity needs
+   `Microsoft.App/managedEnvironments/join/action` on that environment. App and job names stay prefixed `sa-<env>-`,
+   so they do not collide with `innopro-api`. Do not combine this with `enablePrivateNetworking`.
    Leave the variable unset to create a new environment, which is the previous behaviour.
 5. **Production approval**: configure the `prod` GitHub environment with required reviewers.
 
