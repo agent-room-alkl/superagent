@@ -4,10 +4,10 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 187 |
+| e2e | Covered by a Playwright test against the real app | 182 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
 | pending | Feature not built yet; the owner task will add the E2E | 0 |
-| n/a | Prototype-only behaviour, with the reason given | 18 |
+| n/a | Prototype-only behaviour, with the reason given | 23 |
 | **total** | | **275** |
 
 Pending by owner: 
@@ -58,7 +58,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 38 | Upstream revision revokes downstream permission | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 40 | Manual note cannot erase mismatched system outcome | e2e | apps/e2e/tests/work-inbox.spec.ts |
-| 41 | Existing conversation still produces draft | e2e | apps/e2e/tests/command-room.spec.ts |
+| 41 | Existing conversation still produces draft | e2e | apps/e2e/tests/command-room.spec.ts — 产品决定：回报即完成；草稿任务在员工回报前保持进行中，回报后直接完成 |
 | 42 | Existing task evidence boundary retained | e2e | apps/e2e/tests/command-room.spec.ts |
 | 43 | Human dialog styles do not leak to task drawer | n/a | prototype single-file CSS isolation; React components are scoped |
 | 44 | No browser errors | e2e | apps/e2e/tests/fixtures.ts (every test fails on page/console errors) |
@@ -79,7 +79,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 10 | Assignment/source/prompt snapshot absent | e2e | apps/e2e/tests/command-room.spec.ts |
 | 11 | Employee did not report | e2e | apps/e2e/tests/command-room.spec.ts — the report arrives through the report API from the person answering for the employee (the runtime will call the same route) |
 | 12 | Dispatch/report not visible | e2e | apps/e2e/tests/command-room.spec.ts |
-| 13 | Completed unreviewed task disappeared | e2e | apps/e2e/tests/command-room.spec.ts |
+| 13 | Completed unreviewed task disappeared | n/a | 产品决定：回报即完成 |
 | 14 | Task evidence unlinked | e2e | apps/e2e/tests/command-room.spec.ts |
 | 15 | New sent message stayed in old history | e2e | apps/e2e/tests/command-room.spec.ts |
 | 16 | Follow-up lost original context/capability | e2e | apps/e2e/tests/command-room.spec.ts — follow-up is started from the task (追问), not guessed from wording |
@@ -176,14 +176,14 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 2 | Empty summary invents work | e2e | apps/e2e/tests/command-room.spec.ts |
 | 3 | Greeting forced business form/task | e2e | apps/e2e/tests/command-room.spec.ts |
 | 4 | Async employee report replaced composer | e2e | apps/e2e/tests/command-room.spec.ts |
-| 5 | Draft incorrectly marked human-accepted | e2e | apps/e2e/tests/command-room.spec.ts — a reported task is not accepted until a person reviews it |
+| 5 | Draft incorrectly marked human-accepted | n/a | 产品决定：回报即完成 |
 | 6 | Draft boundary missing | e2e | apps/e2e/tests/command-room.spec.ts |
 | 7 | Execution identity untraceable | e2e | apps/e2e/tests/mainline.spec.ts |
 | 8 | Raw implementation JSON in result | e2e | apps/e2e/tests/command-room.spec.ts |
-| 9 | Verified result cannot be reviewed | e2e | apps/e2e/tests/command-room.spec.ts |
+| 9 | Verified result cannot be reviewed | n/a | 产品决定：回报即完成 |
 | 10 | Malformed evidence passed | e2e | apps/e2e/tests/command-room.spec.ts |
 | 11 | Failed evidence can be accepted | e2e | apps/e2e/tests/command-room.spec.ts |
-| 12 | Human result acceptance missing | e2e | apps/e2e/tests/command-room.spec.ts |
+| 12 | Human result acceptance missing | n/a | 产品决定：回报即完成 |
 | 13 | Missing information fake-executed | e2e | apps/e2e/tests/mainline.spec.ts |
 | 14 | Empty supplement accepted | e2e | apps/e2e/tests/command-room.spec.ts |
 | 15 | Supplement restarted/replaced task | e2e | apps/e2e/tests/command-room.spec.ts |
@@ -205,10 +205,10 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 31 | Unknown write can be accepted | e2e | apps/e2e/tests/mainline.spec.ts |
 | 32 | Unknown readback retried write | unit | apps/server/test/execution.test.ts |
 | 33 | Mismatched write accepted or repeated | e2e | apps/e2e/tests/mainline.spec.ts |
-| 34 | Mismatched result review enabled | e2e | apps/e2e/tests/mainline.spec.ts |
+| 34 | Mismatched result review enabled | n/a | 产品决定：回报即完成 |
 | 35 | Corrected external data could not be reread without a second write | e2e | apps/e2e/tests/mainline.spec.ts — An independent external correction is reread on the same run; the write connector count stays one. |
 | 36 | Matching readback did not verify original request | e2e | apps/e2e/tests/mainline.spec.ts |
-| 37 | Changed contract retains old action approval/acceptance | e2e | apps/e2e/tests/mainline.spec.ts — contract revision on the command-room task retires the linked run's approval and the human acceptance |
+| 37 | Changed contract retains old action approval/acceptance | e2e | apps/e2e/tests/mainline.spec.ts — 产品决定：回报即完成；修改验收契约后原动作批准作废，已完成任务回到进行中等待按新契约回报 |
 | 38 | Contract revision repeats write | e2e | apps/e2e/tests/mainline.spec.ts — the run keeps one gateway call and one ledger entry after the revision |
 | 39 | Offline rehearsal discarded original task | e2e | apps/e2e/tests/command-room.spec.ts — a paused employee holds the same task as 等待连接 |
 | 40 | Manual reconnect failed to resume original task | e2e | apps/e2e/tests/command-room.spec.ts — the owner resumes the employee, then resumes the same task id |
