@@ -299,6 +299,7 @@ export function CommandRoomPage() {
   const scroller = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
   const input = useRef<HTMLTextAreaElement | null>(null);
+  const caretAfterMention = useRef<string | null>(null);
 
   const viewer = roster?.viewer ?? null;
   const viewerId = viewer?.userId ?? null;
@@ -367,14 +368,21 @@ export function CommandRoomPage() {
 
   function pickMention(name: string) {
     const next = insertMention(draft, name);
+    caretAfterMention.current = next;
     changeDraft(next);
     setMentionOpen(false);
-    // Typing continues right after the inserted name.
-    requestAnimationFrame(() => {
-      input.current?.focus();
-      input.current?.setSelectionRange(next.length, next.length);
-    });
+    input.current?.focus();
   }
+
+  // Typing continues right after the inserted name. The caret moves only if the box still holds exactly what the
+  // picker wrote: once the person has typed, moving it would split their text and break the mention.
+  useEffect(() => {
+    const el = input.current;
+    const want = caretAfterMention.current;
+    if (!el || want === null) return;
+    caretAfterMention.current = null;
+    if (el.value === want) el.setSelectionRange(want.length, want.length);
+  }, [draft]);
 
   async function sendDraft() {
     const body = draft.trim();

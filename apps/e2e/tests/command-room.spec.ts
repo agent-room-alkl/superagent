@@ -472,3 +472,24 @@ test('an async report leaves the SOP draft and the field being edited', async ({
     return current === mark.__sopField && current?.closest('fieldset') === mark.__sopForm;
   })).toBe(true);
 });
+
+test('typing right after picking a mention never splits the name from the work (caret race)', async ({ page }) => {
+  const staff = `e2e-room-staff-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  await as(page, OWNER);
+  // CI machines are slower than a laptop; throttle the page so a late caret move would land between keystrokes
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  const rounds = 6;
+  for (let i = 1; i <= rounds; i++) {
+    await page.getByRole('button', { name: '@ 提及' }).click();
+    await page.getByRole('listbox', { name: '选择数字员工' }).locator(`[data-mention="${sales.id}"]`).click();
+    // keys go straight in, with no wait for the picker to settle, as a fast typist would
+    await draft(page).pressSequentially(`请整理第${i}份询价草稿`);
+    await page.getByRole('button', { name: '发送' }).click();
+    await expect(draft(page)).toHaveValue('');
+  }
+  const tasks = await tasksOf(page, OWNER);
+  expect(tasks).toHaveLength(rounds); // every message kept "@name " intact, so each one made a task
+  expect(tasks.every((task) => task.employeeId === sales.id)).toBe(true);
+});
