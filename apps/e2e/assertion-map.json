@@ -1124,7 +1124,8 @@
    "suite": "qa-outcomes",
    "assertion": "Authorized original task failed to resume",
    "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts"
+   "ref": "apps/e2e/tests/command-room.spec.ts (qa-outcomes#18, qa-outcomes#23)",
+   "note": "release-hold returns 409 before the held tool is callable, and resumes the same task id to assigned once callable"
   },
   {
    "id": "qa-outcomes#19",
@@ -1162,9 +1163,9 @@
    "id": "qa-outcomes#23",
    "suite": "qa-outcomes",
    "assertion": "Capability delivery lost original task or did not resume",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts (qa-outcomes#18, qa-outcomes#23)",
+   "note": "a command-room task held for a missing toolId resumes the same task id after the tool completes all seven lifecycle steps for that employee"
   },
   {
    "id": "qa-outcomes#24",

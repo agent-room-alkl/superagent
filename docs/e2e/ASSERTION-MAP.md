@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 185 |
+| e2e | Covered by a Playwright test against the real app | 186 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 2 |
+| pending | Feature not built yet; the owner task will add the E2E | 1 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-39 1, T-41 1
+Pending by owner: T-39 1
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -189,12 +189,12 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 15 | Supplement restarted/replaced task | e2e | apps/e2e/tests/command-room.spec.ts |
 | 16 | Revoked tool still usable | unit | apps/server/test/tools.test.ts |
 | 17 | Blocker has no responsible person | e2e | apps/e2e/tests/command-room.spec.ts |
-| 18 | Authorized original task failed to resume | e2e | apps/e2e/tests/command-room.spec.ts |
+| 18 | Authorized original task failed to resume | e2e | apps/e2e/tests/command-room.spec.ts (qa-outcomes#18, qa-outcomes#23) — release-hold returns 409 before the held tool is callable, and resumes the same task id to assigned once callable |
 | 19 | Tool gap missing | unit | apps/server/test/tools.test.ts |
 | 20 | Unreleased tool treated as reusable | unit | apps/server/test/tools.test.ts |
 | 21 | Independent verification record absent | unit | apps/server/test/tools.test.ts |
 | 22 | Release bypasses review | unit | apps/server/test/tools.test.ts |
-| 23 | Capability delivery lost original task or did not resume | pending | T-41 |
+| 23 | Capability delivery lost original task or did not resume | e2e | apps/e2e/tests/command-room.spec.ts (qa-outcomes#18, qa-outcomes#23) — a command-room task held for a missing toolId resumes the same task id after the tool completes all seven lifecycle steps for that employee |
 | 24 | Executing version differs from approved version | unit | apps/server/test/tools.test.ts |
 | 25 | Tool release leaked to other employee | unit | apps/server/test/tools.test.ts |
 | 26 | Summary leaks other owner | e2e | apps/e2e/tests/command-room.spec.ts |

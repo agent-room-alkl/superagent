@@ -528,3 +528,122 @@ test('qa-human-work#41: an existing conversation still produces a draft task, an
   expect(after.find((task) => task.id === earlier.id)).toMatchObject({ status: 'reported' });
   expect(after.map((task) => task.status)).not.toContain('reviewed');
 });
+
+test('qa-outcomes#18 / qa-outcomes#23: a task held for a missing tool resumes the same task only after the tool completes all seven lifecycle steps for that employee', async ({ page }) => {
+  const finStaff = `e2e-room-fin-${tag()}`;
+  const finance = await employee(page, '财务员工', finStaff);
+  const toolId = `e2e.invoice.lookup.${tag()}`;
+  const reviewerHeaders = { 'x-dev-user': 'e2e-room-reviewer|reviewer|' };
+
+  await as(page, OWNER);
+  await say(page, `@${finance.name} 请查询供应商发票金额`);
+  await expect(taskCards(page)).toHaveCount(1);
+  const [originalTask] = await tasksOf(page, OWNER);
+  expect(originalTask).toMatchObject({ status: 'assigned', employeeId: finance.id });
+
+  // 1) Hold the command-room task for the missing tool; hold records toolId
+  expect((await page.request.post(`/api/v1/room/tasks/${originalTask!.id}/hold`, {
+    data: { toolId },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
+  await page.reload();
+  await expect(taskCards(page)).toHaveCount(1);
+  await expect(taskCards(page).first()).toContainText('等待企业负责人授权');
+  await taskCards(page).first().click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('等待企业负责人授权');
+  await expect(drawer(page).locator('[data-blocker]')).toContainText('企业负责人');
+  expect((await tasksOf(page, OWNER))[0]).toMatchObject({
+    id: originalTask!.id,
+    status: 'waiting',
+    waitingReason: '等待企业负责人授权',
+    hold: { responsible: '企业负责人', toolId },
+  });
+
+  // Release-hold is refused before the tool is callable, even if the body claims toolUsable: true
+  expect((await page.request.post(`/api/v1/room/tasks/${originalTask!.id}/release-hold`, {
+    data: { clientMessageId: `e2e-release-early-${tag()}`, toolUsable: true },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(409);
+
+  // 2) Walk the 7-step tool card lifecycle for this tool and employee
+  await ok(page.request.post('/api/v1/tools/', {
+    headers: { 'x-dev-user': OWNER },
+    data: {
+      name: '发票查询工具',
+      contract: {
+        toolId,
+        action: 'lookup invoice',
+        purpose: 'read invoice amount by lot',
+        targetSystem: 'sample-erp',
+        effect: 'read',
+        input: { type: 'object', properties: { lot: { type: 'string' } }, required: ['lot'] },
+        output: { type: 'object', properties: { amount: { type: 'string' } } },
+        risk: 'low',
+        requiresExactApproval: false,
+      },
+      acceptanceCases: ['normal', 'missing lot'],
+      consumers: [finance.id],
+    },
+  }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/confirm`, { headers: { 'x-dev-user': OWNER } }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/acquire`, {
+    headers: { 'x-dev-user': OWNER },
+    data: { route: 'import', artifact: 'script-v1' },
+  }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/test`, {
+    headers: { 'x-dev-user': OWNER },
+    data: { results: { normal: true, 'missing lot': true } },
+  }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/release`, { headers: reviewerHeaders }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/deploy`, {
+    headers: { 'x-dev-user': OWNER },
+    data: { version: '1.0.0', healthy: true, artifact: 'script-v1' },
+  }));
+  await ok(page.request.post(`/api/v1/tools/${toolId}/install`, {
+    headers: { 'x-dev-user': OWNER },
+    data: { employeeId: finance.id },
+  }));
+
+  // Installed without account binding is still not callable, so release-hold still refuses with 409
+  expect((await page.request.post(`/api/v1/room/tasks/${originalTask!.id}/release-hold`, {
+    data: { clientMessageId: `e2e-release-unbound-${tag()}` },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(409);
+
+  await ok(page.request.post(`/api/v1/tools/${toolId}/bind`, {
+    headers: { 'x-dev-user': OWNER },
+    data: { employeeId: finance.id, credentialRef: 'kv://finance-invoice-lookup', scope: { projects: ['P-1'] } },
+  }));
+
+  // Verify the tool card UI shows all 7 steps completed and available for the employee
+  await page.goto('/#tools');
+  await page.getByRole('textbox').first().fill(toolId);
+  await page.getByRole('button', { name: '打开工具卡' }).click();
+  const steps = page.getByRole('list', { name: '工具进度' });
+  await expect(steps.locator('li.done')).toHaveCount(7);
+  await expect(page.locator('main')).toContainText('就绪：主要使用员工可用');
+
+  // 3) Release the hold; the same task returns to assigned (in progress) and task count stays 1
+  expect((await page.request.post(`/api/v1/room/tasks/${originalTask!.id}/release-hold`, {
+    data: { clientMessageId: `e2e-release-ok-${tag()}` },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
+
+  await as(page, OWNER);
+  await expect(taskCards(page)).toHaveCount(1);
+  await expect(page.locator(`[data-task="${originalTask!.id}"]`)).toContainText('进行中');
+  await page.locator(`[data-task="${originalTask!.id}"]`).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('进行中');
+  await expect(drawer(page).locator('[data-blocker]')).toHaveCount(0);
+  await expect(stream(page)).toContainText(`已恢复：${originalTask!.title}`);
+
+  const afterTasks = await tasksOf(page, OWNER);
+  expect(afterTasks).toHaveLength(1);
+  expect(afterTasks[0]).toMatchObject({
+    id: originalTask!.id,
+    messageId: originalTask!.messageId,
+    status: 'assigned',
+    waitingReason: null,
+    hold: null,
+  });
+});
