@@ -31,7 +31,7 @@ export function evidenceFromReport(body: string): ResultEvidence {
 export function requiredContractFields(criteria: string): string[] {
   const named = criteria.match(/必须核对([^，。；]+)/);
   if (!named) return [];
-  return named[1].split(/[、,，]|和/).map((part) => part.trim()).filter(Boolean);
+  return (named[1] ?? '').split(/[、,，]|和/).map((part) => part.trim()).filter(Boolean);
 }
 
 /**
