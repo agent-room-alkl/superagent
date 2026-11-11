@@ -3,8 +3,9 @@ name: deploy
 # Manual deploys. Azure login uses OIDC federated credentials — no long-lived secrets in GitHub.
 # Required repository/environment variables (not secrets): AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
 # AZURE_RESOURCE_GROUP, ENTRA_TENANT_ID, ENTRA_CLIENT_ID, PG_ADMIN_GROUP_ID, PG_ADMIN_GROUP_NAME.
-# Optional: LOCATION, DOC_INTEL_LOCATION. Unset or empty means the template default (resource group region,
-# and Document Intelligence follows LOCATION). An empty string is not passed, so it cannot override that default.
+# Optional: LOCATION, DOC_INTEL_LOCATION, EXISTING_CONTAINERAPPS_ENVIRONMENT_ID.
+# Unset or empty means the template default. An empty string is not passed, so it cannot override that default.
+# Staging sets EXISTING_CONTAINERAPPS_ENVIRONMENT_ID to the innopro Container Apps environment (subscription quota is one).
 on:
   workflow_dispatch:
     inputs:
@@ -61,6 +62,9 @@ jobs:
           if [ -n "${{ vars.DOC_INTEL_LOCATION }}" ]; then
             REGION_ARGS+=(docIntelLocation="${{ vars.DOC_INTEL_LOCATION }}")
           fi
+          if [ -n "${{ vars.EXISTING_CONTAINERAPPS_ENVIRONMENT_ID }}" ]; then
+            REGION_ARGS+=(existingContainerAppsEnvironmentId="${{ vars.EXISTING_CONTAINERAPPS_ENVIRONMENT_ID }}")
+          fi
           out=$(az deployment group create -g "$RG" -f infra/main.bicep \
             -p @source-parameters.json env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" \
                entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
@@ -90,6 +94,9 @@ jobs:
           fi
           if [ -n "${{ vars.DOC_INTEL_LOCATION }}" ]; then
             REGION_ARGS+=(docIntelLocation="${{ vars.DOC_INTEL_LOCATION }}")
+          fi
+          if [ -n "${{ vars.EXISTING_CONTAINERAPPS_ENVIRONMENT_ID }}" ]; then
+            REGION_ARGS+=(existingContainerAppsEnvironmentId="${{ vars.EXISTING_CONTAINERAPPS_ENVIRONMENT_ID }}")
           fi
           out=$(az deployment group create -g "$RG" -f infra/main.bicep \
             -p @source-parameters.json env="$ENV_NAME" image="$IMAGE" \

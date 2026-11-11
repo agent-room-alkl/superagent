@@ -8,7 +8,7 @@ stored in Key Vault by the app itself.
 
 | Resource | Purpose | Notes |
 |---|---|---|
-| Container Apps environment | Hosts web, worker and jobs | Logs to Log Analytics |
+| Container Apps environment | Hosts web, worker and jobs | Logs to Log Analytics. Optional `existingContainerAppsEnvironmentId` reuses one instead of creating it |
 | `sa-<env>-web` | Workbench + API | Scales 0–3; external HTTPS ingress |
 | `sa-<env>-worker` | Queue, schedules, sync, model calls | **minReplicas = 1** — no ingress, so it must never scale to zero |
 | `sa-<env>-migrate` (Job) | Applies `apps/server/migrations/*.sql` | Started by the deploy workflow before smoke test |
@@ -31,15 +31,13 @@ Production hardening (both optional parameters):
 
 ## One-time setup
 
-1. **Resource group**: `az group create -n rg-superagent-staging -l australiasoutheast`
+1. **Resource group**: `az group create -n rg-superagent-staging -l australiaeast`
    Check that every service above (and your chosen model) is available in the region first.
-   Staging on this subscription cannot put Container Apps in Australia East: that region allows only one Container Apps
-   environment, and it is already in use. Australia Southeast has no Document Intelligence, so that one service stays in
-   Australia East. Set the GitHub environment variables `LOCATION=australiasoutheast` and
-   `DOC_INTEL_LOCATION=australiaeast`. Other resources follow `LOCATION`. Leave either variable unset to keep the
-   template default (the resource group region, and Document Intelligence following `location`). The workflow omits an
-   empty value so it does not override that default. A private endpoint, when enabled, stays in the `location` VNet and
-   can reach Document Intelligence in the other region.
+   This subscription allows only one Container Apps environment in total, and `cae-innopro-3aenup` in `rg-innopro-prod`
+   already uses it. Staging therefore reuses that environment instead of creating another. Web, worker and jobs use that environment and must use the same region, so leave `location` as Australia East. PostgreSQL, Key Vault, storage, the registry and
+   Document Intelligence are still created in `rg-superagent-staging`. Do not change `innopro-api`.
+   `LOCATION` and `DOC_INTEL_LOCATION` stay unset unless a resource must leave the resource group region. The workflow
+   omits an empty value so it does not override the template default.
 2. **Entra app registration (workbench + API, one registration)**: note the tenant id and client id.
    - **Expose an API**: Application ID URI `api://<client-id>`, add the scope `access_as_user` (admins and users can consent).
    - **App roles**: add `admin`, `owner`, `employee` and `reviewer`, then assign users or groups to them.
@@ -55,7 +53,13 @@ Production hardening (both optional parameters):
    Contributor + User Access Administrator on the resource group, and set repository variables:
    `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`,
    `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `PG_ADMIN_GROUP_ID`, `PG_ADMIN_GROUP_NAME`.
-   Optional region variables: `LOCATION`, `DOC_INTEL_LOCATION` (staging: `australiasoutheast` and `australiaeast`).
+   Optional: `LOCATION`, `DOC_INTEL_LOCATION`. Leave both unset for staging.
+   Staging also sets `EXISTING_CONTAINERAPPS_ENVIRONMENT_ID` to the existing environment
+   `cae-innopro-3aenup` in `rg-innopro-prod` (Australia East). This subscription allows only one Container Apps
+   environment, so a second one cannot be created in any region. Superagent still creates its own PostgreSQL, Key Vault,
+   storage, registry and Document Intelligence in `rg-superagent-staging`. It does not modify `innopro-api`. Isolation
+   from that app is only at the container-app layer: they share the environment, its VNet and its environment logs.
+   Leave the variable unset to create a new environment, which is the previous behaviour.
 5. **Production approval**: configure the `prod` GitHub environment with required reviewers.
 
 ## Deploy

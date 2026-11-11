@@ -11,6 +11,9 @@ param location string = resourceGroup().location
 @description('Region for Document Intelligence only. Defaults to location. Staging sets this to australiaeast because australiasoutheast has no Document Intelligence, while australiaeast has no free Container Apps environment quota.')
 param docIntelLocation string = location
 
+@description('Resource id of a Container Apps environment to reuse. Empty creates a new environment. Staging reuses the innopro environment because the subscription allows only one.')
+param existingContainerAppsEnvironmentId string = ''
+
 @description('Container image, e.g. <acr>.azurecr.io/superagent:<sha>')
 param image string
 
@@ -252,7 +255,15 @@ module network 'network.bicep' = if (enablePrivateNetworking) {
 }
 
 // ---------- Container Apps ----------
-resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
+var reuseContainerAppsEnvironment = existingContainerAppsEnvironmentId != ''
+var existingEnvParts = split(existingContainerAppsEnvironmentId, '/')
+
+resource existingCaEnv 'Microsoft.App/managedEnvironments@2024-03-01' existing = if (reuseContainerAppsEnvironment) {
+  scope: resourceGroup(existingEnvParts[2], existingEnvParts[4])
+  name: existingEnvParts[8]
+}
+
+resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (!reuseContainerAppsEnvironment) {
   name: '${prefix}-cae'
   location: location
   properties: {
@@ -261,6 +272,8 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
     workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
   }
 }
+
+var containerAppsEnvironmentId = reuseContainerAppsEnvironment ? existingCaEnv!.id : caEnv!.id
 
 var commonEnv = [
   { name: 'NODE_ENV', value: 'production' }
@@ -285,7 +298,7 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${appIdentity.id}': {} } }
   properties: {
-    managedEnvironmentId: caEnv.id
+    managedEnvironmentId: containerAppsEnvironmentId
     configuration: {
       ingress: { external: true, targetPort: 8080, transport: 'auto' }
       registries: [{ server: acr.properties.loginServer, identity: appIdentity.id }]
@@ -314,7 +327,7 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${appIdentity.id}': {} } }
   properties: {
-    managedEnvironmentId: caEnv.id
+    managedEnvironmentId: containerAppsEnvironmentId
     configuration: {
       registries: [{ server: acr.properties.loginServer, identity: appIdentity.id }]
     }
@@ -340,7 +353,7 @@ resource migrate 'Microsoft.App/jobs@2024-03-01' = {
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${appIdentity.id}': {} } }
   properties: {
-    environmentId: caEnv.id
+    environmentId: containerAppsEnvironmentId
     configuration: {
       triggerType: 'Manual'
       replicaTimeout: 600
@@ -369,7 +382,7 @@ resource sandbox 'Microsoft.App/jobs@2024-03-01' = {
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${sandboxIdentity.id}': {} } }
   properties: {
-    environmentId: caEnv.id
+    environmentId: containerAppsEnvironmentId
     configuration: {
       triggerType: 'Manual'
       replicaTimeout: 900
