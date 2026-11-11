@@ -59,9 +59,17 @@ export function ToolsPage() {
   const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
 
+  function employeeQuerySuffix(): string {
+    if (typeof window === 'undefined') return '';
+    const hashQuery = window.location.hash.includes('?') ? window.location.hash.slice(window.location.hash.indexOf('?')) : '';
+    const params = new URLSearchParams(hashQuery || window.location.search);
+    const empId = params.get('employeeId')?.trim();
+    return empId ? `?employeeId=${encodeURIComponent(empId)}` : '';
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void api<{ toolId: string; name: string; stage: Stage }[]>('/api/v1/tools/').then((r) => {
+    void api<{ toolId: string; name: string; stage: Stage }[]>(`/api/v1/tools/${employeeQuerySuffix()}`).then((r) => {
       if (cancelled) return;
       setTools(r.status === 200 && Array.isArray(r.body) ? r.body : []);
       setLoaded(true);
@@ -71,7 +79,7 @@ export function ToolsPage() {
 
   async function open(id: string) {
     setToolId(id);
-    const r = await api<ToolView & { message?: string }>(`/api/v1/tools/${encodeURIComponent(id)}`);
+    const r = await api<ToolView & { message?: string }>(`/api/v1/tools/${encodeURIComponent(id)}${employeeQuerySuffix()}`);
     if (r.status === 200) {
       setTool(r.body);
       setMsg('');

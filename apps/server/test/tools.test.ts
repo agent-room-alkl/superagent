@@ -103,7 +103,7 @@ describe('tool lifecycle gates', () => {
     expect(svc.stage('invoice.lookup', 'emp-2')).toMatchObject({ current: 'install', blocker: 'account binding required' });
   });
 
-  it('upgrade keeps the old version for running work and supports rollback', () => {
+  it('upgrade keeps the old version for running work and supports rollback (rolling back installed employees so callable never returns the rolled-back version)', () => {
     const svc = placeholder();
     toAvailable(svc, { route: 'import', developer: 'd1', artifact: 'v1' });
     const pinned = svc.callable('emp-1')[0]!;
@@ -113,7 +113,10 @@ describe('tool lifecycle gates', () => {
     svc.recordDeploy('invoice.lookup', r2.version, true, 'v2');
     expect(r2.version).toBe('1.1.0');
     expect(pinned.version).toBe('1.0.0'); // snapshot taken earlier is unchanged
+    svc.install('invoice.lookup', 'emp-1');
+    expect(svc.callable('emp-1')).toEqual([{ toolId: 'invoice.lookup', version: '1.1.0', bindingVersion: 1 }]);
     expect(svc.rollback('invoice.lookup')).toBe('1.0.0');
+    expect(svc.callable('emp-1')).toEqual([{ toolId: 'invoice.lookup', version: '1.0.0', bindingVersion: 1 }]);
   });
 
   it('unused placeholders can be cancelled; released tools cannot', () => {
@@ -190,6 +193,47 @@ describe('tool routes', () => {
     const ok = await app.inject({ method: 'POST', url: '/api/v1/tools/http.tool/release', headers: rev });
     expect(ok.json().releases[0].version).toBe('1.0.0');
     expect((await app.inject({ method: 'GET', url: '/api/v1/tools/http.tool', headers: { 'x-dev-user': 'e|employee|' } })).statusCode).toBe(403);
+    await app.close();
+  });
+
+  it('evaluates tool progress by ?employeeId= or by a held command-room task employee, and bind checks the employee installed version (T-83)', async () => {
+    const app = await buildApp();
+    const dev = { 'x-dev-user': 'dev-83|owner|P-1' };
+    const rev = { 'x-dev-user': 'rev-83|reviewer|P-1' };
+    const e1 = (await app.inject({ method: 'POST', url: '/api/v1/employees', headers: dev, payload: { name: '员工甲', duty: '核对', prompt: 'p1', ownerUserId: 'dev-83' } })).json();
+    const e2 = (await app.inject({ method: 'POST', url: '/api/v1/employees', headers: dev, payload: { name: '员工乙', duty: '复盘', prompt: 'p2', ownerUserId: 'dev-83' } })).json();
+    await app.inject({ method: 'POST', url: `/api/v1/employees/${e1.id}/resume`, headers: dev });
+    await app.inject({ method: 'POST', url: `/api/v1/employees/${e2.id}/resume`, headers: dev });
+
+    const toolId = 't83.tool';
+    await app.inject({ method: 'POST', url: '/api/v1/tools/', headers: dev, payload: { name: 'T83 Tool', contract: { ...contract(), toolId }, acceptanceCases: ['normal'], consumers: [e1.id] } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/confirm`, headers: dev });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/acquire`, headers: dev, payload: { route: 'import', artifact: 'v1-art' } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/test`, headers: dev, payload: { results: { normal: true } } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/release`, headers: rev });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/deploy`, headers: dev, payload: { version: '1.0.0', healthy: true, artifact: 'v1-art' } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/install`, headers: dev, payload: { employeeId: e1.id } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/bind`, headers: dev, payload: { employeeId: e1.id, credentialRef: 'kv://cred-e1' } });
+
+    // For e1 (default consumer), stage is available; for e2 via ?employeeId=, stage is still install
+    expect((await app.inject({ method: 'GET', url: `/api/v1/tools/${toolId}`, headers: dev })).json().progress.current).toBe('available');
+    expect((await app.inject({ method: 'GET', url: `/api/v1/tools/${toolId}?employeeId=${e2.id}`, headers: dev })).json().progress.current).toBe('install');
+    const listForE2 = (await app.inject({ method: 'GET', url: `/api/v1/tools/?employeeId=${e2.id}`, headers: dev })).json() as { toolId: string; stage: string }[];
+    expect(listForE2.find((t) => t.toolId === toolId)?.stage).toBe('install');
+
+    // Hold a command-room task for e2 on toolId: now GET /api/v1/tools and GET /api/v1/tools/:id judge by e2, not showing available while release-hold is 409
+    const posted = (await app.inject({ method: 'POST', url: '/api/v1/room/messages', headers: dev, payload: { roomId: 'room-1', body: '@员工乙 查一下批次', clientMessageId: 't83-msg-1' } })).json();
+    const taskId = posted.task.id as string;
+    await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/hold`, headers: dev, payload: { toolId } });
+
+    expect((await app.inject({ method: 'GET', url: `/api/v1/tools/${toolId}`, headers: dev })).json().progress.current).toBe('install');
+    expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/release-hold`, headers: dev, payload: { clientMessageId: 't83-rel-early' } })).statusCode).toBe(409);
+
+    // Once e2 installs and binds the tool, both the tool card and release-hold agree it is available
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/install`, headers: dev, payload: { employeeId: e2.id } });
+    await app.inject({ method: 'POST', url: `/api/v1/tools/${toolId}/bind`, headers: dev, payload: { employeeId: e2.id, credentialRef: 'kv://cred-e2' } });
+    expect((await app.inject({ method: 'GET', url: `/api/v1/tools/${toolId}`, headers: dev })).json().progress.current).toBe('available');
+    expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/release-hold`, headers: dev, payload: { clientMessageId: 't83-rel-ok' } })).statusCode).toBe(200);
     await app.close();
   });
 });
