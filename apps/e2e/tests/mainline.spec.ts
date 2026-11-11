@@ -279,18 +279,17 @@ test('revising a task contract voids acceptance and the old approval, and never 
   await expect(drawer.locator('[data-attempts]')).toContainText('外部提交 1 次，回读一致');
   await expect(drawer.locator('[data-approval-item]')).toHaveText(['批准有效']);
 
-  // contract v1, then a person accepts the result against it
+  // contract v1: the employee's report satisfies it, so the task remains completed
   await drawer.getByLabel('写验收契约').fill('核对金额与供应商');
   await drawer.getByRole('button', { name: '保存契约' }).click();
   await expect(drawer.locator('[data-contract]')).toHaveText('第 1 版：核对金额与供应商');
-  await drawer.getByRole('button', { name: '复核通过' }).click();
-  await expect(drawer.locator('[data-status]')).toHaveText('已复核');
+  await expect(drawer.locator('[data-status]')).toHaveText('已完成');
 
-  // the contract changes: acceptance and the old approval are void, the write and its evidence stay, nothing reruns
-  await drawer.getByLabel('修改验收契约').fill('必须核对金额、供应商和产品编号，负责人独立复核');
+  // the contract changes: the task reopens for a new report, the old approval is void, the write and its evidence stay, nothing reruns
+  await drawer.getByLabel('修改验收契约').fill('必须核对金额、供应商和产品编号');
   await drawer.getByRole('button', { name: '保存契约' }).click();
-  await expect(drawer.locator('[data-contract]')).toHaveText('第 2 版：必须核对金额、供应商和产品编号，负责人独立复核');
-  await expect(drawer.locator('[data-status]')).toHaveText('已回报，待复核');
+  await expect(drawer.locator('[data-contract]')).toHaveText('第 2 版：必须核对金额、供应商和产品编号');
+  await expect(drawer.locator('[data-status]')).toHaveText('进行中');
   await expect(drawer.locator('[data-approval-item]')).toHaveText(['批准已作废']);
   await expect(drawer.locator('[data-attempts]')).toHaveAttribute('data-attempts', '1');
   await expect(drawer.locator('[data-attempts]')).toContainText('回读一致');
@@ -298,7 +297,7 @@ test('revising a task contract voids acceptance and the old approval, and never 
   await expect(page.locator('.exec-stream [data-kind="contract"]').last()).toContainText('不会自动重新执行');
 
   const room = await json<{ tasks: { id: string; status: string; runId: string; reviewedByUserId: string | null }[] }>(page.request.get('/api/v1/room/tasks?roomId=room-1'));
-  expect(room.tasks.filter((t) => t.id === taskId)).toEqual([expect.objectContaining({ status: 'reported', runId: run.id, reviewedByUserId: null })]);
+  expect(room.tasks.filter((t) => t.id === taskId)).toEqual([expect.objectContaining({ status: 'assigned', runId: run.id, reviewedByUserId: null })]);
   const outcome = await json<{ outcome: { approvals: { id: string; standing: boolean }[]; attempts: number } }>(page.request.get(`/api/v1/room/tasks/${taskId}/outcome`));
   expect(outcome.outcome.attempts).toBe(1);
   // the old approval cannot be used again, on the page or through the API

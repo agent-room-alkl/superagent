@@ -174,7 +174,7 @@ it('wiping the process and hydrating from the row store keeps the task and the d
     headers: { 'x-user-id': 'user-sales', 'x-roles': 'employee', 'x-projects': 'p1' },
   });
   expect(tasks.json().tasks).toHaveLength(1);
-  expect(tasks.json().tasks[0].status).toBe('reported');
+  expect(tasks.json().tasks[0].status).toBe('completed');
   const again = await app.inject({
     method: 'POST',
     url: '/api/v1/room/messages',
@@ -280,10 +280,10 @@ it('roster, cancel and review answer by who is asking; a task someone cannot see
   expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/cancel`, headers: owner, payload: {} })).statusCode).toBe(400);
 
   await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/report`, headers: sales, payload: { body: '询价草稿已整理', clientMessageId: 'rp-1' } });
-  expect((await call('cancel', owner, 'cx-2')).statusCode).toBe(409); // reported work is reviewed, not cancelled
-  const accepted = await call('review', owner, 'rv-2');
-  expect(accepted.statusCode).toBe(200);
-  expect(accepted.json()).toMatchObject({ kind: 'review', taskIds: [taskId] });
+  expect((await call('cancel', owner, 'cx-2')).statusCode).toBe(409); // reported work is completed, not cancelled
+  const reviewAfterReport = await call('review', owner, 'rv-2');
+  expect(reviewAfterReport.statusCode).toBe(409);
+  expect(reviewAfterReport.json()).toEqual({ error: 'task_closed' });
   const closed = await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${taskId}/report`, headers: sales, payload: { body: '再报一次', clientMessageId: 'rp-2' } });
   expect(closed.statusCode).toBe(409);
   expect(closed.json()).toEqual({ error: 'task_closed' });

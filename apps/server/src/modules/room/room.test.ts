@@ -80,7 +80,7 @@ it('mentioning an employee creates a task linked back to the message, and the re
   assert.equal(result.task?.status, 'assigned');
   const report = service.report(result.task!.id, 'user-sales', '询价草稿已放在对话里', 'c3');
   assert.deepEqual(report.taskIds, [result.task!.id]);
-  assert.equal(service.listTasks(sales)[0]?.status, 'reported');
+  assert.equal(service.listTasks(sales)[0]?.status, 'completed');
   const afterReload = service.eventsAfter('room-1', 0, owner);
   assert.equal(afterReload.length >= 3, true);
 });
@@ -130,7 +130,7 @@ it('only the assignee can report, and that report stays in the same conversation
   assert.equal(service.listTasks(sales)[0]?.status, 'assigned');
   const report = service.report(posted.task!.id, 'user-sales', '询价草稿已放在对话里', 'mine');
   assert.equal(report.roomId, 'room-1');
-  assert.equal(service.listTasks(sales)[0]?.status, 'reported');
+  assert.equal(service.listTasks(sales)[0]?.status, 'completed');
 });
 
 it('a reloaded room keeps the conversation, the task, and the duplicate guard', () => {

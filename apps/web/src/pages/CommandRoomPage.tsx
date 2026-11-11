@@ -171,8 +171,7 @@ export function employeeName(employees: readonly RosterEmployee[], employeeId: s
 }
 
 export function taskStatusLabel(task: Pick<ApiTask, 'status' | 'waitingReason'>): string {
-  if (task.status === 'reported') return '已回报，待复核';
-  if (task.status === 'reviewed') return '已复核';
+  if (task.status === 'completed' || task.status === 'reviewed' || task.status === 'reported') return '已完成';
   if (task.status === 'cancelled') return '已取消';
   if (task.status === 'rejected') return '已退回';
   if (task.status === 'outcome_unknown') return '结果未知';
@@ -225,8 +224,8 @@ export function taskActions(task: ApiTask, viewer: RoomViewer | null): TaskActio
   if (!viewer) return { report: false, review: false, cancel: false, followup: false, resume: false, contract: false };
   const asked = viewer.owner || task.createdByUserId === viewer.userId;
   return {
-    report: task.assigneeUserId === viewer.userId && (OPEN_STATUS.has(task.status) || task.status === 'reported'),
-    review: asked && task.status === 'reported',
+    report: task.assigneeUserId === viewer.userId && OPEN_STATUS.has(task.status),
+    review: false,
     cancel: asked && OPEN_STATUS.has(task.status),
     followup: (asked || task.assigneeUserId === viewer.userId) && task.status !== 'cancelled',
     resume: asked && waitingForConnection(task),
@@ -257,9 +256,9 @@ export function actorLabel(message: ApiMessage, viewer: RoomViewer | null, tasks
 const REFUSALS: Record<string, string> = {
   not_assignee: '只有被指派的同事能回报这条任务。',
   task_closed: '这条任务已经结束，不能再改。',
-  task_reported: '这条任务已经回报，正在等待复核，不能挂起或要求补充。',
-  not_reported: '还没有回报，不能复核。',
-  evidence_failed: '证据不完整，不能复核通过。',
+  task_reported: '这条任务已经回报完成，不能挂起或要求补充。',
+  not_reported: '还没有回报，不能操作。',
+  evidence_failed: '证据核验未通过，不能算完成。',
   empty_supplement: '请填写要补充的内容。',
   forbidden: '你不能对这条任务做这个操作。',
   task_not_found: '找不到这条任务。',
@@ -762,8 +761,8 @@ export function CommandRoomPage() {
                       ))}
                     </ul>
                   )}
-                  {openTask.status === 'reported' ? <p>已回报，还没有人复核。回报不等于已被接受。</p> : null}
-                  {openTask.status === 'reviewed' ? <p>已由人复核通过。</p> : null}
+                  {openTask.status === 'completed' || openTask.status === 'reviewed' || openTask.status === 'reported' ? <p>已回报完成。</p> : null}
+                  {openTask.verification === 'failed' ? <p>证据核验未通过，不能算完成。</p> : null}
                   {unsentDraftBoundary(openTask) ? <p data-boundary>{unsentDraftBoundary(openTask)}</p> : null}
                   {openTask.hold ? <p data-blocker>负责人：{openTask.hold.responsible}</p> : null}
                 </dd>
@@ -784,9 +783,9 @@ export function CommandRoomPage() {
                   id="room-contract"
                   value={contractDraft ?? openTask.contract?.criteria ?? ''}
                   onChange={(event) => setContractDraft(event.target.value)}
-                  placeholder="怎样才算完成，例如：必须核对金额、供应商和产品编号，负责人独立复核"
+                  placeholder="怎样才算完成，例如：必须核对金额、供应商和产品编号"
                 />
-                {openTask.contract ? <p className="exec-empty">保存新版本后，之前的人工验收和动作批准作废；已有的外部提交和回读证据保留。</p> : null}
+                {openTask.contract ? <p className="exec-empty">保存新版本后，之前的完成状态和动作批准作废；已有的外部提交和回读证据保留。</p> : null}
                 <button type="button" disabled={acting || (contractDraft ?? '').trim() === ''} onClick={() => void saveContract(openTask)}>保存契约</button>
               </div>
             ) : null}
