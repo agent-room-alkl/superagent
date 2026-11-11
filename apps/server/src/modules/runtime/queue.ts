@@ -143,10 +143,12 @@ export class TaskQueue {
     return this.clone(task);
   }
 
-  claim(workerId: string, now: number, kinds?: readonly string[]): QueueTask | null {
+  claim(workerId: string, now: number, kinds?: readonly string[], tenantId?: string): QueueTask | null {
     const allowed = kinds ? new Set(kinds) : null;
     const eligible = [...this.tasks.values()]
-      .filter((task) => this.claimable(task, now) && (allowed === null || (task.kind !== null && allowed.has(task.kind))))
+      .filter((task) => this.claimable(task, now)
+        && (tenantId === undefined || task.tenantId === tenantId)
+        && (allowed === null || (task.kind !== null && allowed.has(task.kind))))
       .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
     const task = eligible[0];
     if (!task) return null;

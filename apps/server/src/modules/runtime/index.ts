@@ -36,11 +36,12 @@ export const runtimeModule: FastifyPluginAsync = async (app) => {
   }));
 
   app.post('/tasks', async (req, reply) => {
-    const body = (req.body ?? {}) as { id?: string; tenantId?: string; assigneeUserId?: string; projectId?: string; maxAttempts?: number };
-    if (!body.tenantId) return reply.code(400).send({ error: 'missing_tenant' });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'unauthenticated' });
+    const body = (req.body ?? {}) as { id?: string; assigneeUserId?: string; projectId?: string; maxAttempts?: number };
     return runtimeState.queue.add({
       id: body.id,
-      tenantId: body.tenantId,
+      tenantId,
       assigneeUserId: body.assigneeUserId ?? null,
       projectId: body.projectId ?? null,
       maxAttempts: body.maxAttempts,
@@ -79,13 +80,15 @@ export const runtimeModule: FastifyPluginAsync = async (app) => {
   app.post('/claim', async (req, reply) => {
     const body = (req.body ?? {}) as { workerId?: string; maxAttempts?: number; kinds?: string[] };
     if (!body.workerId) return reply.code(400).send({ error: 'missing_worker' });
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'unauthenticated' });
     const kinds = Array.isArray(body.kinds) ? body.kinds.filter((kind) => WORK_KINDS.includes(kind as (typeof WORK_KINDS)[number])) : undefined;
     if (runtimeState.db) {
       const maxAttempts = attemptCeiling(body.maxAttempts);
       if (maxAttempts === null) return reply.code(400).send({ error: 'bad_attempts' });
-      return { task: await claimTask(runtimeState.db, body.workerId, LEASE_MS, maxAttempts, kinds) };
+      return { task: await claimTask(runtimeState.db, body.workerId, LEASE_MS, maxAttempts, tenantId, kinds) };
     }
-    return { task: runtimeState.queue.claim(body.workerId, Date.now(), kinds) };
+    return { task: runtimeState.queue.claim(body.workerId, Date.now(), kinds, tenantId) };
   });
 
   app.post('/tasks/:id/heartbeat', async (req, reply) => {

@@ -57,11 +57,14 @@ function registeredKinds(queue: TaskQueue): string[] {
   return WORK_KINDS.filter((kind) => queue.handler(kind));
 }
 
-/** One Postgres claim for a kind this process can run. No handler means no query and no attempt. */
-export async function dispatchBound(db: Queryable, queue: TaskQueue, workerId: string): Promise<QueueTask | null> {
+/**
+ * One Postgres claim for a kind this process can run, and only for this process's platform tenant.
+ * No handler means no query and no attempt. Other tenants' rows stay where they are.
+ */
+export async function dispatchBound(db: Queryable, queue: TaskQueue, workerId: string, tenantId: string): Promise<QueueTask | null> {
   const kinds = registeredKinds(queue);
   if (!kinds.length) return null;
-  const row = await claimTask(db, workerId, LEASE_MS, 3, kinds);
+  const row = await claimTask(db, workerId, LEASE_MS, 3, tenantId, kinds);
   if (!row?.kind || !kinds.includes(row.kind)) return null;
   const task = claimedWork(row);
   queue.handler(row.kind)?.(task);
@@ -111,7 +114,8 @@ export async function runQueueLoop(
   while (!signal?.aborted) {
     try {
       const bound = currentDb();
-      if (bound && queue) await dispatchBound(bound, queue, workerId);
+      const tenantId = process.env.PLATFORM_TENANT_ID ?? 'default';
+      if (bound && queue) await dispatchBound(bound, queue, workerId, tenantId);
       else if (queue) dispatchReady(queue, workerId, Date.now());
     } catch (error) {
       console.log(JSON.stringify({ msg: 'worker tick failed', error: error instanceof Error ? error.message : 'unknown' }));

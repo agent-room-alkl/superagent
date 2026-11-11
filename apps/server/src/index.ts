@@ -94,7 +94,7 @@ if (role === 'web') {
       async () => {
         if (!runtime.pool) return;
         const pool = runtime.pool;
-        await dispatchBound({ query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) }, runtimeState.queue, process.env.WORKER_ID ?? 'worker');
+        await dispatchBound({ query: async <T>(text: string, params: readonly unknown[]) => ({ rows: (await pool.query(text, params as unknown[])).rows as T[] }) }, runtimeState.queue, process.env.WORKER_ID ?? 'worker', runtime.config.platformTenantId);
       },
     ],
     log: entry => { if (entry.msg !== 'worker heartbeat' || Date.now() - lastHeartbeat >= 15_000) { console.log(JSON.stringify(entry)); lastHeartbeat = Date.now(); } },

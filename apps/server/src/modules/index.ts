@@ -26,7 +26,9 @@ export const modules: ModuleDef[] = [
   { prefix: 'room', plugin: roomModule },         // T-41 Grok
   { prefix: 'employees', plugin: employeesModule, roles: ['admin', 'owner'] }, // T-42
   { prefix: 'tools', plugin: toolsModule, roles: ['admin', 'owner', 'reviewer'] }, // T-42
-  { prefix: 'runtime', plugin: runtimeModule },   // T-41 Grok
+  // HTTP queue is for the internal operator (admin/owner). The worker process does not use this
+  // route; it calls claimTask with PLATFORM_TENANT_ID. employee and reviewer are refused.
+  { prefix: 'runtime', plugin: runtimeModule, roles: ['admin', 'owner'] },
   { prefix: 'gateway', plugin: gatewayModule },   // T-41 Grok
   { prefix: 'work-items', plugin: humanworkModule }, // T-41 Grok
   { prefix: 'sop', plugin: sopModule, roles: ['admin', 'owner'] }, // T-41 Grok (runtime) / T-48 page

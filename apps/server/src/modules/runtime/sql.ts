@@ -18,6 +18,7 @@ WHERE t.id = (
     AND attempt < $3
     AND (lease_until IS NULL OR lease_until <= now())
     AND (not_before IS NULL OR not_before <= now())
+    AND tenant_id = $4::uuid
   ORDER BY created_at
   FOR UPDATE SKIP LOCKED
   LIMIT 1
@@ -28,7 +29,7 @@ RETURNING *;
 /** Same claim, limited to kinds the caller named. A room row (kind null) is not taken. */
 export const CLAIM_TASK_KIND_SQL = CLAIM_TASK_SQL.replace(
   '  ORDER BY created_at',
-  '    AND kind = ANY($4::text[])\n  ORDER BY created_at',
+  '    AND kind = ANY($5::text[])\n  ORDER BY created_at',
 );
 
 export const HEARTBEAT_TASK_SQL = `
