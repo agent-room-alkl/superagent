@@ -22,7 +22,7 @@ export type CuAction =
   | { kind: 'scroll'; dx: number; dy: number }
   | { kind: 'wait'; ms: number }
   | { kind: 'navigate'; url: string }
-  | { kind: 'click'; x: number; y: number; label?: string; target?: ClickTarget | null }
+  | { kind: 'click'; x: number; y: number; label?: string }
   | { kind: 'type'; text: string }
   | { kind: 'key'; keys: string };
 
@@ -71,10 +71,8 @@ export function classify(a: CuAction, target?: ClickTarget | null): 'observe' | 
       return 'observe';
     case 'navigate':
       return 'navigate';
-    case 'click': {
-      const el = target !== undefined ? target : a.target;
-      return isSafeNavigateTarget(el) ? 'navigate' : 'write';
-    }
+    case 'click':
+      return isSafeNavigateTarget(target) ? 'navigate' : 'write';
     case 'type':
     case 'key':
       return 'write';
@@ -107,8 +105,7 @@ export class ComputerUsePolicy {
   decide(a: CuAction, target?: ClickTarget | null): Decision {
     if (a.kind === 'navigate' && !this.isAllowedUrl(a.url)) return { allowed: false, reason: 'egress_blocked' };
     if (a.kind === 'click') {
-      const el = target !== undefined ? target : a.target;
-      if (el?.href && !el.href.startsWith('#') && !el.href.toLowerCase().startsWith('javascript:') && !this.isAllowedUrl(el.href)) {
+      if (target?.href && !target.href.startsWith('#') && !target.href.toLowerCase().startsWith('javascript:') && !this.isAllowedUrl(target.href)) {
         return { allowed: false, reason: 'egress_blocked' };
       }
     }

@@ -157,11 +157,9 @@ export async function runComputerUse(opts: {
     if (!action) return { status: 'finished', steps, screenshots: shots };
     const target =
       action.kind === 'click'
-        ? action.target !== undefined
-          ? action.target
-          : opts.screen.inspectAt
-            ? await opts.screen.inspectAt(action.x, action.y)
-            : null
+        ? opts.screen.inspectAt
+          ? await opts.screen.inspectAt(action.x, action.y)
+          : null
         : undefined;
     const d = opts.policy.decide(action, target);
     steps.push({ action, decision: d.reason });

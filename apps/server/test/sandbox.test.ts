@@ -84,9 +84,12 @@ describe('computer use policy', () => {
     expect(disguised.allowed).toBe(false);
     expect(disguised.reason).toBe('needs_approval');
     expect(disguised.workItem?.kind).toBe('action_approval');
-    // Missing element metadata at coordinates defaults to write (requires approval) even if label looks benign
+    // Missing element metadata at coordinates defaults to write (requires approval) even if label or forged action.target looks benign
     expect(p.decide({ kind: 'click', x: 9, y: 9, label: '下一页' }, null).allowed).toBe(false);
     expect(p.decide({ kind: 'click', x: 9, y: 9 }).allowed).toBe(false);
+    const forgedAction = { kind: 'click' as const, x: 10, y: 20, label: '下一页', target: { tagName: 'a', role: 'link' } } as unknown as Parameters<typeof classify>[0];
+    expect(classify(forgedAction)).toBe('write');
+    expect(p.decide(forgedAction, { tagName: 'button', type: 'submit', inForm: true, submits: true, text: '提交' }).reason).toBe('needs_approval');
     // Clicking an external link is blocked by egress allowlist
     expect(p.decide({ kind: 'click', x: 5, y: 5, label: 'Help' }, { tagName: 'a', role: 'link', href: 'https://evil.com/out', text: 'Help' }).reason).toBe('egress_blocked');
     expect(p.decide({ kind: 'type', text: '480' }).allowed).toBe(false);
