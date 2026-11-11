@@ -22,12 +22,13 @@ export async function claimTask(
   workerId: string,
   leaseMs: number,
   maxAttempts: number,
+  tenantId: string,
   kinds?: readonly string[],
 ): Promise<ClaimedTaskRow | null> {
   const filtered = kinds !== undefined;
   const result = await db.query<ClaimedTaskRow>(
     filtered ? CLAIM_TASK_KIND_SQL : CLAIM_TASK_SQL,
-    filtered ? [workerId, leaseMs, maxAttempts, [...kinds]] : [workerId, leaseMs, maxAttempts],
+    filtered ? [workerId, leaseMs, maxAttempts, tenantId, [...kinds]] : [workerId, leaseMs, maxAttempts, tenantId],
   );
   return result.rows[0] ?? null;
 }

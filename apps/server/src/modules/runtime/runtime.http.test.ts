@@ -1,10 +1,20 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { beforeEach, expect, it } from 'vitest';
+import type { Role } from '@superagent/shared';
+import { buildApp } from '../../app.js';
 import { inboxState } from '../humanwork/index.js';
 import { WorkInbox } from '../humanwork/work-items.js';
 import { humanworkModule } from '../humanwork/index.js';
 import { bindRuntimeDb, resetRuntime, runtimeModule } from './index.js';
 import { CLAIM_TASK_KIND_SQL, CLAIM_TASK_SQL, DEAD_LETTER_SQL, FIND_OPEN_WORK_SQL, HEARTBEAT_TASK_SQL, INSERT_WORK_SQL, RELEASE_TASK_SQL, SUCCEED_TASK_SQL } from './sql.js';
+
+function signIn(app: FastifyInstance, fallback = 'worker|admin|tenant-1') {
+  app.addHook('preHandler', async (req) => {
+    const raw = typeof req.headers['x-test-user'] === 'string' ? req.headers['x-test-user'] : fallback;
+    const [userId, role, tenantId] = raw.split('|');
+    req.user = { userId: userId!, roles: [role as Role], tenantId: tenantId!, projectScopes: [] };
+  });
+}
 
 beforeEach(() => {
   inboxState.current = new WorkInbox();
@@ -13,6 +23,7 @@ beforeEach(() => {
 
 it('a failed task past the attempt ceiling shows up once in the human inbox', async () => {
   const app = Fastify();
+  signIn(app);
   await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
   await app.register(humanworkModule, { prefix: '/api/v1/work-items' });
 
@@ -62,6 +73,7 @@ it('a failed task past the attempt ceiling shows up once in the human inbox', as
 
 it('a poll waits with notBefore and the same run stays one task until it succeeds', async () => {
   const app = Fastify();
+  signIn(app);
   await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
   const later = Date.now() + 60_000;
   const first = await app.inject({
@@ -127,6 +139,7 @@ it('a bound database claim and heartbeat use the Postgres statements', async () 
     },
   });
   const app = Fastify();
+  signIn(app);
   await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
 
   const bad = await app.inject({
@@ -147,7 +160,7 @@ it('a bound database claim and heartbeat use the Postgres statements', async () 
   expect(calls[0]?.sql).toBe(CLAIM_TASK_SQL);
   expect(calls[0]?.sql).toMatch(/FOR UPDATE SKIP LOCKED/);
   expect(calls[0]?.sql).toMatch(/not_before IS NULL OR not_before <= now\(\)/);
-  expect(calls[0]?.params).toEqual(['worker-a', 60_000, 3]);
+  expect(calls[0]?.params).toEqual(['worker-a', 60_000, 3, 'tenant-1']);
 
   const beat = await app.inject({
     method: 'POST',
@@ -165,7 +178,7 @@ it('a bound database claim and heartbeat use the Postgres statements', async () 
   });
   expect(filtered.json().task.id).toBe('pg-kind');
   expect(calls[2]?.sql).toBe(CLAIM_TASK_KIND_SQL);
-  expect(calls[2]?.params).toEqual(['worker-a', 60_000, 3, ['knowledge.parse']]);
+  expect(calls[2]?.params).toEqual(['worker-a', 60_000, 3, 'tenant-1', ['knowledge.parse']]);
 });
 
 it('a bound database finishes a lease by reporting it, or dead-letters only at the ceiling', async () => {
@@ -241,4 +254,75 @@ it('a bound database stores one work ref and rejects a non-uuid tenant before an
   expect(created.statusCode).toBe(200);
   expect(created.json().id).toBe('22222222-2222-4222-8222-222222222222');
   expect(calls).toEqual([FIND_OPEN_WORK_SQL, INSERT_WORK_SQL]);
+});
+
+it('stores the caller tenant and ignores a tenant id in the body', async () => {
+  const app = Fastify();
+  signIn(app, 'ada|admin|tenant-a');
+  await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/tasks',
+    payload: { id: 'task-a', tenantId: 'tenant-b' },
+  });
+  expect(created.statusCode).toBe(200);
+  expect(created.json().tenantId).toBe('tenant-a');
+});
+
+it('tenant A cannot claim a task that belongs to tenant B', async () => {
+  const app = Fastify();
+  signIn(app);
+  await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/tasks',
+    headers: { 'x-test-user': 'b|admin|tenant-b' },
+    payload: { id: 'task-b' },
+  });
+  expect(created.json().tenantId).toBe('tenant-b');
+  const stolen = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/claim',
+    headers: { 'x-test-user': 'a|admin|tenant-a' },
+    payload: { workerId: 'worker-a' },
+  });
+  expect(stolen.json().task).toBeNull();
+  const own = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/claim',
+    headers: { 'x-test-user': 'b|admin|tenant-b' },
+    payload: { workerId: 'worker-b' },
+  });
+  expect(own.json().task.id).toBe('task-b');
+});
+
+it('an employee or reviewer is refused on every runtime write', async () => {
+  const app = await buildApp({ auth: { mode: 'dev', platformTenantId: 'tenant-a' } });
+  const writes = [
+    { url: '/api/v1/runtime/tasks', payload: { id: 't' } },
+    { url: '/api/v1/runtime/work', payload: { kind: 'knowledge.sync', payload: { tenantId: 'tenant-a', runId: 'r', operationId: 'p' } } },
+    { url: '/api/v1/runtime/claim', payload: { workerId: 'w' } },
+    { url: '/api/v1/runtime/tasks/t/succeed', payload: { workerId: 'w' } },
+    { url: '/api/v1/runtime/tasks/t/fail', payload: { workerId: 'w', reason: 'no' } },
+    { url: '/api/v1/runtime/tasks/t/heartbeat', payload: { workerId: 'w' } },
+  ];
+  for (const role of ['employee', 'reviewer']) {
+    for (const call of writes) {
+      const response = await app.inject({
+        method: 'POST',
+        url: call.url,
+        headers: { 'x-dev-user': `person|${role}|p1` },
+        payload: call.payload,
+      });
+      expect(response.statusCode).toBe(403);
+    }
+  }
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/tasks',
+    headers: { 'x-dev-user': 'ada|admin|' },
+    payload: { id: 'task-admin', tenantId: 'tenant-b' },
+  });
+  expect(created.statusCode).toBe(200);
+  expect(created.json().tenantId).toBe('tenant-a');
 });

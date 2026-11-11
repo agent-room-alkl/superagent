@@ -9,8 +9,18 @@ it('claim SQL takes one row with SKIP LOCKED and a lease', () => {
   assert.match(CLAIM_TASK_SQL, /attempt = t\.attempt \+ 1/);
   assert.match(CLAIM_TASK_SQL, /attempt < \$3/);
   assert.match(CLAIM_TASK_SQL, /not_before IS NULL OR not_before <= now\(\)/);
+  assert.match(CLAIM_TASK_SQL, /tenant_id = \$4::uuid/);
   assert.match(HEARTBEAT_TASK_SQL, /lease_owner = \$2/);
   assert.doesNotMatch(CLAIM_TASK_SQL, /OFFSET/);
+});
+
+it('a claim for one tenant does not take another tenant\'s task', () => {
+  const queue = new TaskQueue(30_000);
+  queue.add({ id: 'b', tenantId: 'tenant-b', createdAt: 1 });
+  queue.add({ id: 'a', tenantId: 'tenant-a', createdAt: 2 });
+  assert.equal(queue.claim('w1', 0, undefined, 'tenant-a')?.id, 'a');
+  assert.equal(queue.get('b')?.leaseOwner, null);
+  assert.equal(queue.claim('w2', 0, undefined, 'tenant-b')?.id, 'b');
 });
 
 it('two workers do not receive the same task while the lease holds', () => {

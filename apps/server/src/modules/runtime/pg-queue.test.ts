@@ -14,10 +14,12 @@ it('sends the SKIP LOCKED claim and returns no row when the queue is empty', asy
     'worker-a',
     30_000,
     3,
+    '11111111-1111-4111-8111-111111111111',
   );
   expect(row).toBeNull();
   expect(calls[0]?.sql).toBe(CLAIM_TASK_SQL);
-  expect(calls[0]?.params).toEqual(['worker-a', 30_000, 3]);
+  expect(calls[0]?.sql).toMatch(/tenant_id = \$4::uuid/);
+  expect(calls[0]?.params).toEqual(['worker-a', 30_000, 3, '11111111-1111-4111-8111-111111111111']);
 });
 
 it('limits a Postgres claim to the named kinds and does not take a room row', async () => {
@@ -32,12 +34,14 @@ it('limits a Postgres claim to the named kinds and does not take a room row', as
     'worker-a',
     30_000,
     3,
+    '11111111-1111-4111-8111-111111111111',
     ['knowledge.parse'],
   );
   expect(calls[0]?.sql).toBe(CLAIM_TASK_KIND_SQL);
-  expect(calls[0]?.sql).toMatch(/kind = ANY\(\$4::text\[\]\)/);
+  expect(calls[0]?.sql).toMatch(/kind = ANY\(\$5::text\[\]\)/);
+  expect(calls[0]?.sql).toMatch(/tenant_id = \$4::uuid/);
   expect(calls[0]?.sql).toMatch(/FOR UPDATE SKIP LOCKED/);
-  expect(calls[0]?.params).toEqual(['worker-a', 30_000, 3, ['knowledge.parse']]);
+  expect(calls[0]?.params).toEqual(['worker-a', 30_000, 3, '11111111-1111-4111-8111-111111111111', ['knowledge.parse']]);
 });
 
 it('treats a heartbeat with no updated row as a lost lease', async () => {
