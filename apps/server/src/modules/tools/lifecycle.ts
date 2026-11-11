@@ -183,7 +183,13 @@ export class ToolService {
     const idx = healthy.findIndex((r) => r.version === t.activeVersion);
     const prev = idx > 0 ? healthy[idx - 1] : undefined;
     if (!prev) throw new GateError('no earlier healthy version');
+    const rolledBack = t.activeVersion;
     t.activeVersion = prev.version;
+    for (const inst of t.installations) {
+      if (inst.version === rolledBack) {
+        inst.version = prev.version;
+      }
+    }
     return prev.version;
   }
 
