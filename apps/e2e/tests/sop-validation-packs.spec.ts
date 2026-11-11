@@ -1,7 +1,7 @@
 /**
  * T-48 / qa-outcomes: validation with regression cases, stale validation, revalidation, SOP packs from the knowledge
- * analysis, and knowledge-change impact — all on the real page. The SOP runtime is the contract test double;
- * the knowledge overview is answered in the analysis's response shape.
+ * analysis, and knowledge-change impact — all on the real page. The SOP runtime is the one mounted by the e2e
+ * server; the knowledge overview is answered in the analysis's response shape.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures.js';

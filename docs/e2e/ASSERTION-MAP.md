@@ -217,20 +217,20 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 43 | Paused readback repeated/finished external write | e2e | apps/e2e/tests/mainline.spec.ts — Denied paused reconciliation keeps the original run unknown and the external write count at one. |
 | 44 | Async report erased SOP input | e2e | apps/e2e/tests/command-room.spec.ts |
 | 45 | Async report replaced or lost workflow draft | e2e | apps/e2e/tests/command-room.spec.ts |
-| 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 47 | Baseline validation missing regression cases | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 49 | Validated confirmed draft not published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 50 | Stale validation published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 51 | Stale validation not explained | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 52 | Revalidated revision not published | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 53 | Publishing rewrote old instance | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
-| 54 | Pack replaced draft without explicit confirmation | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 55 | Pack auto-confirmed rule/trigger | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 56 | Pack modified published workflow | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 57 | Unconfirmed package can publish | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 58 | Confirmed package cannot validate | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 59 | Knowledge change has no impact/context | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
+| 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts |
+| 47 | Baseline validation missing regression cases | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts |
+| 49 | Validated confirmed draft not published | e2e | apps/e2e/tests/superagent.spec.ts |
+| 50 | Stale validation published | e2e | apps/e2e/tests/superagent.spec.ts |
+| 51 | Stale validation not explained | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 52 | Revalidated revision not published | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 53 | Publishing rewrote old instance | e2e | apps/e2e/tests/superagent.spec.ts |
+| 54 | Pack replaced draft without explicit confirmation | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 55 | Pack auto-confirmed rule/trigger | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 56 | Pack modified published workflow | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 57 | Unconfirmed package can publish | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 58 | Confirmed package cannot validate | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
+| 59 | Knowledge change has no impact/context | e2e | apps/e2e/tests/sop-validation-packs.spec.ts |
 | 60 | Summary not linked to room | e2e | apps/e2e/tests/command-room.spec.ts |
 | 61 | File origin outcome interactions broken | n/a | prototype opened from file://; product is served over HTTPS |
 
