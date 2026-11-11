@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 
 type Stage = 'placeholder' | 'acquire' | 'test' | 'release' | 'deploy' | 'install' | 'available';
@@ -21,12 +21,20 @@ const STEPS: { id: Stage; label: string }[] = [
   { id: 'available', label: '可用' },
 ];
 
+/** The list endpoint only returns the current stage. Steps before it are done; available means all seven are done. */
+function progressFromStage(stage: Stage): ToolView['progress'] {
+  if (stage === 'available') return { done: STEPS.map((step) => step.id), current: 'available' };
+  const index = STEPS.findIndex((step) => step.id === stage);
+  const at = index < 0 ? 0 : index;
+  return { done: STEPS.slice(0, at).map((step) => step.id), current: STEPS[at]?.id ?? 'placeholder' };
+}
+
 /** Tool card progress (accepted in T-32): done ✓ / current (highlighted, with blocker) / not started. */
-export function ToolProgress({ p }: { p: ToolView['progress'] }) {
+export function ToolProgress({ p, label = '工具进度' }: { p: ToolView['progress']; label?: string }) {
   const allDone = p.done.length === STEPS.length;
   return (
     <div>
-      <ol className="steps" aria-label="工具进度">
+      <ol className="steps" aria-label={label}>
         {STEPS.map((s, i) => {
           const done = p.done.includes(s.id);
           const current = !allDone && p.current === s.id;
@@ -47,11 +55,23 @@ export function ToolProgress({ p }: { p: ToolView['progress'] }) {
 export function ToolsPage() {
   const [toolId, setToolId] = useState('');
   const [tool, setTool] = useState<ToolView | null>(null);
+  const [tools, setTools] = useState<{ toolId: string; name: string; stage: Stage }[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
 
-  async function load(e?: FormEvent) {
-    e?.preventDefault();
-    const r = await api<ToolView & { message?: string }>(`/api/v1/tools/${encodeURIComponent(toolId)}`);
+  useEffect(() => {
+    let cancelled = false;
+    void api<{ toolId: string; name: string; stage: Stage }[]>('/api/v1/tools/').then((r) => {
+      if (cancelled) return;
+      setTools(r.status === 200 && Array.isArray(r.body) ? r.body : []);
+      setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function open(id: string) {
+    setToolId(id);
+    const r = await api<ToolView & { message?: string }>(`/api/v1/tools/${encodeURIComponent(id)}`);
     if (r.status === 200) {
       setTool(r.body);
       setMsg('');
@@ -61,12 +81,28 @@ export function ToolsPage() {
     }
   }
 
+  async function load(e?: FormEvent) {
+    e?.preventDefault();
+    await open(toolId);
+  }
+
   return (
     <>
       <div className="page-head">
         <h1>员工工具</h1>
         <p>每个工具一张卡：占位 → 获取 → 测试 → 发布 → 部署 → 安装 → 可用</p>
       </div>
+      {loaded && tools.length === 0 ? <p>还没有工具。</p> : null}
+      {tools.length > 0 ? (
+        <ul className="tool-list" aria-label="工具列表">
+          {tools.map((item) => (
+            <li key={item.toolId}>
+              <button className="btn" type="button" onClick={() => void open(item.toolId)}>{item.name} · {item.toolId}</button>
+              <ToolProgress p={progressFromStage(item.stage)} label="紧凑进度" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <form className="panel stack" onSubmit={load}>
         <label className="field">
           <span>工具 ID</span>

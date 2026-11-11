@@ -28,6 +28,8 @@ input, select { min-height: var(--control); border-radius: var(--radius-sm); bor
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .helper { margin: 0; font-size: 13px; color: var(--color-muted); }
 .warn { margin: 0; color: var(--color-warning); font-size: 14px; }
+.tool-list { list-style: none; display: grid; gap: var(--space-sm); padding: 0; margin: 0 0 var(--space-sm); }
+.tool-list > li { display: grid; gap: var(--space-xs); }
 .steps { list-style: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-xs); padding: 0; margin: 0; }
 .steps li { display: grid; gap: 2px; border-top: 3px solid var(--color-rule); padding-top: var(--space-xs); font-size: 13px; color: var(--color-subtle); }
 .steps li.done { border-color: var(--color-success); color: var(--color-ink); }
