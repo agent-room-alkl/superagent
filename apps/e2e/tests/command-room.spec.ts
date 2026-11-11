@@ -110,6 +110,7 @@ test('a new room has no tasks; greetings, questions and discussion only get a re
   await expect(picker).toHaveCount(0);
   await expect(draft(page)).toHaveValue(`@${sales.name} `);
   await draft(page).pressSequentially('请整理一份供应商询价草稿');
+  await expect(draft(page)).toHaveValue(`@${sales.name} 请整理一份供应商询价草稿`);
   await page.getByRole('button', { name: '发送' }).click();
 
   await expect(taskCards(page)).toHaveCount(1);
