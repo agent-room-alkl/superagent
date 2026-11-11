@@ -235,31 +235,11 @@ it('revising the acceptance contract voids the earlier acceptance and keeps the 
   expect(reloaded.task(id, owner)).toMatchObject({ runId: 'run_1', contract: { version: 2 }, status: 'reviewed' });
 });
 
-it('refuses self-review when the asker is also the assignee (employee or owner), and refuses hold/ask-input on reported tasks (T-82)', () => {
-  const service = new CommandRoom([
-    ...employees,
-    { id: 'emp-owner-bot', name: '负责人助理', ownerUserId: 'user-owner', status: 'active' },
-  ]);
-  const reviewer: Viewer = { userId: 'user-reviewer', roles: ['reviewer'], projectScopes: [] };
-  const secondOwner: Viewer = { userId: 'user-owner-2', roles: ['owner'], projectScopes: [] };
-
-  // 1) Employee assigns their own digital employee and reports: cannot self-review; owner can review
-  const selfTask = say(service, sales, '@销售员工 请整理客户跟进草稿').task!;
-  service.report(selfTask.id, 'user-sales', '跟进草稿已整理好', 'rep-self-1');
-  expect(() => service.review(selfTask.id, sales, 'rev-self-1')).toThrow(/self_review/);
-  // #6: a reported task cannot be overwritten to waiting by askInput or holdForPermission
-  expect(() => service.askInput(selfTask.id, sales)).toThrow(/task_reported/);
-  expect(() => service.holdForPermission(selfTask.id, sales, 'crm.contact.read')).toThrow(/task_reported/);
-  expect(service.task(selfTask.id, sales).status).toBe('reported');
-  expect(service.review(selfTask.id, owner, 'rev-by-owner').kind).toBe('review');
-  expect(service.task(selfTask.id, owner)).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-owner' });
-
-  // 2) Owner assigns a digital employee owned by that same owner and reports: cannot self-review; another owner/reviewer can review
-  const ownerTask = say(service, owner, '@负责人助理 请核对季度报表').task!;
-  service.report(ownerTask.id, 'user-owner', '季度报表已核对完毕', 'rep-self-2');
-  expect(() => service.review(ownerTask.id, owner, 'rev-self-2')).toThrow(/self_review/);
-  expect(() => service.askInput(ownerTask.id, owner)).toThrow(/task_reported/);
-  expect(() => service.holdForPermission(ownerTask.id, owner, 'erp.report.read')).toThrow(/task_reported/);
-  expect(service.review(ownerTask.id, reviewer, 'rev-by-reviewer').kind).toBe('review');
-  expect(service.task(ownerTask.id, secondOwner)).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-reviewer' });
+it('refuses hold and ask-input on reported tasks so a reported task is not overwritten back to waiting (T-82 #6)', () => {
+  const service = new CommandRoom(employees);
+  const task = say(service, sales, '@销售员工 请整理客户跟进草稿').task!;
+  service.report(task.id, 'user-sales', '跟进草稿已整理好', 'rep-t82-1');
+  expect(() => service.askInput(task.id, sales)).toThrow(/task_reported/);
+  expect(() => service.holdForPermission(task.id, sales, 'crm.contact.read')).toThrow(/task_reported/);
+  expect(service.task(task.id, sales).status).toBe('reported');
 });

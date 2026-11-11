@@ -369,8 +369,7 @@ export class CommandRoom {
   /** A person accepts a reported result. The employee's own report never counts as acceptance. */
   review(taskId: string, viewer: Viewer, clientMessageId: string): RoomMessage {
     const task = this.visibleTask(taskId, viewer);
-    if (!isOwner(viewer) && !viewer.roles.includes('reviewer') && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
-    if (task.assigneeUserId === viewer.userId) throw new Error('self_review');
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return prior;
     if (task.status !== 'reported') throw new Error('not_reported');
@@ -641,14 +640,14 @@ export class CommandRoom {
   }
 
   private canSeeRoom(roomId: string, viewer: Viewer): boolean {
-    if (isOwner(viewer) || viewer.roles.includes('reviewer')) return true;
+    if (isOwner(viewer)) return true;
     if (this.members.get(roomId)?.has(viewer.userId)) return true;
     // Whoever answers for a digital employee follows that employee's work here.
     return roomId === 'room-1' && this.employees().some((employee) => employee.ownerUserId === viewer.userId);
   }
 
   private canSeeTask(task: RoomTask, viewer: Viewer): boolean {
-    if (!isOwner(viewer) && !viewer.roles.includes('reviewer') && task.assigneeUserId !== viewer.userId && task.createdByUserId !== viewer.userId) return false;
+    if (!isOwner(viewer) && task.assigneeUserId !== viewer.userId && task.createdByUserId !== viewer.userId) return false;
     if (viewer.projectScopes.length > 0 && task.projectId && !viewer.projectScopes.includes(task.projectId)) return false;
     return true;
   }
@@ -658,7 +657,7 @@ export class CommandRoom {
    * task they can see. Other people's work stays out of view.
    */
   private canSeeMessage(message: RoomMessage, viewer: Viewer): boolean {
-    if (isOwner(viewer) || viewer.roles.includes('reviewer')) return true;
+    if (isOwner(viewer)) return true;
     if (message.authorUserId === viewer.userId) return true;
     if (message.taskIds.length > 0) {
       return message.taskIds.some((id) => {

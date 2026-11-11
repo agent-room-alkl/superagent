@@ -118,7 +118,6 @@ const STATUS: Record<string, number> = {
   task_not_found: 404,
   forbidden: 403,
   not_assignee: 403,
-  self_review: 403,
   task_closed: 409,
   task_reported: 409,
   not_reported: 409,
