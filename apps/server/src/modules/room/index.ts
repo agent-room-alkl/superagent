@@ -122,7 +122,10 @@ const STATUS: Record<string, number> = {
   not_reported: 409,
   evidence_failed: 409,
   empty_supplement: 400,
+  empty_report: 400,
   not_held: 409,
+  hold_not_satisfied: 409,
+  missing_tool: 400,
   not_waiting: 409,
   employee_offline: 409,
   run_already_linked: 409,
@@ -294,12 +297,18 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     });
   }
 
-  app.post<{ Params: { id: string }; Body: { body?: string | null } }>('/tasks/:id/verify', async (req, reply) => {
-    if (!req.body || !('body' in req.body)) return reply.code(400).send({ error: 'missing_fields' });
+  app.post<{ Params: { id: string } }>('/tasks/:id/verify', async (req, reply) => {
     try {
-      const task = roomState.current.verifyEvidence(req.params.id, viewerFrom(req.headers, req.user), req.body.body ?? null);
+      const viewer = viewerFrom(req.headers, req.user);
+      const current = roomState.current.task(req.params.id, viewer);
+      let mismatch = false;
+      if (current.runId) {
+        const { readbackMismatch } = await import('./outcome.js');
+        mismatch = readbackMismatch(current.tenantId, current.runId);
+      }
+      const task = roomState.current.verifyEvidence(req.params.id, viewer, { readbackMismatch: mismatch });
       await flushRoom();
-      return { task, overview: roomState.current.overview(task.id, viewerFrom(req.headers, req.user)) };
+      return { task, overview: roomState.current.overview(task.id, viewer) };
     } catch (error) {
       const refused = refusal(error);
       return reply.code(refused.code).send(refused.body);
@@ -330,9 +339,11 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post<{ Params: { id: string } }>('/tasks/:id/hold', async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { toolId?: string } }>('/tasks/:id/hold', async (req, reply) => {
+    const toolId = req.body?.toolId;
+    if (!toolId?.trim()) return reply.code(400).send({ error: 'missing_fields' });
     try {
-      const task = roomState.current.holdForPermission(req.params.id, viewerFrom(req.headers, req.user));
+      const task = roomState.current.holdForPermission(req.params.id, viewerFrom(req.headers, req.user), toolId);
       await flushRoom();
       return { task };
     } catch (error) {
@@ -345,7 +356,11 @@ export const roomModule: FastifyPluginAsync = async (app) => {
     const body = req.body ?? {};
     if (!body.clientMessageId) return reply.code(400).send({ error: 'missing_fields' });
     try {
-      const result = roomState.current.releaseHold(req.params.id, viewerFrom(req.headers, req.user), body.clientMessageId);
+      const viewer = viewerFrom(req.headers, req.user);
+      const current = roomState.current.task(req.params.id, viewer);
+      const { toolsState } = await import('../tools/index.js');
+      const toolUsable = !!current.hold && toolsState.current.callable(current.employeeId).some((row) => row.toolId === current.hold?.toolId);
+      const result = roomState.current.releaseHold(req.params.id, viewer, body.clientMessageId, { toolUsable });
       await flushRoom();
       return result;
     } catch (error) {

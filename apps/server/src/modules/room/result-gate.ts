@@ -15,18 +15,40 @@ export type ResultVerification = 'none' | 'verified' | 'failed';
 export interface ResultHold {
   reason: string;
   responsible: string;
+  /** The tool this task is waiting on. Releasing the hold checks this id, not a flag in the request. */
+  toolId: string;
 }
 
-export const PERMISSION_HOLD: ResultHold = { reason: '未授权的工具', responsible: '企业负责人' };
+export function permissionHold(toolId: string): ResultHold {
+  return { reason: '未授权的工具', responsible: '企业负责人', toolId };
+}
 
 export function evidenceFromReport(body: string): ResultEvidence {
   return { fields: { subject: null, body }, sent: false };
 }
 
-export function verificationOf(evidence: ResultEvidence | null): ResultVerification {
+/** Fields named by “必须核对…”. A contract without that phrase adds no field check. */
+export function requiredContractFields(criteria: string): string[] {
+  const named = criteria.match(/必须核对([^，。；]+)/);
+  if (!named) return [];
+  return named[1].split(/[、,，]|和/).map((part) => part.trim()).filter(Boolean);
+}
+
+/**
+ * Checks evidence that is already stored. A blank body fails. So does a linked-run read-back mismatch,
+ * or a report that omits a field the acceptance contract named. Nothing here writes a new body.
+ */
+export function verificationOf(
+  evidence: ResultEvidence | null,
+  check?: { contract?: string | null; readbackMismatch?: boolean },
+): ResultVerification {
   if (!evidence) return 'none';
   const body = evidence.fields.body;
-  return typeof body === 'string' && body.trim() !== '' ? 'verified' : 'failed';
+  if (typeof body !== 'string' || body.trim() === '') return 'failed';
+  if (check?.readbackMismatch) return 'failed';
+  const fields = check?.contract ? requiredContractFields(check.contract) : [];
+  if (fields.some((field) => !body.includes(field))) return 'failed';
+  return 'verified';
 }
 
 /** Unsent drafts say so. Anything else, including a sent result, has no draft boundary. */
