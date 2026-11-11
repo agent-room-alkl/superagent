@@ -369,7 +369,8 @@ export class CommandRoom {
   /** A person accepts a reported result. The employee's own report never counts as acceptance. */
   review(taskId: string, viewer: Viewer, clientMessageId: string): RoomMessage {
     const task = this.visibleTask(taskId, viewer);
-    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (!isOwner(viewer) && !viewer.roles.includes('reviewer') && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (task.assigneeUserId === viewer.userId) throw new Error('self_review');
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return prior;
     if (task.status !== 'reported') throw new Error('not_reported');
@@ -410,6 +411,7 @@ export class CommandRoom {
   /** Marks the same task as waiting for a supplement. Does not open a second task. */
   askInput(taskId: string, viewer: Viewer): RoomTask {
     const task = this.askedTask(taskId, viewer);
+    if (task.status === 'reported') throw new Error('task_reported');
     task.status = 'waiting';
     task.waitingReason = '等待补充';
     return task;
@@ -450,6 +452,7 @@ export class CommandRoom {
     const id = toolId.trim();
     if (!id) throw new Error('missing_tool');
     const task = this.askedTask(taskId, viewer);
+    if (task.status === 'reported') throw new Error('task_reported');
     task.status = 'waiting';
     task.waitingReason = '等待企业负责人授权';
     task.hold = permissionHold(id);
@@ -638,14 +641,14 @@ export class CommandRoom {
   }
 
   private canSeeRoom(roomId: string, viewer: Viewer): boolean {
-    if (isOwner(viewer)) return true;
+    if (isOwner(viewer) || viewer.roles.includes('reviewer')) return true;
     if (this.members.get(roomId)?.has(viewer.userId)) return true;
     // Whoever answers for a digital employee follows that employee's work here.
     return roomId === 'room-1' && this.employees().some((employee) => employee.ownerUserId === viewer.userId);
   }
 
   private canSeeTask(task: RoomTask, viewer: Viewer): boolean {
-    if (!isOwner(viewer) && task.assigneeUserId !== viewer.userId && task.createdByUserId !== viewer.userId) return false;
+    if (!isOwner(viewer) && !viewer.roles.includes('reviewer') && task.assigneeUserId !== viewer.userId && task.createdByUserId !== viewer.userId) return false;
     if (viewer.projectScopes.length > 0 && task.projectId && !viewer.projectScopes.includes(task.projectId)) return false;
     return true;
   }
@@ -655,7 +658,7 @@ export class CommandRoom {
    * task they can see. Other people's work stays out of view.
    */
   private canSeeMessage(message: RoomMessage, viewer: Viewer): boolean {
-    if (isOwner(viewer)) return true;
+    if (isOwner(viewer) || viewer.roles.includes('reviewer')) return true;
     if (message.authorUserId === viewer.userId) return true;
     if (message.taskIds.length > 0) {
       return message.taskIds.some((id) => {

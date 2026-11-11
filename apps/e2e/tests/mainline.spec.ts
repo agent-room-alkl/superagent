@@ -59,7 +59,7 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     expect(tool.evidence.length).toBeGreaterThan(0);
 
     // the owner turns the recommendations into a real employee and tool (creation grants nothing by itself)
-    employeeId = (await json<{ id: string }>(page.request.post('/api/v1/employees/', { data: { name: role.name, duty: role.description, prompt: role.description, source: 'recommended' } }))).id;
+    employeeId = (await json<{ id: string }>(page.request.post('/api/v1/employees/', { data: { name: role.name, duty: role.description, prompt: role.description, source: 'recommended', ownerUserId: 'e2e-main-finance' } }))).id;
     await json(page.request.post(`/api/v1/employees/${employeeId}/pause`));
     expect((await json<{ status: string }>(page.request.post(`/api/v1/employees/${employeeId}/resume`))).status).toBe('online');
   });
@@ -269,7 +269,7 @@ test('revising a task contract voids acceptance and the old approval, and never 
   const posted = await json<{ task: { id: string } }>(page.request.post('/api/v1/room/messages', { data: { roomId: 'room-1', body: '@财务专员 请登记付款 INV-777', clientMessageId: `e2e-contract-${Date.now()}` } }));
   const taskId = posted.task.id;
   await json(page.request.post(`/api/v1/room/tasks/${taskId}/run`, { data: { runId: run.id } }));
-  await json(page.request.post(`/api/v1/room/tasks/${taskId}/report`, { data: { body: '付款已登记，ERP 回读一致', clientMessageId: `e2e-contract-report-${Date.now()}` } }));
+  await json(page.request.post(`/api/v1/room/tasks/${taskId}/report`, { data: { body: '付款已登记，ERP 回读一致', clientMessageId: `e2e-contract-report-${Date.now()}` }, headers: { 'x-dev-user': 'e2e-main-finance|employee|P-1' } }));
 
   await page.goto('/#room');
   await page.locator(`[data-task="${taskId}"]`).click();

@@ -224,9 +224,10 @@ export function waitingForConnection(task: Pick<ApiTask, 'status' | 'waitingReas
 export function taskActions(task: ApiTask, viewer: RoomViewer | null): TaskActions {
   if (!viewer) return { report: false, review: false, cancel: false, followup: false, resume: false, contract: false };
   const asked = viewer.owner || task.createdByUserId === viewer.userId;
+  const canReview = asked || viewer.roles.includes('reviewer');
   return {
     report: task.assigneeUserId === viewer.userId && (OPEN_STATUS.has(task.status) || task.status === 'reported'),
-    review: asked && task.status === 'reported',
+    review: canReview && task.assigneeUserId !== viewer.userId && task.status === 'reported',
     cancel: asked && OPEN_STATUS.has(task.status),
     followup: (asked || task.assigneeUserId === viewer.userId) && task.status !== 'cancelled',
     resume: asked && waitingForConnection(task),
@@ -256,7 +257,9 @@ export function actorLabel(message: ApiMessage, viewer: RoomViewer | null, tasks
 
 const REFUSALS: Record<string, string> = {
   not_assignee: '只有被指派的同事能回报这条任务。',
+  self_review: '不能复核自己负责回报的任务，需要别人复核。',
   task_closed: '这条任务已经结束，不能再改。',
+  task_reported: '这条任务已经回报，正在等待复核，不能挂起或要求补充。',
   not_reported: '还没有回报，不能复核。',
   evidence_failed: '证据不完整，不能复核通过。',
   empty_supplement: '请填写要补充的内容。',
@@ -761,7 +764,12 @@ export function CommandRoomPage() {
                       ))}
                     </ul>
                   )}
-                  {openTask.status === 'reported' ? <p>已回报，还没有人复核。回报不等于已被接受。</p> : null}
+                  {openTask.status === 'reported' ? (
+                    <p>
+                      已回报，还没有人复核。回报不等于已被接受。
+                      {openTask.assigneeUserId === viewerId ? '不能自己复核自己负责的任务，需要别人复核。' : ''}
+                    </p>
+                  ) : null}
                   {openTask.status === 'reviewed' ? <p>已由人复核通过。</p> : null}
                   {unsentDraftBoundary(openTask) ? <p data-boundary>{unsentDraftBoundary(openTask)}</p> : null}
                   {openTask.hold ? <p data-blocker>负责人：{openTask.hold.responsible}</p> : null}
