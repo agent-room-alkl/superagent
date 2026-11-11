@@ -197,9 +197,10 @@ export class WorkInbox {
     return { ok: true, item: this.view(item) };
   }
 
-  /** Changing the amount (or any payload field) retires the previous approval. */
+  /** Changing the amount (or any payload field) retires the previous approval. An executed or retired item stays as it is. */
   revise(id: string, patch: Record<string, unknown>): WorkItem {
     const item = this.require(id);
+    this.refuseSettled(item);
     item.payload = { ...item.payload, ...patch };
     item.draft = null; // the staged edits are now the saved version
     item.payloadVersion += 1;
@@ -246,6 +247,7 @@ export class WorkInbox {
   /** Unsaved edits block execution. They do not replace the approved payload. */
   stage(id: string, patch: Record<string, unknown>): WorkItem {
     const item = this.require(id);
+    this.refuseSettled(item);
     item.draft = { ...(item.draft ?? {}), ...patch };
     return this.view(item);
   }
@@ -264,6 +266,8 @@ export class WorkInbox {
 
   reopen(id: string): WorkItem {
     const item = this.require(id);
+    if (item.kind !== 'branch_choice') throw new Error('reopen_not_allowed');
+    this.refuseSettled(item);
     item.status = 'open';
     return this.view(item);
   }
@@ -357,7 +361,8 @@ export class WorkInbox {
   }
 
   private visible(item: WorkItem, viewer: Viewer): boolean {
-    if (viewer.projectScopes.length > 0 && item.projectId && !viewer.projectScopes.includes(item.projectId)) return false;
+    // Empty project scopes mean no project access, the same rule as canAccessProject. Owners are not scoped.
+    if (!isOwner(viewer) && item.projectId && !viewer.projectScopes.includes(item.projectId)) return false;
     if (isOwner(viewer)) return true;
     if (item.assigneeUserId === viewer.userId) return true;
     return viewer.roles.includes('reviewer') && item.kind === 'exception_ruling';
@@ -367,6 +372,13 @@ export class WorkInbox {
     const item = this.items.get(id);
     if (!item) throw new Error('work_item_not_found');
     return item;
+  }
+
+  /** An executed, read-back, or retired item cannot be rewritten or reopened. */
+  private refuseSettled(item: WorkItem): void {
+    if (item.status === 'closed') throw new Error('approval_retired');
+    if (item.actionStatus !== null) throw new Error('already_executed');
+    if (item.rows.some((row) => row.executed)) throw new Error('already_executed');
   }
 
   /** An item matches when it, or one of its batch rows, belongs to the project. */

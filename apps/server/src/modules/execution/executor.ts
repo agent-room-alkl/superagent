@@ -431,9 +431,13 @@ export class SopExecutor {
   }
 
   private approvalFor(run: Execution, toolNodeId: string): WorkItem | null {
-    const review = run.steps.find((s) => s.kind === 'human_review' && s.workItemId);
-    const items = this.deps.inbox().all();
-    return items.find((i) => i.kind === 'action_approval' && i.payload.executionId === run.id && i.payload.stepId === toolNodeId) ?? (review ? items.find((i) => i.id === review.workItemId) ?? null : null);
+    const toolAt = run.steps.findIndex((step) => step.nodeId === toolNodeId);
+    const review = [...run.steps].reverse().find((step) => step.kind === 'human_review' && step.workItemId && run.steps.indexOf(step) < toolAt);
+    const bound = review ?? run.steps.find((step) => step.nodeId === toolNodeId && step.workItemId);
+    if (!bound?.workItemId) return null;
+    const item = this.deps.inbox().all().find((candidate) => candidate.id === bound.workItemId) ?? null;
+    if (!item || item.tenantId !== run.tenantId) return null;
+    return item;
   }
 
   /** Business parameters of the run (the input), the same shape the approval shows. */

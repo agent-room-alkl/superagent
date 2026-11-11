@@ -414,6 +414,55 @@ it('T-57: another tenant never sees or acts on an item; owners see but do not ac
   expect(inbox.actor(a.id, reviewer, 'tenant-a')).toEqual({ ok: false, reason: 'work_item_not_found' });
 });
 
+it('an executed approval cannot be revised, and a client cannot set execution binding fields', async () => {
+  const server = await app();
+  const reserved = await server.inject({
+    method: 'POST',
+    url: '/api/v1/work-items',
+    headers: owner,
+    payload: { kind: 'action_approval', assigneeUserId: 'alice', projectId: 'p1', payload: { executionId: 'run-1', stepId: 'pay', amount: 1 } },
+  });
+  expect(reserved.statusCode).toBe(400);
+  expect(reserved.json().error).toBe('reserved_field');
+
+  const created = await server.inject({
+    method: 'POST',
+    url: '/api/v1/work-items',
+    headers: owner,
+    payload: { kind: 'action_approval', projectId: 'p1', assigneeUserId: 'alice', payload: { amount: 1 } },
+  });
+  const id = created.json().id as string;
+  inboxState.current.decide(id, 'alice', 1);
+  inboxState.current.noteReadback(id, true);
+  const revised = await server.inject({
+    method: 'POST',
+    url: `/api/v1/work-items/${id}/revise`,
+    headers: alice,
+    payload: { patch: { amount: 9 } },
+  });
+  expect(revised.statusCode).toBe(409);
+  expect(revised.json().error).toBe('already_executed');
+  const staged = await server.inject({
+    method: 'POST',
+    url: `/api/v1/work-items/${id}/stage`,
+    headers: alice,
+    payload: { patch: { amount: 9 } },
+  });
+  expect(staged.statusCode).toBe(409);
+  const reopened = await server.inject({
+    method: 'POST',
+    url: `/api/v1/work-items/${id}/reopen`,
+    headers: alice,
+  });
+  expect(reopened.statusCode).toBe(409);
+  expect(reopened.json().error).toBe('reopen_not_allowed');
+
+  const unscoped = { 'x-user-id': 'rev', 'x-roles': 'reviewer' };
+  const hidden = await server.inject({ method: 'GET', url: '/api/v1/work-items', headers: unscoped });
+  expect(hidden.json().items).toEqual([]);
+  await server.close();
+});
+
 it('T-57: saving a revision consumes the staged draft; revising data only retires approvals that were given', () => {
   const inbox = inboxState.current;
   const check = inbox.create({ tenantId: 't', kind: 'data_check', assigneeUserId: 'alice', payload: { amount: 5 } });

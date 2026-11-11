@@ -116,7 +116,7 @@ test('batch: conflict rows cannot be selected, only selected clean rows run, exc
     rows: [{ id: 'r1', clean: true, selected: false }, { id: 'r2', clean: false, selected: false }, { id: 'r3', clean: true, selected: false }],
   });
   const other = await item(page, { kind: 'supply_info', assigneeUserId: staff, projectId: 'P-3', payload: { title: '另一个项目的事' } });
-  await as(page, `${staff}|employee|`);
+  await as(page, `${staff}|employee|P-2,P-3`);
 
   // the project filter selects only that project's work
   await page.getByLabel('项目筛选').selectOption('P-2');
@@ -152,7 +152,7 @@ test('project filter hides batch rows that belong to another project', async ({ 
       { id: 'd', clean: false, selected: false, projectId: 'P-D' },
     ],
   });
-  await as(page, `${staff}|employee|`);
+  await as(page, `${staff}|employee|P-A,P-C,P-D`);
   await page.getByLabel('项目筛选').selectOption('P-C');
   await expect(page.locator(`[data-item="${batch}"]`)).toBeVisible();
   await openItem(page, batch);
@@ -251,4 +251,31 @@ test('exception ruling keeps the evidence; a note cannot erase the mismatched sy
   await expect(drawer(page)).toContainText('系统回读：{"amount":9900}');
   await expect(drawer(page).locator('[data-note]')).toContainText('备注不会改变系统结果');
   await expect(drawer(page).getByRole('button', { name: /决定/ })).toHaveCount(0);
+});
+
+test('an executed approval does not offer revise, stage, or reopen', async ({ page }) => {
+  await page.route('**/api/v1/work-items**', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    return route.fulfill({
+      json: {
+        items: [{
+          id: 'executed-1',
+          kind: 'action_approval',
+          renderer: 'field_diff',
+          status: 'decided',
+          payloadVersion: 1,
+          actionStatus: 'confirmed',
+          canAct: true,
+          payload: { title: '已执行的批准', amount: 10 },
+          decision: { by: 'ada', payloadHash: 'stored' },
+        }],
+      },
+    });
+  });
+  await as(page, OWNER);
+  await page.getByRole('button', { name: /已执行的批准/ }).click();
+  const pane = drawer(page);
+  await expect(pane.getByRole('button', { name: '保存修订' })).toHaveCount(0);
+  await expect(pane.getByRole('button', { name: '暂存修改' })).toHaveCount(0);
+  await expect(pane.getByRole('button', { name: '重新打开' })).toHaveCount(0);
 });
