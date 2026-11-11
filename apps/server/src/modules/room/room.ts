@@ -1,7 +1,7 @@
 import type { TaskStatus } from '@superagent/shared';
 import { asksAvailability, isExternalAction, isGreeting, needsParameters, workText } from './intent.js';
 import {
-  acceptSupplement, applyAsyncReport, evidenceFromReport, PERMISSION_HOLD, resultOverview, summaryLabel, verificationOf,
+  acceptSupplement, applyAsyncReport, evidenceFromReport, permissionHold, resultOverview, summaryLabel, verificationOf,
   type ResultEvidence, type ResultHold, type ResultVerification,
 } from './result-gate.js';
 
@@ -141,7 +141,7 @@ function withDefaults(task: RoomTask): RoomTask {
       : null,
     verification: task.verification === 'verified' || task.verification === 'failed' ? task.verification : 'none',
     inputSupplement: task.inputSupplement ?? null,
-    hold: task.hold?.responsible ? { reason: task.hold.reason, responsible: task.hold.responsible } : null,
+    hold: task.hold?.toolId ? { reason: task.hold.reason, responsible: task.hold.responsible, toolId: task.hold.toolId } : null,
     contract: task.contract ? { ...task.contract } : null,
     runId: task.runId ?? null,
   };
@@ -327,10 +327,12 @@ export class CommandRoom {
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return prior;
     if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    const text = body.trim();
+    if (!text) throw new Error('empty_report');
     task.status = 'reported';
     task.waitingReason = null;
-    task.evidence = evidenceFromReport(body);
-    task.verification = verificationOf(task.evidence);
+    task.evidence = evidenceFromReport(text);
+    task.verification = verificationOf(task.evidence, { contract: task.contract?.criteria ?? null });
     return this.push({
       roomId: task.roomId,
       tenantId: task.tenantId,
@@ -386,12 +388,16 @@ export class CommandRoom {
     });
   }
 
-  /** Re-checks the stored evidence. A missing body fails the check and blocks acceptance. */
-  verifyEvidence(taskId: string, viewer: Viewer, body: string | null): RoomTask {
+  /**
+   * Re-checks the evidence already stored on the task. The caller cannot supply a replacement body.
+   * A linked run's read-back is passed in by the route, which reads it from the gateway.
+   */
+  verifyEvidence(taskId: string, viewer: Viewer, check: { readbackMismatch?: boolean } = {}): RoomTask {
     const task = this.editableTask(taskId, viewer);
-    const current = task.evidence ?? { fields: { subject: null, body: null }, sent: false };
-    task.evidence = { fields: { subject: current.fields.subject, body }, sent: current.sent };
-    task.verification = verificationOf(task.evidence);
+    task.verification = verificationOf(task.evidence, {
+      contract: task.contract?.criteria ?? null,
+      readbackMismatch: check.readbackMismatch === true,
+    });
     return task;
   }
 
@@ -439,21 +445,27 @@ export class CommandRoom {
     return { task, message };
   }
 
-  /** The task waits, named to the enterprise owner. The task itself is not replaced. */
-  holdForPermission(taskId: string, viewer: Viewer): RoomTask {
+  /** The task waits on one tool, named to the enterprise owner. The task itself is not replaced. */
+  holdForPermission(taskId: string, viewer: Viewer, toolId: string): RoomTask {
+    const id = toolId.trim();
+    if (!id) throw new Error('missing_tool');
     const task = this.askedTask(taskId, viewer);
     task.status = 'waiting';
     task.waitingReason = '等待企业负责人授权';
-    task.hold = { ...PERMISSION_HOLD };
+    task.hold = permissionHold(id);
     return task;
   }
 
-  /** Clears a hold and continues the same task. Nothing is rebuilt. */
-  releaseHold(taskId: string, viewer: Viewer, clientMessageId: string): { task: RoomTask; message: RoomMessage } {
+  /**
+   * Continues the same task only when the held tool is callable for that employee.
+   * The route supplies that fact from the tool card. A request cannot set it.
+   */
+  releaseHold(taskId: string, viewer: Viewer, clientMessageId: string, gate: { toolUsable: boolean }): { task: RoomTask; message: RoomMessage } {
     const task = this.askedTask(taskId, viewer);
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return { task, message: prior };
     if (!task.hold) throw new Error('not_held');
+    if (!gate.toolUsable) throw new Error('hold_not_satisfied');
     const id = task.id;
     task.hold = null;
     task.waitingReason = null;

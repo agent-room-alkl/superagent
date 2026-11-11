@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import { beforeEach, expect, it } from 'vitest';
+import type { ToolContract } from '@superagent/shared';
+import { toolsState } from '../tools/index.js';
 import { createCommandRoom, roomModule, roomState } from './index.js';
 import { CommandRoom, type EmployeeRef, type Viewer } from './room.js';
 import { resultOverview } from './result-gate.js';
@@ -22,6 +24,22 @@ function post(service: CommandRoom, body: string, clientMessageId: string) {
   return service.post({
     roomId: 'room-1', tenantId: 't', authorUserId: owner.userId, authorRoles: owner.roles, body, clientMessageId,
   });
+}
+
+function makeCallable(toolId: string, employeeId: string) {
+  const contract: ToolContract = {
+    toolId, action: 'crm.read', purpose: 'Read a contact', targetSystem: 'app.example.com', effect: 'read',
+    input: { type: 'object', properties: {} }, output: { type: 'object', properties: {} }, risk: 'low', requiresExactApproval: false,
+  };
+  const svc = toolsState.current;
+  svc.createPlaceholder({ name: toolId, contract, acceptanceCases: ['normal'], consumers: [employeeId], maintainer: 'm1' });
+  svc.confirmContract(toolId);
+  svc.acquire(toolId, { route: 'import', developer: 'd1', artifact: 'script' });
+  svc.recordTest(toolId, { normal: true });
+  const released = svc.release(toolId, 'reviewer-1');
+  svc.recordDeploy(toolId, released.version, true, 'script');
+  svc.install(toolId, employeeId);
+  svc.bind(toolId, employeeId, 'kv://cred', { projects: ['P-1'] }, () => true);
 }
 
 beforeEach(() => {
@@ -62,11 +80,16 @@ it('a draft report keeps the boundary, hides raw fields, and a failed check cann
   expect(service.overview(id, owner)).not.toContain('"subject"');
   expect(resultOverview(task.title, { fields: { subject: '内部字段', body: task.evidence!.fields.body }, sent: false })).not.toContain('subject');
 
-  expect(service.verifyEvidence(id, owner, null).verification).toBe('failed');
+  service.reviseContract(id, owner, '必须核对金额、供应商和产品编号，负责人独立复核', 'contract');
+  expect(service.verifyEvidence(id, owner).verification).toBe('failed');
+  expect(service.task(id, owner).evidence?.fields.body).toBe('询价草稿已放在对话里');
   expect(() => service.review(id, owner, 'rev-fail')).toThrow(/evidence_failed/);
   expect(service.listTasks(owner)[0]?.status).toBe('reported');
 
-  expect(service.verifyEvidence(id, owner, '请核对报价、可交付数量与交期。').verification).toBe('verified');
+  service.report(id, 'user-sales', '金额、供应商和产品编号都已核对', 'rep-ok');
+  expect(service.verifyEvidence(id, owner, { readbackMismatch: true }).verification).toBe('failed');
+  expect(service.task(id, owner).evidence?.fields.body).toBe('金额、供应商和产品编号都已核对');
+  expect(service.verifyEvidence(id, owner).verification).toBe('verified');
   expect(service.review(id, owner, 'rev-ok').kind).toBe('review');
   expect(service.listTasks(owner)).toHaveLength(1);
 });
@@ -88,16 +111,18 @@ it('an empty supplement is refused and a real one stays on the same task', () =>
 it('a permission hold names the enterprise owner and releasing it resumes the same task', () => {
   const service = room();
   const id = post(service, '@运营员工 请核对客户资料', 'hold').task!.id;
-  const held = service.holdForPermission(id, owner);
+  const held = service.holdForPermission(id, owner, 'crm.contact.read');
   expect(held.id).toBe(id);
-  expect(held.hold?.responsible).toBe('企业负责人');
+  expect(held.hold).toMatchObject({ responsible: '企业负责人', toolId: 'crm.contact.read' });
   expect(held.waitingReason).toContain('企业负责人');
   expect(service.listTasks(owner)).toHaveLength(1);
-  const released = service.releaseHold(id, owner, 'go');
+  expect(() => service.releaseHold(id, owner, 'no', { toolUsable: false })).toThrow(/hold_not_satisfied/);
+  expect(service.listTasks(owner)[0]).toMatchObject({ id, status: 'waiting', hold: { toolId: 'crm.contact.read' } });
+  const released = service.releaseHold(id, owner, 'go', { toolUsable: true });
   expect(released.task).toMatchObject({ id, status: 'assigned', hold: null, waitingReason: null });
   expect(service.listTasks(owner)).toHaveLength(1);
-  expect(service.releaseHold(id, owner, 'go').message.id).toBe(released.message.id);
-  expect(() => service.releaseHold(id, owner, 'again')).toThrow(/not_held/);
+  expect(service.releaseHold(id, owner, 'go', { toolUsable: true }).message.id).toBe(released.message.id);
+  expect(() => service.releaseHold(id, owner, 'again', { toolUsable: true })).toThrow(/not_held/);
 });
 
 it('an async report leaves the workflow draft the person is editing', () => {
@@ -128,11 +153,16 @@ it('serves the summary, the failed check, and the same-task supplement over HTTP
     method: 'POST', url: `/api/v1/room/tasks/${id}/report`, headers: salesHeaders,
     payload: { body: '草稿已整理', clientMessageId: 'http-rep' },
   });
+  await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/contract`, headers: ownerHeaders,
+    payload: { criteria: '必须核对金额、供应商和产品编号', clientMessageId: 'http-contract' },
+  });
   const failed = await app.inject({
     method: 'POST', url: `/api/v1/room/tasks/${id}/verify`, headers: ownerHeaders,
-    payload: { body: null },
+    payload: { body: '改写成通过，金额、供应商、产品编号' },
   });
   expect(failed.json().task.verification).toBe('failed');
+  expect(failed.json().task.evidence.fields.body).toBe('草稿已整理');
   expect(failed.json().overview).toBe('请整理询价草稿。尚未发送');
   expect(failed.json().overview).not.toContain('"subject"');
   const refused = await app.inject({
@@ -156,6 +186,27 @@ it('serves the summary, the failed check, and the same-task supplement over HTTP
   expect(filled.json().task.inputSupplement).toBe('客户ID C-DEMO-002');
   const listed = await app.inject({ method: 'GET', url: '/api/v1/room/tasks', headers: ownerHeaders });
   expect(listed.json().tasks).toHaveLength(1);
+
+  const employeeId = posted.json().task.employeeId as string;
+  const toolId = `room.hold.${Date.now()}`;
+  const held = await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/hold`, headers: ownerHeaders,
+    payload: { toolId },
+  });
+  expect(held.statusCode).toBe(200);
+  const blocked = await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/release-hold`, headers: ownerHeaders,
+    payload: { clientMessageId: 'http-release-blocked', toolUsable: true },
+  });
+  expect(blocked.statusCode).toBe(409);
+  expect(blocked.json()).toEqual({ error: 'hold_not_satisfied' });
+  makeCallable(toolId, employeeId);
+  const released = await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/release-hold`, headers: ownerHeaders,
+    payload: { clientMessageId: 'http-release' },
+  });
+  expect(released.statusCode).toBe(200);
+  expect(released.json().task).toMatchObject({ id, status: 'assigned', hold: null });
 
   await app.close();
 });

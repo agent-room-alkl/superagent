@@ -24,7 +24,8 @@ interface Task {
   followupTo: string | null; approval: string; waitingReason: string | null;
   verification?: string;
   inputSupplement?: string | null;
-  hold?: { responsible: string } | null;
+  hold?: { responsible: string; toolId?: string } | null;
+  evidence?: { fields: { body: string | null } } | null;
   promptSnapshot: { employeeId: string; promptVersion: number | null; modelTier: string | null; takenAt: string } | null;
 }
 interface Message { id: string; seq: number; body: string; kind: string; taskIds: string[] }
@@ -109,6 +110,7 @@ test('a new room has no tasks; greetings, questions and discussion only get a re
   await expect(picker).toHaveCount(0);
   await expect(draft(page)).toHaveValue(`@${sales.name} `);
   await draft(page).pressSequentially('请整理一份供应商询价草稿');
+  await expect(draft(page)).toHaveValue(`@${sales.name} 请整理一份供应商询价草稿`);
   await page.getByRole('button', { name: '发送' }).click();
 
   await expect(taskCards(page)).toHaveCount(1);
@@ -340,15 +342,20 @@ test('an empty summary invents nothing; an unsent draft stays unsent; failed evi
   await expect(drawer(page).locator('[data-overview]')).not.toContainText('"subject"');
   await expect(drawer(page).locator('[data-boundary]')).toHaveText('尚未发送');
 
+  expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/contract`, {
+    data: { criteria: '必须核对金额、供应商和产品编号', clientMessageId: `e2e-contract-${tag()}` },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
   expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/verify`, {
-    data: { body: null },
+    data: { body: '改写成通过，金额、供应商、产品编号' },
     headers: { 'x-dev-user': OWNER },
   })).status()).toBe(200);
   await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.verification).toBe('failed');
+  expect((await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.evidence?.fields.body).toBe('询价草稿已放在对话里');
   await expect(drawer(page).locator('[data-review]')).toBeDisabled();
 
+  expect((await report(page, staffHeader(staff), draftTask.id, '金额、供应商和产品编号都已核对')).status()).toBe(200);
   expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/verify`, {
-    data: { body: '请核对报价、可交付数量与交期。' },
     headers: { 'x-dev-user': OWNER },
   })).status()).toBe(200);
   await expect(drawer(page).locator('[data-review]')).toBeEnabled();
@@ -364,16 +371,19 @@ test('an empty summary invents nothing; an unsent draft stays unsent; failed evi
   await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === financeTask.id)?.inputSupplement).toBe('客户ID C-DEMO-002');
   expect(await tasksOf(page, OWNER)).toHaveLength(2);
 
-  expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/hold`, { headers: { 'x-dev-user': OWNER } })).status()).toBe(200);
+  expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/hold`, {
+    data: { toolId: 'crm.contact.read' },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
   await page.reload();
   await page.locator(`[data-task="${financeTask.id}"]`).click();
   await expect(drawer(page).locator('[data-blocker]')).toContainText('企业负责人');
   expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/release-hold`, {
-    data: { clientMessageId: `e2e-release-${tag()}` },
+    data: { clientMessageId: `e2e-release-${tag()}`, toolUsable: true },
     headers: { 'x-dev-user': OWNER },
-  })).status()).toBe(200);
-  const resumed = (await tasksOf(page, OWNER)).find((task) => task.id === financeTask.id);
-  expect(resumed).toMatchObject({ id: financeTask.id, status: 'assigned', hold: null });
+  })).status()).toBe(409);
+  const stillHeld = (await tasksOf(page, OWNER)).find((task) => task.id === financeTask.id);
+  expect(stillHeld).toMatchObject({ id: financeTask.id, status: 'waiting', hold: { responsible: '企业负责人', toolId: 'crm.contact.read' } });
   expect(await tasksOf(page, OWNER)).toHaveLength(2);
 });
 

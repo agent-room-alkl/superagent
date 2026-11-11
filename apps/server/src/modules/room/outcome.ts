@@ -42,6 +42,13 @@ function approvalsOf(run: Execution): WorkItem[] {
     && (item.payload.executionId === run.id || reviewIds.has(item.id)));
 }
 
+/** True when a linked run has an outward action whose read-back did not match or did not finish. */
+export function readbackMismatch(tenantId: string, runId: string): boolean {
+  const outcome = outcomeOf(tenantId, runId);
+  if (!outcome) return false;
+  return outcome.actions.some((action) => action.status === 'outcome_unknown' || action.status === 'failed');
+}
+
 export function outcomeOf(tenantId: string, runId: string): TaskOutcome | null {
   const run = findRun(tenantId, runId);
   if (!run) return null;
