@@ -275,6 +275,10 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = if (!reuseContai
 
 var containerAppsEnvironmentId = reuseContainerAppsEnvironment ? existingCaEnv!.id : caEnv!.id
 
+// A reused environment already has its own network. fail() runs only when both are set.
+var existingEnvironmentPrivateNetworkError = reuseContainerAppsEnvironment && enablePrivateNetworking ? fail('existingContainerAppsEnvironmentId cannot be combined with enablePrivateNetworking') : ''
+output privateNetworkGuard string = existingEnvironmentPrivateNetworkError
+
 var commonEnv = [
   { name: 'NODE_ENV', value: 'production' }
   { name: 'AUTH_MODE', value: 'entra' }

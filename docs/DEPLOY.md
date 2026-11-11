@@ -58,8 +58,13 @@ Production hardening (both optional parameters):
    `cae-innopro-3aenup` in `rg-innopro-prod` (Australia East). This subscription allows only one Container Apps
    environment, so a second one cannot be created in any region. Superagent still creates its own PostgreSQL, Key Vault,
    storage, registry and Document Intelligence in `rg-superagent-staging`. It does not modify `innopro-api`. Isolation
-   from that app is only at the container-app layer: they share the environment, its VNet and its environment logs.
-   Leave the variable unset to create a new environment, which is the previous behaviour.
+   from that app is only at the container-app layer: they share the environment and its VNet.
+   Container logs go to innopro's Log Analytics workspace. The deployment identity needs
+   `Microsoft.App/managedEnvironments/join/action` on `cae-innopro-3aenup`. App and job names stay
+   prefixed `sa-<env>-`, so they do not collide with `innopro-api`.
+   Leave `EXISTING_CONTAINERAPPS_ENVIRONMENT_ID` unset to create a new environment, which is the previous behaviour.
+   Do not set `enablePrivateNetworking` at the same time: the deployment fails with
+   `existingContainerAppsEnvironmentId cannot be combined with enablePrivateNetworking`.
 5. **Production approval**: configure the `prod` GitHub environment with required reviewers.
 
 ## Deploy
