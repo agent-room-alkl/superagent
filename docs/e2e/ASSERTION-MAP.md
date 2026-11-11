@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 185 |
+| e2e | Covered by a Playwright test against the real app | 186 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 2 |
+| pending | Feature not built yet; the owner task will add the E2E | 1 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 2
+Pending by owner: T-41 1
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -58,7 +58,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 38 | Upstream revision revokes downstream permission | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 40 | Manual note cannot erase mismatched system outcome | e2e | apps/e2e/tests/work-inbox.spec.ts |
-| 41 | Existing conversation still produces draft | pending | T-41 |
+| 41 | Existing conversation still produces draft | e2e | apps/e2e/tests/command-room.spec.ts |
 | 42 | Existing task evidence boundary retained | e2e | apps/e2e/tests/command-room.spec.ts |
 | 43 | Human dialog styles do not leak to task drawer | n/a | prototype single-file CSS isolation; React components are scoped |
 | 44 | No browser errors | e2e | apps/e2e/tests/fixtures.ts (every test fails on page/console errors) |

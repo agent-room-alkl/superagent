@@ -286,9 +286,8 @@
    "id": "qa-human-work#41",
    "suite": "qa-human-work",
    "assertion": "Existing conversation still produces draft",
-   "status": "pending",
-   "owner": "T-41",
-   "note": ""
+   "status": "e2e",
+   "ref": "apps/e2e/tests/command-room.spec.ts"
   },
   {
    "id": "qa-human-work#42",
