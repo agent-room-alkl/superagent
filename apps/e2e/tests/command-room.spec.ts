@@ -25,7 +25,7 @@ interface Task {
   verification?: string;
   inputSupplement?: string | null;
   hold?: { responsible: string; toolId?: string } | null;
-  evidence?: { fields: { body: string | null } } | null;
+  evidence?: { fields: { subject: string | null; body: string | null }; sent: boolean } | null;
   promptSnapshot: { employeeId: string; promptVersion: number | null; modelTier: string | null; takenAt: string } | null;
 }
 interface Message { id: string; seq: number; body: string; kind: string; taskIds: string[] }
@@ -492,4 +492,39 @@ test('typing right after picking a mention never splits the name from the work (
   const tasks = await tasksOf(page, OWNER);
   expect(tasks).toHaveLength(rounds); // every message kept "@name " intact, so each one made a task
   expect(tasks.every((task) => task.employeeId === sales.id)).toBe(true);
+});
+
+test('qa-human-work#41: an existing conversation still produces a draft task, and the draft never completes itself', async ({ page }) => {
+  const staff = `e2e-room-staff-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  await post(page, OWNER, '我们先讨论一下这周的供应商');
+  const earlier = (await post(page, OWNER, `@${sales.name} 请整理上周的报价对比`)).task!;
+  expect((await report(page, staffHeader(staff), earlier.id, '报价对比已放在对话里')).status()).toBe(200);
+  await as(page, OWNER);
+  await expect(taskCards(page)).toHaveCount(1);
+  expect(await stream(page).locator('[data-message]').count()).toBeGreaterThan(0);
+
+  await say(page, `@${sales.name} 请整理询价草稿`);
+  await expect(taskCards(page)).toHaveCount(2);
+  await expect(stream(page)).toContainText(`已交给 @${sales.name}`);
+  const draftTask = (await tasksOf(page, OWNER)).find((task) => task.id !== earlier.id);
+  expect(draftTask).toMatchObject({ title: '请整理询价草稿', employeeId: sales.id, assigneeUserId: staff, status: 'assigned', followupTo: null });
+  // A title that says 草稿 stores an unsent shell. That is not a report, and it does not complete the task.
+  expect(draftTask!.evidence).toMatchObject({ fields: { subject: null, body: null }, sent: false });
+
+  const card = page.locator(`[data-task="${draftTask!.id}"]`);
+  await expect(card).toContainText('进行中');
+  await expect(card).not.toContainText(/已复核|已回报/);
+  await card.click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('进行中');
+  await expect(drawer(page).locator('[data-evidence]')).toContainText('还没有回报。');
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0);
+  await drawer(page).getByRole('button', { name: '关闭' }).click();
+
+  await page.reload();
+  await expect(taskCards(page)).toHaveCount(2);
+  const after = await tasksOf(page, OWNER);
+  expect(after.find((task) => task.id === draftTask!.id)).toMatchObject({ status: 'assigned' });
+  expect(after.find((task) => task.id === earlier.id)).toMatchObject({ status: 'reported' });
+  expect(after.map((task) => task.status)).not.toContain('reviewed');
 });
