@@ -20,6 +20,7 @@ interface Overview {
   spaceName: string; sourceResources: SourceResource[];
   plugins: Plugin[]; connections: Connection[]; items: Item[];
   analyses: { id: string; status: string; stage: string }[]; recommendations: Recommendation[];
+  canConfirm: boolean;
   parseJobs: { id: string; name: string; status: string; error: string | null }[];
   databaseResources?: { id: string; name: string; tables: Record<string, { columns: string[]; sensitive?: string[] }>; maxRows: number }[];
 }
@@ -337,8 +338,8 @@ export function KnowledgePage() {
           {overview.connections.length ? <ul className="knowledge-source-list">{overview.connections.map(connection => <li key={connection.id}>
             <div><strong>{connection.name}</strong><small>{overview.plugins.find(plugin => plugin.id === connection.pluginId)?.name ?? connection.pluginId}</small></div>
             <span className={`knowledge-badge ${connection.status === 'confirmed' ? 'is-green' : ''}`}>{label(connection.status)}</span>
-            {['draft','tested','pending_confirmation','sync_failed','needs_reauth'].includes(connection.status) ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>{connection.status==='draft'?'确认连接':'重新测试并确认连接'}</button> : null}
-            {connection.status === 'confirmed' ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已重新测试并确认，资料仍需逐版本确认。')}>重新测试连接</button> : null}
+            {overview.canConfirm && ['draft','tested','pending_confirmation','sync_failed','needs_reauth'].includes(connection.status) ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已确认，资料仍需逐版本确认。')}>{connection.status==='draft'?'确认连接':'重新测试并确认连接'}</button> : null}
+            {overview.canConfirm && connection.status === 'confirmed' ? <button className="btn" disabled={!!busy} onClick={() => void action(`confirm:${connection.id}`, `/connections/${encodeURIComponent(connection.id)}/confirm`, {}, '连接已重新测试并确认，资料仍需逐版本确认。')}>重新测试连接</button> : null}
             {['email', 'sharepoint'].includes(connection.pluginId) ? <RemoteSourcePreview connection={connection} resource={overview.sourceResources?.find(resource => resource.id === connection.scope?.resourceId)} active={overview.plugins.some(plugin => plugin.id === connection.pluginId && plugin.installed && plugin.enabled && plugin.configured)} disabled={!!busy} onAction={action} /> : null}
           </li>)}</ul> : <p className="knowledge-empty">还没有来源连接。先创建连接，再导入资料。</p>}
           <form onSubmit={createConnection} className="knowledge-form knowledge-inset">
@@ -377,7 +378,7 @@ export function KnowledgePage() {
           </li>)}</ul></div> : null}
           {overview.items.length ? <ul className="knowledge-source-list knowledge-items">{overview.items.map(item => <li key={item.id}>
             <div><strong>{item.title}</strong><small>版本 {item.version} · {item.locator}</small><small>{label(item.status)} · {item.confirmed ? '当前版本已人工确认' : '尚未确认用于检索'}</small><ItemPreview key={`${item.id}:${item.version}`} item={item} /></div>
-            {item.confirmed ? <span className="knowledge-badge is-green">已确认</span> : !['deleted', 'revoked', 'parse_failed'].includes(item.status) ? <button className="btn" disabled={!!busy} title={`核对原始资料后确认版本 ${item.version}`} onClick={() => void action(`item:${item.id}`, `/items/${encodeURIComponent(item.id)}/confirm`, { version: item.version }, '当前资料版本已确认；是否可用仍由源权限决定。')}>确认此版本</button> : <span className="knowledge-badge">不可用</span>}
+            {item.confirmed ? <span className="knowledge-badge is-green">已确认</span> : ['deleted', 'revoked', 'parse_failed'].includes(item.status) ? <span className="knowledge-badge">不可用</span> : overview.canConfirm ? <button className="btn" disabled={!!busy} title={`核对原始资料后确认版本 ${item.version}`} onClick={() => void action(`item:${item.id}`, `/items/${encodeURIComponent(item.id)}/confirm`, { version: item.version }, '当前资料版本已确认；是否可用仍由源权限决定。')}>确认此版本</button> : null}
           </li>)}</ul> : <p className="knowledge-empty">还没有资料。上传后将在这里显示解析与确认状态。</p>}
         </section>
       </div>

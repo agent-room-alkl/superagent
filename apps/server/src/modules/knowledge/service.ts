@@ -88,6 +88,7 @@ export class KnowledgeService {
       connections: s.source.connections.filter(c => this.connectionAllowed(s, ctx, c.id)).map(c => ({ id: c.id, name: s.connectionMeta[c.id]!.name, pluginId: c.pluginId, status: c.status, scope: c.scope })),
       items: items.map(i => ({ id: hash(i.id), title: i.title, version: i.version, status: i.status, confirmed: this.allowed(s, ctx, i), locator: i.locator })),
       analyses: s.analyses.filter(r => r.actor.userId === ctx.userId).map(({ actor: _, ...run }) => run), recommendations: visibleRecs,
+      canConfirm: ctx.roles.some(role => role === 'owner' || role === 'admin'),
       parseJobs: s.parseJobs.filter(j => j.actor.userId === ctx.userId && s.connectionMeta[j.connectionId]?.audience.includes(ctx.userId) && s.connectionMeta[j.connectionId]!.projectIds.every(p => ctx.projectScopes.includes(p))).map(j => ({ id: j.id, name: j.name, status: j.status, error: j.error })),
     };
   }
@@ -218,7 +219,10 @@ export class KnowledgeService {
     requireManager(ctx); if (!this.deps.binary) throw new KnowledgeError('parser_unavailable', 'Azure 文档解析和文件存储尚未配置。', 503);
     return queueBinaryUpload(this.deps.repo, this.deps.binary, ctx, input);
   }
-  async confirm(ctx: UserContext, sourceId: string, version: string) { return this.deps.repo.transact(ctx, async s => { const item = s.source.items.find(i => i.id === sourceId || hash(i.id) === sourceId); if (!item || !this.allowed(s, ctx, item, false)) throw new KnowledgeError('source_denied', '当前资料权限不足。', 403); await this.checkLiveAcl(s, ctx, item); confirmSource(s, ctx, item.id, version); return { confirmed: true }; }); }
+  async confirm(ctx: UserContext, sourceId: string, version: string) {
+    requireManager(ctx);
+    return this.deps.repo.transact(ctx, async s => { const item = s.source.items.find(i => i.id === sourceId || hash(i.id) === sourceId); if (!item || !this.allowed(s, ctx, item, false)) throw new KnowledgeError('source_denied', '当前资料权限不足。', 403); await this.checkLiveAcl(s, ctx, item); confirmSource(s, ctx, item.id, version); return { confirmed: true }; });
+  }
   async preview(ctx: UserContext, sourceId: string, version: string) {
     const state = await this.deps.repo.read(ctx), item = state.source.items.find(i => hash(i.id) === sourceId || i.id === sourceId);
     if (!item || !this.allowed(state, ctx, item, false)) throw new KnowledgeError('not_found', '当前资料不可读取。', 404);
