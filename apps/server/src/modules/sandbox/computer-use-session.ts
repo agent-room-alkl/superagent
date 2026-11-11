@@ -3,7 +3,8 @@
  * allowed actions run on a sandboxed browser page; every step's screenshot goes to restricted retention.
  * Blocked writes stop the session and return an action-approval work item.
  */
-import type { ComputerUsePolicy, CuAction, Decision } from './computer-use.js';
+import type { ClickTarget, ComputerUsePolicy, CuAction, Decision } from './computer-use.js';
+import { isAllowedUrl, resolveAndCheckUrl, type HostIpResolver } from './guards.js';
 import type { ScreenshotStore } from './screenshots.js';
 
 /** Minimal model interface for computer use. Implemented on top of the Setup provider (see anthropicComputerUse). */
@@ -16,6 +17,115 @@ export interface ComputerUseModel {
 export interface Screen {
   screenshot(): Promise<Uint8Array>;
   perform(a: CuAction): Promise<void>;
+  inspectAt?(x: number, y: number): Promise<ClickTarget | null>;
+}
+
+/** Minimal Playwright context/page shape for `createBrowserScreen` so unit tests and sandbox runs share the same egress route guard. */
+export interface RoutableContext {
+  route(
+    url: string,
+    handler: (route: { request(): { url(): string }; continue(): Promise<void> | void; abort(errorCode?: string): Promise<void> | void }) => Promise<void> | void,
+  ): Promise<void>;
+}
+
+export interface RoutablePage {
+  screenshot(): Promise<Uint8Array>;
+  goto(url: string): Promise<unknown>;
+  mouse: { click(x: number, y: number): Promise<void>; wheel(dx: number, dy: number): Promise<void> };
+  keyboard: { type(text: string): Promise<void>; press(keys: string): Promise<void> };
+  waitForTimeout?(ms: number): Promise<void>;
+  evaluate<R, Arg>(pageFunction: (arg: Arg) => R, arg: Arg): Promise<R>;
+}
+
+/**
+ * Wraps a Playwright BrowserContext + Page as a `Screen`, installing `context.route('**\/*', ...)` so every request
+ * (including clicks that follow an external `<a href>` or form action) goes through `isAllowedUrl` + IP validation.
+ */
+export async function createBrowserScreen(
+  context: RoutableContext,
+  page: RoutablePage,
+  egressAllowlist: string[],
+  opts: { resolvedIps?: HostIpResolver; lookupFn?: (host: string) => Promise<readonly string[]> } = {},
+): Promise<Screen & { blockedRequests: string[] }> {
+  const blockedRequests: string[] = [];
+  const checkUrl = async (url: string): Promise<boolean> => {
+    if (url.startsWith('data:')) return true;
+    if (opts.resolvedIps !== undefined) return isAllowedUrl(url, egressAllowlist, opts.resolvedIps);
+    return resolveAndCheckUrl(url, egressAllowlist, opts.lookupFn);
+  };
+
+  await context.route('**/*', async (route) => {
+    const url = route.request().url();
+    if (await checkUrl(url)) {
+      await route.continue();
+      return;
+    }
+    blockedRequests.push(url);
+    await route.abort('blockedbyclient');
+  });
+
+  return {
+    blockedRequests,
+    async screenshot() {
+      return page.screenshot();
+    },
+    async inspectAt(x: number, y: number): Promise<ClickTarget | null> {
+      try {
+        return await page.evaluate(
+          ([px, py]) => {
+            const doc = (globalThis as unknown as { document?: any }).document;
+            const raw = doc?.elementFromPoint?.(px, py);
+            if (!raw) return null;
+            const el = raw.closest?.('button, a, input, select, textarea, [role], form') ?? raw;
+            const tagName = String(el.tagName ?? '').toLowerCase();
+            const role = el.getAttribute?.('role') ?? null;
+            const attrType = el.getAttribute?.('type');
+            const propType = typeof el.type === 'string' ? el.type : null;
+            const type = attrType ?? propType ?? null;
+            const inForm = Boolean(el.closest?.('form'));
+            const submits = Boolean(
+              el.closest?.('button:not([type="button"]):not([type="reset"]), input[type="submit"], input[type="image"]'),
+            );
+            const anchor = el.closest?.('a');
+            const href = anchor && typeof anchor.href === 'string' ? anchor.href : null;
+            const text = String(el.textContent ?? '').trim().slice(0, 120) || null;
+            return { tagName, role, type, inForm, submits, href, text };
+          },
+          [x, y] as [number, number],
+        );
+      } catch {
+        return null;
+      }
+    },
+    async perform(a: CuAction): Promise<void> {
+      switch (a.kind) {
+        case 'screenshot':
+          return;
+        case 'scroll':
+          await page.mouse.wheel(a.dx, a.dy);
+          return;
+        case 'wait':
+          if (page.waitForTimeout) await page.waitForTimeout(a.ms);
+          return;
+        case 'navigate':
+          if (!(await checkUrl(a.url))) {
+            blockedRequests.push(a.url);
+            throw new Error(`navigation to ${a.url} is not allow-listed`);
+          }
+          await page.goto(a.url);
+          return;
+        case 'click':
+          await page.mouse.click(a.x, a.y);
+          return;
+        case 'type':
+          await page.keyboard.type(a.text);
+          return;
+        case 'key':
+          await page.keyboard.press(a.keys);
+          return;
+      }
+    },
+  };
 }
 
 export interface SessionResult {
@@ -45,7 +155,15 @@ export async function runComputerUse(opts: {
   for (let i = 0; i < (opts.maxSteps ?? 25); i++) {
     const action = await opts.model.next({ goal: opts.goal, screenshotPng: png, history: steps });
     if (!action) return { status: 'finished', steps, screenshots: shots };
-    const d = opts.policy.decide(action);
+    const target =
+      action.kind === 'click'
+        ? action.target !== undefined
+          ? action.target
+          : opts.screen.inspectAt
+            ? await opts.screen.inspectAt(action.x, action.y)
+            : null
+        : undefined;
+    const d = opts.policy.decide(action, target);
     steps.push({ action, decision: d.reason });
     if (!d.allowed) {
       return { status: d.reason === 'needs_approval' ? 'needs_approval' : 'blocked', steps, workItem: d.workItem, screenshots: shots };
