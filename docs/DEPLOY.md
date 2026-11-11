@@ -70,7 +70,8 @@ Production hardening (both optional parameters):
 ## Deploy
 
 Run the **deploy** workflow (Actions → deploy → Run workflow → staging). It:
-1. creates or updates infrastructure,
+1. creates or updates infrastructure (this first pass runs every app and job, including the sandbox, on a public
+   placeholder image because the registry is still empty),
 2. builds and pushes `superagent:<git sha>` to the registry,
 3. deploys the new revision of web, worker and jobs,
 4. runs the migration job and waits for success,

@@ -17,6 +17,9 @@ param existingContainerAppsEnvironmentId string = ''
 @description('Container image, e.g. <acr>.azurecr.io/superagent:<sha>')
 param image string
 
+@description('Sandbox (browser) image. Defaults to the browser variant of image. The first infrastructure pass sets a public placeholder because the registry is still empty.')
+param browserImage string = replace(image, ':', '-browser:')
+
 @description('Entra tenant id and API app registration (client) id used to validate user tokens')
 param entraTenantId string
 param entraClientId string
@@ -207,6 +210,8 @@ resource pgAdmin 'Microsoft.DBforPostgreSQL/flexibleServers/administrators@2024-
   parent: pg
   name: pgAdminGroupObjectId
   properties: { principalType: 'Group', principalName: pgAdminGroupName, tenantId: subscription().tenantId }
+  // The server rejects an Entra admin change while another child operation is updating it, so this runs last.
+  dependsOn: [pgExtensions, pgDb, pgAllowAzure]
 }
 resource pgExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
   parent: pg
@@ -398,7 +403,7 @@ resource sandbox 'Microsoft.App/jobs@2024-03-01' = {
       containers: [
         {
           name: 'sandbox'
-          image: replace(image, ':', '-browser:') // browser image variant built from Dockerfile.browser
+          image: browserImage // browser image variant built from Dockerfile.browser
           resources: { cpu: json('1.0'), memory: '2Gi' }
           env: [
             { name: 'APP_ROLE', value: 'browser' }
