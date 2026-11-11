@@ -150,3 +150,30 @@ it('a retired approval no longer stands, keeps its evidence, and an executed app
   inbox.noteReadback(kept.id, true);
   assert.equal(inbox.decide(kept.id, 'owner', 1).ok, false);
 });
+
+it('an executed or retired approval cannot be revised, staged, or reopened', () => {
+  const inbox = new WorkInbox();
+  const executed = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'alice', payload: { amount: 10 } });
+  inbox.decide(executed.id, 'alice', 1);
+  inbox.noteReadback(executed.id, true);
+  assert.throws(() => inbox.revise(executed.id, { amount: 80 }), /already_executed/);
+  assert.throws(() => inbox.stage(executed.id, { amount: 80 }), /already_executed/);
+  assert.throws(() => inbox.reopen(executed.id), /reopen_not_allowed/);
+  assert.equal(inbox.get(executed.id).payload.amount, 10);
+
+  const retired = inbox.create({ tenantId: 't', kind: 'action_approval', assigneeUserId: 'alice', payload: { amount: 4 } });
+  inbox.decide(retired.id, 'alice', 1);
+  inbox.retireDecision(retired.id);
+  assert.throws(() => inbox.revise(retired.id, { amount: 5 }), /approval_retired/);
+});
+
+it('a reviewer with no project scope cannot see or rule a project item', () => {
+  const inbox = new WorkInbox();
+  const item = inbox.create({ tenantId: 't', projectId: 'p1', kind: 'exception_ruling', assigneeUserId: 'alice' });
+  const reviewer: Viewer = { userId: 'rev', roles: ['reviewer'], projectScopes: [] };
+  assert.deepEqual(inbox.list(reviewer).map((row) => row.id), []);
+  assert.equal(inbox.actor(item.id, reviewer, 't').ok, false);
+  const scoped: Viewer = { userId: 'rev', roles: ['reviewer'], projectScopes: ['p1'] };
+  assert.deepEqual(inbox.list(scoped).map((row) => row.id), [item.id]);
+  assert.equal(inbox.actor(item.id, scoped, 't').ok, true);
+});

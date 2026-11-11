@@ -95,6 +95,9 @@ export const humanworkModule: FastifyPluginAsync<{ deps?: LongWorkDeps }> = asyn
     };
     if (!body.kind || !KINDS.has(body.kind)) return reply.code(400).send({ error: 'bad_kind' });
     if (body.renderer && !RENDERERS.has(body.renderer)) return reply.code(400).send({ error: 'bad_renderer' });
+    if (body.payload && ('executionId' in body.payload || 'stepId' in body.payload)) {
+      return reply.code(400).send({ error: 'reserved_field' });
+    }
     const viewer = viewerFrom(req.headers, req.user);
     const owner = viewer.roles.includes('owner') || viewer.roles.includes('admin');
     return inboxState.current.create({

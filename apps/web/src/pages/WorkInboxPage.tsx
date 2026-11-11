@@ -343,7 +343,7 @@ function Drawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: 
   const unknown = item.actionStatus === 'outcome_unknown';
   const current = !!item.decision && item.decision.payloadHash === item.payloadHash;
   const act = item.canAct === true;
-  const editable = act && item.status !== 'closed' && (item.kind === 'data_check' || item.kind === 'action_approval') && item.renderer === 'field_diff' && !unknown;
+  const editable = act && item.status !== 'closed' && !item.actionStatus && (item.kind === 'data_check' || item.kind === 'action_approval') && item.renderer === 'field_diff' && !unknown;
   // a closed item (finished, or an approval retired by a contract change) is never decided again
   const decidable = act && item.status !== 'closed' && canDecide({ fromServer: true, actionStatus: item.actionStatus }) && !item.decision && !item.draft && !['manual_execution', 'branch_choice', 'supply_info'].includes(item.kind);
   const options = Array.isArray(item.payload.options) ? (item.payload.options as unknown[]).map(String) : [];
@@ -433,7 +433,7 @@ function Drawer({ item, msg, post }: { item: ServerWorkItem; msg: string; post: 
               <button type="button" disabled={!choice} onClick={() => void post('branch', { choice }, () => '已记录选择。')}>记录选择</button>
             </fieldset>
           ) : null}
-          {act && item.status === 'decided' ? <button type="button" onClick={() => void post('reopen', {}, () => '已重新打开，原来的选择仍保留。')}>重新打开</button> : null}
+          {act && item.status === 'decided' && !item.actionStatus ? <button type="button" onClick={() => void post('reopen', {}, () => '已重新打开，原来的选择仍保留。')}>重新打开</button> : null}
         </div>
       ) : null}
 

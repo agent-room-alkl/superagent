@@ -252,3 +252,30 @@ test('exception ruling keeps the evidence; a note cannot erase the mismatched sy
   await expect(drawer(page).locator('[data-note]')).toContainText('备注不会改变系统结果');
   await expect(drawer(page).getByRole('button', { name: /决定/ })).toHaveCount(0);
 });
+
+test('an executed approval does not offer revise, stage, or reopen', async ({ page }) => {
+  await page.route('**/api/v1/work-items**', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    return route.fulfill({
+      json: {
+        items: [{
+          id: 'executed-1',
+          kind: 'action_approval',
+          renderer: 'field_diff',
+          status: 'decided',
+          payloadVersion: 1,
+          actionStatus: 'confirmed',
+          canAct: true,
+          payload: { title: '已执行的批准', amount: 10 },
+          decision: { by: 'ada', payloadHash: 'stored' },
+        }],
+      },
+    });
+  });
+  await as(page, OWNER);
+  await page.getByRole('button', { name: /已执行的批准/ }).click();
+  const pane = drawer(page);
+  await expect(pane.getByRole('button', { name: '保存修订' })).toHaveCount(0);
+  await expect(pane.getByRole('button', { name: '暂存修改' })).toHaveCount(0);
+  await expect(pane.getByRole('button', { name: '重新打开' })).toHaveCount(0);
+});
