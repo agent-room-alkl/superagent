@@ -97,20 +97,17 @@ it('a follow-up continues the original task: same employee, same project, linked
   expect(hidden.message.taskIds).toEqual([]);
 });
 
-it('a reported task stays listed until a person accepts it; the assignee cannot accept their own report', () => {
+it('a reported task completes directly once evidence verifies; the review step is retired (T-86)', () => {
   const service = room();
   const posted = say(service, owner, '@销售员工 请整理询价草稿');
   const id = posted.task!.id;
   expect(() => service.review(id, owner, 'r0')).toThrow(/not_reported/);
   const report = service.report(id, 'user-sales', '询价草稿已放在对话里，尚未发送', 'rep-1');
   expect(report.kind).toBe('report');
-  expect(service.listTasks(owner).map((task) => task.status)).toEqual(['reported']);
+  expect(service.listTasks(owner).map((task) => task.status)).toEqual(['completed']);
   expect(() => service.review(id, sales, 'r1')).toThrow(/forbidden/);
   expect(() => service.review(id, stranger, 'r2')).toThrow(/task_not_found/);
-  const accepted = service.review(id, owner, 'r3');
-  expect(accepted.kind).toBe('review');
-  expect(service.review(id, owner, 'r3').id).toBe(accepted.id); // the same click twice is one message
-  expect(service.listTasks(owner)[0]).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-owner' });
+  expect(() => service.review(id, owner, 'r3')).toThrow(/task_closed/);
   expect(() => service.report(id, 'user-sales', '再报一次', 'rep-2')).toThrow(/task_closed/);
 });
 
@@ -221,18 +218,17 @@ it('revising the acceptance contract voids the earlier acceptance and keeps the 
   expect(service.linkRun(id, owner, 'run_1').runId).toBe('run_1');
   expect(() => service.linkRun(id, owner, 'run_2')).toThrow(/run_already_linked/);
   service.report(id, 'user-sales', '已登记，回读一致', 'rep');
-  service.review(id, owner, 'rev');
-  expect(service.task(id, owner)).toMatchObject({ status: 'reviewed', reviewedByUserId: 'user-owner' });
+  expect(service.task(id, owner)).toMatchObject({ status: 'completed', reviewedByUserId: null });
 
-  const revised = service.reviseContract(id, owner, '必须核对金额、供应商和产品编号，负责人独立复核', 'k4');
+  const revised = service.reviseContract(id, owner, '必须核对金额、供应商和产品编号', 'k4');
   expect(revised.revised).toBe(true);
   expect(revised.message.body).toContain('第 2 版');
-  expect(revised.task).toMatchObject({ id, status: 'reported', reviewedByUserId: null, runId: 'run_1', messageId: posted.message.id, contract: { version: 2 } });
+  expect(revised.task).toMatchObject({ id, status: 'assigned', verification: 'failed', reviewedByUserId: null, runId: 'run_1', messageId: posted.message.id, contract: { version: 2 } });
   expect(service.listTasks(owner)).toHaveLength(1);
-  // acceptance is against the new contract: the person reviews again
-  expect(service.review(id, owner, 'rev-2').kind).toBe('review');
+  // reporting against the new contract completes the task again
+  service.report(id, 'user-sales', '金额、供应商和产品编号均已核对，回读一致', 'rep-2');
   const reloaded = CommandRoom.restore(employees, service.snapshot());
-  expect(reloaded.task(id, owner)).toMatchObject({ runId: 'run_1', contract: { version: 2 }, status: 'reviewed' });
+  expect(reloaded.task(id, owner)).toMatchObject({ runId: 'run_1', contract: { version: 2 }, status: 'completed', verification: 'verified' });
 });
 
 it('refuses hold and ask-input on reported tasks so a reported task is not overwritten back to waiting (T-82 #6)', () => {
@@ -241,5 +237,5 @@ it('refuses hold and ask-input on reported tasks so a reported task is not overw
   service.report(task.id, 'user-sales', '跟进草稿已整理好', 'rep-t82-1');
   expect(() => service.askInput(task.id, sales)).toThrow(/task_reported/);
   expect(() => service.holdForPermission(task.id, sales, 'crm.contact.read')).toThrow(/task_reported/);
-  expect(service.task(task.id, sales).status).toBe('reported');
+  expect(service.task(task.id, sales).status).toBe('completed');
 });

@@ -78,10 +78,11 @@ describe('execution pages reuse the v12 copy', () => {
   });
 
   it('labels a server task by status and the employee it was given to', () => {
-    expect(taskLine(task({ status: 'reported' }), EMPLOYEES)).toBe('已回报，待复核 · 销售员工');
+    expect(taskLine(task({ status: 'completed' }), EMPLOYEES)).toBe('已完成 · 销售员工');
+    expect(taskLine(task({ status: 'reported' }), EMPLOYEES)).toBe('已完成 · 销售员工');
     expect(taskLine(task({ status: 'waiting', waitingReason: '等待连接', employeeId: 'emp-2' }), EMPLOYEES)).toBe('等待连接 · 运营员工');
     expect(taskLine(task({ employeeId: 'emp-gone' }), EMPLOYEES)).toBe('进行中 · 数字员工');
-    expect(taskStatusLabel({ status: 'reviewed', waitingReason: null })).toBe('已复核');
+    expect(taskStatusLabel({ status: 'reviewed', waitingReason: null })).toBe('已完成');
     expect(taskStatusLabel({ status: 'cancelled', waitingReason: null })).toBe('已取消');
   });
 
@@ -105,8 +106,8 @@ describe('execution pages reuse the v12 copy', () => {
     expect(taskActions(task({}), null)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
     expect(taskActions(task({}), OWNER)).toEqual({ report: false, review: false, cancel: true, followup: true, resume: false, contract: true });
     expect(taskActions(task({}), SALES)).toEqual({ report: true, review: false, cancel: false, followup: true, resume: false, contract: false });
-    expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true, resume: false, contract: true });
-    expect(taskActions(task({ status: 'reviewed' }), SALES).report).toBe(false);
+    expect(taskActions(task({ status: 'completed' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: true, resume: false, contract: true });
+    expect(taskActions(task({ status: 'completed' }), SALES).report).toBe(false);
     expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
     const draft = task({
       title: '整理询价草稿',

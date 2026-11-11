@@ -80,17 +80,24 @@ it('a draft report keeps the boundary, hides raw fields, and a failed check cann
   expect(service.overview(id, owner)).not.toContain('"subject"');
   expect(resultOverview(task.title, { fields: { subject: '内部字段', body: task.evidence!.fields.body }, sent: false })).not.toContain('subject');
 
-  service.reviseContract(id, owner, '必须核对金额、供应商和产品编号，负责人独立复核', 'contract');
+  service.reviseContract(id, owner, '必须核对金额、供应商和产品编号', 'contract');
   expect(service.verifyEvidence(id, owner).verification).toBe('failed');
   expect(service.task(id, owner).evidence?.fields.body).toBe('询价草稿已放在对话里');
   expect(() => service.review(id, owner, 'rev-fail')).toThrow(/evidence_failed/);
-  expect(service.listTasks(owner)[0]?.status).toBe('reported');
+  // Failed verification never counts as completed: the task stays in 'assigned' so the assignee can report again
+  expect(service.listTasks(owner)[0]?.status).toBe('assigned');
+
+  // A direct report that fails the contract also stays in 'assigned' with verification='failed'
+  service.report(id, 'user-sales', '只核对了金额', 'rep-partial');
+  expect(service.task(id, owner)).toMatchObject({ status: 'assigned', verification: 'failed' });
 
   service.report(id, 'user-sales', '金额、供应商和产品编号都已核对', 'rep-ok');
+  expect(service.task(id, owner)).toMatchObject({ status: 'completed', verification: 'verified' });
   expect(service.verifyEvidence(id, owner, { readbackMismatch: true }).verification).toBe('failed');
+  expect(service.task(id, owner).status).toBe('assigned');
   expect(service.task(id, owner).evidence?.fields.body).toBe('金额、供应商和产品编号都已核对');
   expect(service.verifyEvidence(id, owner).verification).toBe('verified');
-  expect(service.review(id, owner, 'rev-ok').kind).toBe('review');
+  expect(service.task(id, owner).status).toBe('completed');
   expect(service.listTasks(owner)).toHaveLength(1);
 });
 

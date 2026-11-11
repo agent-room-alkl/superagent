@@ -109,6 +109,7 @@ export interface PostInput {
 }
 
 const OPEN: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['assigned', 'running', 'waiting']);
+const COMPLETED: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['completed', 'reviewed']);
 const WAITING_CONNECTION = '等待连接';
 const ACTIVE = (employee: EmployeeRef | undefined) => employee?.status === 'active';
 
@@ -326,13 +327,15 @@ export class CommandRoom {
     if (task.assigneeUserId !== authorUserId) throw new Error('not_assignee');
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return prior;
-    if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    if (task.status === 'cancelled' || COMPLETED.has(task.status)) throw new Error('task_closed');
     const text = body.trim();
     if (!text) throw new Error('empty_report');
-    task.status = 'reported';
     task.waitingReason = null;
     task.evidence = evidenceFromReport(text);
     task.verification = verificationOf(task.evidence, { contract: task.contract?.criteria ?? null });
+    // Product decision (T-86): an employee report completes the task directly unless evidence verification fails,
+    // in which case the task stays in 'assigned' (in-progress) so the assignee can submit a corrected report.
+    task.status = task.verification === 'failed' ? 'assigned' : 'completed';
     return this.push({
       roomId: task.roomId,
       tenantId: task.tenantId,
@@ -366,38 +369,36 @@ export class CommandRoom {
     });
   }
 
-  /** A person accepts a reported result. The employee's own report never counts as acceptance. */
-  review(taskId: string, viewer: Viewer, clientMessageId: string): RoomMessage {
+  /**
+   * Human review step is retired (T-86: report completes the task directly when evidence verifies).
+   * Kept as a refusal endpoint so callers get 404/403/409 (evidence_failed / task_closed / not_reported).
+   */
+  review(taskId: string, viewer: Viewer, _clientMessageId: string): RoomMessage {
     const task = this.visibleTask(taskId, viewer);
     if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
-    const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
-    if (prior) return prior;
-    if (task.status !== 'reported') throw new Error('not_reported');
     if (task.verification === 'failed') throw new Error('evidence_failed');
-    task.status = 'reviewed';
-    task.reviewedByUserId = viewer.userId;
-    return this.push({
-      roomId: task.roomId,
-      tenantId: task.tenantId,
-      authorUserId: viewer.userId,
-      body: `已复核通过：${task.title}`,
-      clientMessageId,
-      mentions: [],
-      taskIds: [task.id],
-      kind: 'review',
-    });
+    if (COMPLETED.has(task.status) || task.status === 'reported' || task.status === 'cancelled') throw new Error('task_closed');
+    throw new Error('not_reported');
   }
 
   /**
    * Re-checks the evidence already stored on the task. The caller cannot supply a replacement body.
    * A linked run's read-back is passed in by the route, which reads it from the gateway.
+   * If verification fails, a completed task drops back to 'assigned' so a failed report never counts as completed.
    */
   verifyEvidence(taskId: string, viewer: Viewer, check: { readbackMismatch?: boolean } = {}): RoomTask {
-    const task = this.editableTask(taskId, viewer);
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId && task.assigneeUserId !== viewer.userId) throw new Error('forbidden');
+    if (task.status === 'cancelled') throw new Error('task_closed');
     task.verification = verificationOf(task.evidence, {
       contract: task.contract?.criteria ?? null,
       readbackMismatch: check.readbackMismatch === true,
     });
+    if (task.verification === 'failed') {
+      if (COMPLETED.has(task.status) || task.status === 'reported') task.status = 'assigned';
+    } else if (task.verification === 'verified' && task.evidence?.fields.body) {
+      task.status = 'completed';
+    }
     return task;
   }
 
@@ -409,8 +410,10 @@ export class CommandRoom {
 
   /** Marks the same task as waiting for a supplement. Does not open a second task. */
   askInput(taskId: string, viewer: Viewer): RoomTask {
-    const task = this.askedTask(taskId, viewer);
-    if (task.status === 'reported') throw new Error('task_reported');
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (COMPLETED.has(task.status) || task.status === 'reported') throw new Error('task_reported');
+    if (task.status === 'cancelled') throw new Error('task_closed');
     task.status = 'waiting';
     task.waitingReason = '等待补充';
     return task;
@@ -450,8 +453,10 @@ export class CommandRoom {
   holdForPermission(taskId: string, viewer: Viewer, toolId: string): RoomTask {
     const id = toolId.trim();
     if (!id) throw new Error('missing_tool');
-    const task = this.askedTask(taskId, viewer);
-    if (task.status === 'reported') throw new Error('task_reported');
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (COMPLETED.has(task.status) || task.status === 'reported') throw new Error('task_reported');
+    if (task.status === 'cancelled') throw new Error('task_closed');
     task.status = 'waiting';
     task.waitingReason = '等待企业负责人授权';
     task.hold = permissionHold(id);
@@ -550,9 +555,9 @@ export class CommandRoom {
   }
 
   /**
-   * Set or revise what counts as done. A revision voids the person's earlier acceptance (a reviewed task goes back to
-   * reported) and the caller retires the linked run's action approval. Nothing here runs or repeats an external
-   * action, and the task keeps its id, source, reports and run.
+   * Set or revise what counts as done. Revising the contract (or setting a contract that existing evidence fails)
+   * reopens a completed task to 'assigned' and the caller retires the linked run's action approval. Nothing here runs
+   * or repeats an external action, and the task keeps its id, source, reports and run.
    */
   reviseContract(taskId: string, viewer: Viewer, criteria: string, clientMessageId: string): { message: RoomMessage; task: RoomTask; revised: boolean } {
     const task = this.visibleTask(taskId, viewer);
@@ -565,8 +570,13 @@ export class CommandRoom {
     if (task.contract?.criteria === text) throw new Error('contract_unchanged');
     const version = (task.contract?.version ?? 0) + 1;
     task.contract = { criteria: text, version, revisedByUserId: viewer.userId, at: this.now().toISOString() };
-    const hadAcceptance = task.status === 'reviewed';
-    if (hadAcceptance) task.status = 'reported';
+    const wasCompleted = COMPLETED.has(task.status) || task.status === 'reported';
+    if (task.evidence?.fields.body) {
+      task.verification = verificationOf(task.evidence, { contract: text });
+    }
+    if (wasCompleted && (version > 1 || task.verification === 'failed')) {
+      task.status = 'assigned';
+    }
     task.reviewedByUserId = null;
     const message = this.push({
       roomId: task.roomId,
@@ -574,13 +584,13 @@ export class CommandRoom {
       authorUserId: viewer.userId,
       body: version === 1
         ? `验收契约第 1 版：${text}`
-        : `验收契约改为第 ${version} 版：${text}。之前的人工验收和动作批准作废；已有的外部提交和回读证据保留，不会自动重新执行。`,
+        : `验收契约改为第 ${version} 版：${text}。之前的完成状态和动作批准作废；已有的外部提交和回读证据保留，不会自动重新执行。`,
       clientMessageId,
       mentions: [],
       taskIds: [task.id],
       kind: 'contract',
     });
-    return { message, task: withDefaults(task), revised: version > 1 || hadAcceptance };
+    return { message, task: withDefaults(task), revised: version > 1 || (wasCompleted && task.status === 'assigned') };
   }
 
   /** Visible work only. An empty list is "暂无事项", never a made-up item. */
@@ -614,7 +624,7 @@ export class CommandRoom {
   private askedTask(taskId: string, viewer: Viewer): RoomTask {
     const task = this.visibleTask(taskId, viewer);
     if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
-    if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    if (task.status === 'cancelled' || COMPLETED.has(task.status)) throw new Error('task_closed');
     return task;
   }
 
@@ -622,7 +632,7 @@ export class CommandRoom {
   private editableTask(taskId: string, viewer: Viewer): RoomTask {
     const task = this.visibleTask(taskId, viewer);
     if (!isOwner(viewer) && task.createdByUserId !== viewer.userId && task.assigneeUserId !== viewer.userId) throw new Error('forbidden');
-    if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    if (task.status === 'cancelled' || COMPLETED.has(task.status)) throw new Error('task_closed');
     return task;
   }
 

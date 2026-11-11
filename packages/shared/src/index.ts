@@ -153,6 +153,7 @@ export type TaskStatus =
   | 'waiting'
   | 'reported'
   | 'reviewed'
+  | 'completed'
   | 'rejected'
   | 'cancelled'
   | 'outcome_unknown';

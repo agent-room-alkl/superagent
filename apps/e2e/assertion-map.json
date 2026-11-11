@@ -287,7 +287,8 @@
    "suite": "qa-human-work",
    "assertion": "Existing conversation still produces draft",
    "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts"
+   "ref": "apps/e2e/tests/command-room.spec.ts",
+   "note": "产品决定：回报即完成；草稿任务在员工回报前保持进行中，回报后直接完成"
   },
   {
    "id": "qa-human-work#42",
@@ -399,8 +400,8 @@
    "id": "qa-conversation#13",
    "suite": "qa-conversation",
    "assertion": "Completed unreviewed task disappeared",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts"
+   "status": "n/a",
+   "reason": "产品决定：回报即完成"
   },
   {
    "id": "qa-conversation#14",
@@ -1029,9 +1030,8 @@
    "id": "qa-outcomes#5",
    "suite": "qa-outcomes",
    "assertion": "Draft incorrectly marked human-accepted",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts",
-   "note": "a reported task is not accepted until a person reviews it"
+   "status": "n/a",
+   "reason": "产品决定：回报即完成"
   },
   {
    "id": "qa-outcomes#6",
@@ -1058,8 +1058,8 @@
    "id": "qa-outcomes#9",
    "suite": "qa-outcomes",
    "assertion": "Verified result cannot be reviewed",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts"
+   "status": "n/a",
+   "reason": "产品决定：回报即完成"
   },
   {
    "id": "qa-outcomes#10",
@@ -1079,8 +1079,8 @@
    "id": "qa-outcomes#12",
    "suite": "qa-outcomes",
    "assertion": "Human result acceptance missing",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/command-room.spec.ts"
+   "status": "n/a",
+   "reason": "产品决定：回报即完成"
   },
   {
    "id": "qa-outcomes#13",
@@ -1246,8 +1246,8 @@
    "id": "qa-outcomes#34",
    "suite": "qa-outcomes",
    "assertion": "Mismatched result review enabled",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/mainline.spec.ts"
+   "status": "n/a",
+   "reason": "产品决定：回报即完成"
   },
   {
    "id": "qa-outcomes#35",
@@ -1270,7 +1270,7 @@
    "assertion": "Changed contract retains old action approval/acceptance",
    "status": "e2e",
    "ref": "apps/e2e/tests/mainline.spec.ts",
-   "note": "contract revision on the command-room task retires the linked run's approval and the human acceptance"
+   "note": "产品决定：回报即完成；修改验收契约后原动作批准作废，已完成任务回到进行中等待按新契约回报"
   },
   {
    "id": "qa-outcomes#38",

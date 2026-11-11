@@ -144,7 +144,7 @@ test('a new room has no tasks; greetings, questions and discussion only get a re
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1)).toBe(true);
 });
 
-test('a report shows up without touching the draft; the reported task stays, links its evidence, and waits for a person to accept it', async ({ page }) => {
+test('a report shows up without touching the draft; the reported task completes directly and links its evidence', async ({ page }) => {
   const staff = `e2e-room-staff-${tag()}`;
   const sales = await employee(page, '销售员工', staff);
   await as(page, OWNER);
@@ -164,23 +164,18 @@ test('a report shows up without touching the draft; the reported task stays, lin
   expect(await draft(page).evaluate((el) => (window as unknown as { composer?: Element }).composer === el)).toBe(true); // same composer, not re-created
   await draft(page).fill('');
 
-  // reported is not accepted: the task is still listed, with its evidence linked back to the conversation
+  // reporting completes the task directly; the task stays on the list with its evidence linked back to the conversation
   await expect(taskCards(page)).toHaveCount(1);
-  await expect(taskCards(page).first()).toContainText('已回报，待复核');
+  await expect(taskCards(page).first()).toContainText('已完成');
   await taskCards(page).first().click();
-  await expect(drawer(page).locator('[data-status]')).toHaveText('已回报，待复核');
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已完成');
   await expect(drawer(page).locator('[data-evidence]')).toContainText('询价草稿已放在对话里，尚未发送给供应商');
-  await expect(drawer(page).locator('[data-evidence]')).toContainText('回报不等于已被接受');
+  await expect(drawer(page).locator('[data-evidence]')).toContainText('已回报完成。');
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0);
   await drawer(page).getByRole('button', { name: '回到原消息' }).click();
   await expect(stream(page).locator(`#room-msg-${task!.messageId}`)).toHaveClass(/exec-message-focus/);
   await expect(stream(page).locator(`#room-msg-${task!.messageId}`)).toBeInViewport();
-
-  // a person accepts the result; it is still on the list afterwards
-  await drawer(page).getByRole('button', { name: '复核通过' }).click();
-  await expect(drawer(page).locator('[data-status]')).toHaveText('已复核');
-  await expect(taskCards(page).first()).toContainText('已复核');
-  await expect(stream(page).locator('[data-kind="review"]')).toContainText('已复核通过');
-  expect((await tasksOf(page, OWNER))[0]).toMatchObject({ status: 'reviewed', reviewedByUserId: 'e2e-room-owner' });
+  expect((await tasksOf(page, OWNER))[0]).toMatchObject({ status: 'completed', reviewedByUserId: null });
 });
 
 test('a new message lands in view; a follow-up keeps the original task; read-only work needs no approval; a task can be cancelled', async ({ page }) => {
@@ -307,8 +302,8 @@ test('an employee sees and assigns only their own digital employee; drafts stay 
   await expect(drawer(page).getByRole('button', { name: '提交回报' })).toBeDisabled(); // an empty report is not a report
   await drawer(page).getByLabel('回报内容').fill('询价草稿已整理好，尚未发送');
   await drawer(page).getByRole('button', { name: '提交回报' }).click();
-  await expect(drawer(page).locator('[data-status]')).toHaveText('已回报，待复核');
-  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0); // they did not ask for it, so they do not accept it
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已完成');
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0);
 
   // back as the owner: the draft they left is restored
   await as(page, OWNER);
@@ -351,14 +346,16 @@ test('an empty summary invents nothing; an unsent draft stays unsent; failed evi
     headers: { 'x-dev-user': OWNER },
   })).status()).toBe(200);
   await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.verification).toBe('failed');
+  expect((await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.status).toBe('assigned');
   expect((await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.evidence?.fields.body).toBe('询价草稿已放在对话里');
-  await expect(drawer(page).locator('[data-review]')).toBeDisabled();
+  await expect(drawer(page).locator('[data-review]')).toHaveCount(0);
 
   expect((await report(page, staffHeader(staff), draftTask.id, '金额、供应商和产品编号都已核对')).status()).toBe(200);
   expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/verify`, {
     headers: { 'x-dev-user': OWNER },
   })).status()).toBe(200);
-  await expect(drawer(page).locator('[data-review]')).toBeEnabled();
+  await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.status).toBe('completed');
+  expect((await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.verification).toBe('verified');
 
   expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/ask-input`, { headers: { 'x-dev-user': OWNER } })).status()).toBe(200);
   await page.reload();
@@ -424,9 +421,9 @@ test('an employee that disconnects keeps the same task waiting; the owner reconn
   expect(after).toHaveLength(1);
   expect(after[0]).toMatchObject({ id: task!.id, messageId: task!.messageId, status: 'assigned', waitingReason: null });
 
-  // the employee's report lands on that same task
+  // the employee's report lands on that same task and completes it
   expect((await report(page, staffHeader(staff), task!.id, '客户资料已核对')).status()).toBe(200);
-  expect((await tasksOf(page, OWNER))[0]).toMatchObject({ id: task!.id, status: 'reported' });
+  expect((await tasksOf(page, OWNER))[0]).toMatchObject({ id: task!.id, status: 'completed' });
 });
 
 test('an async report leaves the SOP draft and the field being edited', async ({ page }) => {
@@ -514,7 +511,7 @@ test('qa-human-work#41: an existing conversation still produces a draft task, an
 
   const card = page.locator(`[data-task="${draftTask!.id}"]`);
   await expect(card).toContainText('进行中');
-  await expect(card).not.toContainText(/已复核|已回报/);
+  await expect(card).not.toContainText(/已完成|已复核|已回报/);
   await card.click();
   await expect(drawer(page).locator('[data-status]')).toHaveText('进行中');
   await expect(drawer(page).locator('[data-evidence]')).toContainText('还没有回报。');
@@ -525,8 +522,7 @@ test('qa-human-work#41: an existing conversation still produces a draft task, an
   await expect(taskCards(page)).toHaveCount(2);
   const after = await tasksOf(page, OWNER);
   expect(after.find((task) => task.id === draftTask!.id)).toMatchObject({ status: 'assigned' });
-  expect(after.find((task) => task.id === earlier.id)).toMatchObject({ status: 'reported' });
-  expect(after.map((task) => task.status)).not.toContain('reviewed');
+  expect(after.find((task) => task.id === earlier.id)).toMatchObject({ status: 'completed' });
 });
 
 test('qa-outcomes#18 / qa-outcomes#23: a task held for a missing tool resumes the same task only after the tool completes all seven lifecycle steps for that employee', async ({ page }) => {
