@@ -103,6 +103,29 @@ describe('knowledge application: real source store + transactions', () => {
     expect((await wired.inject({ method: 'POST', url: '/knowledge/connections', payload: [] })).statusCode).toBe(400);
     expect((await wired.inject({ method: 'POST', url: '/knowledge/analyses', payload: {} })).statusCode).toBe(503); await wired.close();
   });
+  it('an employee cannot confirm a source version; an owner can', async () => {
+    const f = await fixture();
+    const employee: UserContext = { ...owner, roles: ['employee'] };
+    const app = Fastify();
+    app.addHook('preHandler', async req => { req.user = req.headers['x-test-role'] === 'employee' ? employee : owner; });
+    await app.register(knowledgeModule, { prefix: '/knowledge', deps: { repo: f.repo } });
+    const listed = (await app.inject('/knowledge/overview')).json() as { items: { id: string; version: string; confirmed: boolean }[]; canConfirm: boolean };
+    expect(listed.canConfirm).toBe(true);
+    const item = listed.items[0]!;
+    const denied = await app.inject({ method: 'POST', url: `/knowledge/items/${item.id}/confirm`, headers: { 'x-test-role': 'employee' }, payload: { version: item.version } });
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().error).toBe('forbidden');
+    expect((await f.repo.read(owner)).confirmations[f.item.id]).toBeUndefined();
+    const allowed = await app.inject({ method: 'POST', url: `/knowledge/items/${item.id}/confirm`, payload: { version: item.version } });
+    expect(allowed.statusCode).toBe(200);
+    expect((await f.repo.read(owner)).confirmations[f.item.id]?.version).toBe(f.item.version);
+    const asEmployee = Fastify();
+    asEmployee.addHook('preHandler', async req => { req.user = employee; });
+    await asEmployee.register(knowledgeModule, { prefix: '/knowledge', deps: { repo: f.repo } });
+    expect(((await asEmployee.inject('/knowledge/overview')).json() as { canConfirm: boolean }).canConfirm).toBe(false);
+    await app.close();
+    await asEmployee.close();
+  });
 });
 describe('analysis stage worker', () => {
   it('persists stages, generates only evidence-backed drafts, and protects human locks/deletions', async () => {
