@@ -17,7 +17,7 @@ stored in Key Vault by the app itself.
 | PostgreSQL Flexible Server 16 | Business state, queue, audit | **Entra auth only** (password auth disabled); `pg_trgm` and `vector` allow-listed |
 | Storage account | Source originals, artifacts, screenshots | No public blob access, no shared keys |
 | Key Vault (RBAC) | Model API key, connector credentials | Purge protection on; app identity = Secrets Officer |
-| Document Intelligence (S0) | PDF / scanned document parsing | Local auth disabled; app identity = Cognitive Services User |
+| Document Intelligence (S0) | PDF / scanned document parsing | Local auth disabled; app identity = Cognitive Services User. Region is `docIntelLocation`, which defaults to `location` |
 | Application Insights | Telemetry | 50% sampling, 30-day log retention |
 
 Production hardening (both optional parameters):
@@ -31,8 +31,15 @@ Production hardening (both optional parameters):
 
 ## One-time setup
 
-1. **Resource group**: `az group create -n rg-superagent-staging -l australiaeast`
+1. **Resource group**: `az group create -n rg-superagent-staging -l australiasoutheast`
    Check that every service above (and your chosen model) is available in the region first.
+   Staging on this subscription cannot put Container Apps in Australia East: that region allows only one Container Apps
+   environment, and it is already in use. Australia Southeast has no Document Intelligence, so that one service stays in
+   Australia East. Set the GitHub environment variables `LOCATION=australiasoutheast` and
+   `DOC_INTEL_LOCATION=australiaeast`. Other resources follow `LOCATION`. Leave either variable unset to keep the
+   template default (the resource group region, and Document Intelligence following `location`). The workflow omits an
+   empty value so it does not override that default. A private endpoint, when enabled, stays in the `location` VNet and
+   can reach Document Intelligence in the other region.
 2. **Entra app registration (workbench + API, one registration)**: note the tenant id and client id.
    - **Expose an API**: Application ID URI `api://<client-id>`, add the scope `access_as_user` (admins and users can consent).
    - **App roles**: add `admin`, `owner`, `employee` and `reviewer`, then assign users or groups to them.
@@ -48,6 +55,7 @@ Production hardening (both optional parameters):
    Contributor + User Access Administrator on the resource group, and set repository variables:
    `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`,
    `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `PG_ADMIN_GROUP_ID`, `PG_ADMIN_GROUP_NAME`.
+   Optional region variables: `LOCATION`, `DOC_INTEL_LOCATION` (staging: `australiasoutheast` and `australiaeast`).
 5. **Production approval**: configure the `prod` GitHub environment with required reviewers.
 
 ## Deploy

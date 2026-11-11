@@ -3,7 +3,8 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "env": { "value": "staging" },
-    "location": { "value": "australiaeast" },
+    "location": { "value": "australiasoutheast" },
+    "docIntelLocation": { "value": "australiaeast" },
     "image": { "value": "<acr-login-server>/superagent:<git-sha>" },
     "entraTenantId": { "value": "<entra-tenant-id>" },
     "entraClientId": { "value": "<api-app-registration-client-id>" },

@@ -5,8 +5,11 @@ targetScope = 'resourceGroup'
 @description('Short environment name, e.g. dev, staging, prod')
 param env string
 
-@description('Azure region. Verify service + model availability for the region before production.')
+@description('Azure region for every resource except Document Intelligence. Verify service + model availability before production.')
 param location string = resourceGroup().location
+
+@description('Region for Document Intelligence only. Defaults to location. Staging sets this to australiaeast because australiasoutheast has no Document Intelligence, while australiaeast has no free Container Apps environment quota.')
+param docIntelLocation string = location
 
 @description('Container image, e.g. <acr>.azurecr.io/superagent:<sha>')
 param image string
@@ -220,7 +223,7 @@ resource pgAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2
 // ---------- Document Intelligence ----------
 resource docIntel 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   name: '${prefix}-docintel-${uniq}'
-  location: location
+  location: docIntelLocation
   kind: 'FormRecognizer'
   sku: { name: 'S0' }
   properties: { customSubDomainName: '${prefix}-docintel-${uniq}', disableLocalAuth: true, publicNetworkAccess: enablePrivateNetworking ? 'Disabled' : 'Enabled' }
