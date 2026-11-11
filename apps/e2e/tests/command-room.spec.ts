@@ -647,3 +647,69 @@ test('qa-outcomes#18 / qa-outcomes#23: a task held for a missing tool resumes th
     hold: null,
   });
 });
+
+test('a person who assigned and reported on their own digital employee cannot self-review (403); reported tasks refuse hold/ask-input (409); another reviewer or owner accepts it (T-82)', async ({ page }) => {
+  const staff = `e2e-room-self-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  const ownerBot = await employee(page, '负责人助理', 'e2e-room-owner');
+  const reviewer = 'e2e-room-reviewer|reviewer|';
+
+  // 1) Employee assigns their own digital employee and reports on it
+  await as(page, staffHeader(staff));
+  await say(page, `@${sales.name} 请整理客户回访纪要`);
+  await expect(taskCards(page)).toHaveCount(1);
+  const [selfTask] = await tasksOf(page, staffHeader(staff));
+  expect(selfTask).toMatchObject({ createdByUserId: staff, assigneeUserId: staff, status: 'assigned' });
+
+  await page.locator(`[data-task="${selfTask!.id}"]`).click();
+  await drawer(page).getByLabel('回报内容').fill('客户回访纪要已整理完毕');
+  await drawer(page).getByRole('button', { name: '提交回报' }).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已回报，待复核');
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0);
+  await expect(drawer(page).locator('[data-evidence]')).toContainText('需要别人复核');
+
+  const selfReviewRes = await page.request.post(`/api/v1/room/tasks/${selfTask!.id}/review`, {
+    data: { clientMessageId: `e2e-self-rev-${tag()}` },
+    headers: { 'x-dev-user': staffHeader(staff) },
+  });
+  expect(selfReviewRes.status()).toBe(403);
+  expect(await selfReviewRes.json()).toEqual({ error: 'self_review' });
+
+  // #6: reported task cannot be overwritten to waiting by hold or ask-input
+  expect((await page.request.post(`/api/v1/room/tasks/${selfTask!.id}/ask-input`, {
+    headers: { 'x-dev-user': staffHeader(staff) },
+  })).status()).toBe(409);
+  expect((await page.request.post(`/api/v1/room/tasks/${selfTask!.id}/hold`, {
+    data: { toolId: 'crm.contact.read' },
+    headers: { 'x-dev-user': staffHeader(staff) },
+  })).status()).toBe(409);
+
+  // Another person (owner) reviews and accepts the task on the page
+  await as(page, OWNER);
+  await page.locator(`[data-task="${selfTask!.id}"]`).click();
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toBeVisible();
+  await drawer(page).getByRole('button', { name: '复核通过' }).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已复核');
+
+  // 2) Owner assigns their own digital employee and reports: owner also cannot self-review; another reviewer accepts it
+  await say(page, `@${ownerBot.name} 请核对经营周报`);
+  const ownerTask = (await tasksOf(page, OWNER)).find((task) => task.employeeId === ownerBot.id)!;
+  await page.locator(`[data-task="${ownerTask.id}"]`).click();
+  await drawer(page).getByLabel('回报内容').fill('经营周报已核对');
+  await drawer(page).getByRole('button', { name: '提交回报' }).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已回报，待复核');
+  await expect(drawer(page).getByRole('button', { name: '复核通过' })).toHaveCount(0);
+  await expect(drawer(page).locator('[data-evidence]')).toContainText('需要别人复核');
+  expect((await page.request.post(`/api/v1/room/tasks/${ownerTask.id}/review`, {
+    data: { clientMessageId: `e2e-owner-self-rev-${tag()}` },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(403);
+
+  expect((await page.request.post(`/api/v1/room/tasks/${ownerTask.id}/review`, {
+    data: { clientMessageId: `e2e-reviewer-ok-${tag()}` },
+    headers: { 'x-dev-user': reviewer },
+  })).status()).toBe(200);
+  await page.reload();
+  await page.locator(`[data-task="${ownerTask.id}"]`).click();
+  await expect(drawer(page).locator('[data-status]')).toHaveText('已复核');
+});

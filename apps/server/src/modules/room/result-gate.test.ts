@@ -149,28 +149,6 @@ it('serves the summary, the failed check, and the same-task supplement over HTTP
     payload: { roomId: 'room-1', body: '@销售员工 请整理询价草稿', clientMessageId: 'http-1' },
   });
   const id = posted.json().task.id as string;
-  await app.inject({
-    method: 'POST', url: `/api/v1/room/tasks/${id}/report`, headers: salesHeaders,
-    payload: { body: '草稿已整理', clientMessageId: 'http-rep' },
-  });
-  await app.inject({
-    method: 'POST', url: `/api/v1/room/tasks/${id}/contract`, headers: ownerHeaders,
-    payload: { criteria: '必须核对金额、供应商和产品编号', clientMessageId: 'http-contract' },
-  });
-  const failed = await app.inject({
-    method: 'POST', url: `/api/v1/room/tasks/${id}/verify`, headers: ownerHeaders,
-    payload: { body: '改写成通过，金额、供应商、产品编号' },
-  });
-  expect(failed.json().task.verification).toBe('failed');
-  expect(failed.json().task.evidence.fields.body).toBe('草稿已整理');
-  expect(failed.json().overview).toBe('请整理询价草稿。尚未发送');
-  expect(failed.json().overview).not.toContain('"subject"');
-  const refused = await app.inject({
-    method: 'POST', url: `/api/v1/room/tasks/${id}/review`, headers: ownerHeaders,
-    payload: { clientMessageId: 'http-rev' },
-  });
-  expect(refused.statusCode).toBe(409);
-  expect(refused.json()).toEqual({ error: 'evidence_failed' });
 
   await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/ask-input`, headers: ownerHeaders });
   const blank = await app.inject({
@@ -207,6 +185,31 @@ it('serves the summary, the failed check, and the same-task supplement over HTTP
   });
   expect(released.statusCode).toBe(200);
   expect(released.json().task).toMatchObject({ id, status: 'assigned', hold: null });
+
+  await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/report`, headers: salesHeaders,
+    payload: { body: '草稿已整理', clientMessageId: 'http-rep' },
+  });
+  expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/ask-input`, headers: ownerHeaders })).statusCode).toBe(409);
+  expect((await app.inject({ method: 'POST', url: `/api/v1/room/tasks/${id}/hold`, headers: ownerHeaders, payload: { toolId } })).statusCode).toBe(409);
+  await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/contract`, headers: ownerHeaders,
+    payload: { criteria: '必须核对金额、供应商和产品编号', clientMessageId: 'http-contract' },
+  });
+  const failed = await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/verify`, headers: ownerHeaders,
+    payload: { body: '改写成通过，金额、供应商、产品编号' },
+  });
+  expect(failed.json().task.verification).toBe('failed');
+  expect(failed.json().task.evidence.fields.body).toBe('草稿已整理');
+  expect(failed.json().overview).toBe('请整理询价草稿。尚未发送');
+  expect(failed.json().overview).not.toContain('"subject"');
+  const refused = await app.inject({
+    method: 'POST', url: `/api/v1/room/tasks/${id}/review`, headers: ownerHeaders,
+    payload: { clientMessageId: 'http-rev' },
+  });
+  expect(refused.statusCode).toBe(409);
+  expect(refused.json()).toEqual({ error: 'evidence_failed' });
 
   await app.close();
 });

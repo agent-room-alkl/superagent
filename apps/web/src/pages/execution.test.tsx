@@ -106,6 +106,9 @@ describe('execution pages reuse the v12 copy', () => {
     expect(taskActions(task({}), OWNER)).toEqual({ report: false, review: false, cancel: true, followup: true, resume: false, contract: true });
     expect(taskActions(task({}), SALES)).toEqual({ report: true, review: false, cancel: false, followup: true, resume: false, contract: false });
     expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true, resume: false, contract: true });
+    expect(taskActions(task({ status: 'reported', createdByUserId: 'user-sales', assigneeUserId: 'user-sales' }), SALES).review).toBe(false);
+    expect(taskActions(task({ status: 'reported', createdByUserId: 'user-owner', assigneeUserId: 'user-owner' }), OWNER).review).toBe(false);
+    expect(taskActions(task({ status: 'reported', createdByUserId: 'user-owner', assigneeUserId: 'user-owner' }), { userId: 'user-reviewer', roles: ['reviewer'], owner: false }).review).toBe(true);
     expect(taskActions(task({ status: 'reviewed' }), SALES).report).toBe(false);
     expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
     const draft = task({
