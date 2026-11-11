@@ -66,7 +66,7 @@ jobs:
             REGION_ARGS+=(existingContainerAppsEnvironmentId="${{ vars.EXISTING_CONTAINERAPPS_ENVIRONMENT_ID }}")
           fi
           out=$(az deployment group create -g "$RG" -f infra/main.bicep \
-            -p @source-parameters.json env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" \
+            -p @source-parameters.json env="$ENV_NAME" image="$IMAGE_PLACEHOLDER" browserImage="$IMAGE_PLACEHOLDER" \
                entraTenantId="${{ vars.ENTRA_TENANT_ID }}" entraClientId="${{ vars.ENTRA_CLIENT_ID }}" \
                pgAdminGroupObjectId="${{ vars.PG_ADMIN_GROUP_ID }}" pgAdminGroupName="${{ vars.PG_ADMIN_GROUP_NAME }}" \
                "${REGION_ARGS[@]}" \

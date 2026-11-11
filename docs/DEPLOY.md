@@ -70,19 +70,38 @@ Production hardening (both optional parameters):
 ## Deploy
 
 Run the **deploy** workflow (Actions → deploy → Run workflow → staging). It:
-1. creates or updates infrastructure,
+1. creates or updates infrastructure (this first pass runs every app and job, including the sandbox, on a public
+   placeholder image because the registry is still empty),
 2. builds and pushes `superagent:<git sha>` to the registry,
 3. deploys the new revision of web, worker and jobs,
 4. runs the migration job and waits for success,
 5. smoke-tests `/healthz`.
 
-Database access for the app identity: after the first deploy, a member of the PostgreSQL admin group runs once
-(replace the identity name, shown as `sa-<env>-app-id`):
+Database bootstrap: the first deploy stops at the migration step, because the app identity has no database login yet.
+A member of the PostgreSQL admin group runs the statements below once, then reruns the workflow (replace the identity
+name, shown as `sa-<env>-app-id`). Connect with the admin group name as the user and an Entra token as the password
+(`az account get-access-token --resource-type oss-rdbms`). The server accepts only Azure services, so add a firewall
+rule for your own address first and delete it afterwards.
+
+In the `postgres` database:
 
 ```sql
 SELECT * FROM pgaadauth_create_principal('sa-staging-app-id', false, false);
-GRANT superagent_app TO "sa-staging-app-id";
 ```
+
+In the `superagent` database:
+
+```sql
+CREATE ROLE superagent_app NOLOGIN;
+GRANT superagent_app TO "sa-staging-app-id";
+GRANT USAGE ON SCHEMA public TO "sa-staging-app-id" WITH GRANT OPTION;
+GRANT CREATE ON SCHEMA public TO "sa-staging-app-id";
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+The migration job runs as the app identity, which is not a database administrator. It cannot create roles or
+extensions, and it can create tables only with the schema grant above, so those exist before the first migration.
 
 ## First start
 
