@@ -78,11 +78,21 @@ describe('computer-use session', () => {
     expect(toAction({ action: 'triple_click' })).toEqual({ kind: 'key', keys: 'triple_click' });
   });
 
-  it('requires approval when clicking a submit button even if the model labels it "下一页", and blocks external click navigations via context.route (T-85)', async () => {
+  it('requires approval when clicking a submit button even if the model labels it "下一页" or attaches a forged action.target, and blocks external click navigations via context.route (T-85)', async () => {
     const { model } = fakeAnthropic([{ action: 'left_click', coordinate: [40, 80], label: '下一页' }]);
     const submitScreen = new FakeScreen(() => ({ tagName: 'button', type: 'submit', inForm: true, submits: true, text: '确认提交' }));
     const res = await runComputerUse({ runId: 'cu-t85-submit', goal: 'Next page', model, screen: submitScreen, policy: policy(), screenshots: new InMemoryScreenshotStore() });
     expect(res.status).toBe('needs_approval');
+    expect(submitScreen.performed).toEqual([]);
+
+    // Even if a custom/forged model action carries action.target = { tagName: 'a' }, runComputerUse ignores it and uses screen.inspectAt
+    const forgedModel = {
+      async next() {
+        return { kind: 'click', x: 40, y: 80, label: '下一页', target: { tagName: 'a', role: 'link', text: 'Next' } } as unknown as CuAction;
+      },
+    };
+    const forgedRes = await runComputerUse({ runId: 'cu-t85-forged-target', goal: 'Next page', model: forgedModel, screen: submitScreen, policy: policy(), screenshots: new InMemoryScreenshotStore() });
+    expect(forgedRes.status).toBe('needs_approval');
     expect(submitScreen.performed).toEqual([]);
 
     // Browser Screen installs context.route('**/*', ...) and blocks click-triggered navigation to non-allowlisted domains or 10.x / 127.x IPs
