@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ComputerUsePolicy, actionHash, type CuAction } from '../src/modules/sandbox/computer-use.js';
-import { anthropicComputerUse, runComputerUse, testComputerUseCapability, toAction, type Screen } from '../src/modules/sandbox/computer-use-session.js';
+import { ComputerUsePolicy, actionHash, type ClickTarget, type CuAction } from '../src/modules/sandbox/computer-use.js';
+import { anthropicComputerUse, createBrowserScreen, runComputerUse, testComputerUseCapability, toAction, type RoutableContext, type RoutablePage, type Screen } from '../src/modules/sandbox/computer-use-session.js';
 import { InMemoryScreenshotStore } from '../src/modules/sandbox/screenshots.js';
 import { isAllowedUrl } from '../src/modules/sandbox/guards.js';
 
@@ -20,8 +20,12 @@ function fakeAnthropic(script: (Record<string, unknown> | null)[]) {
 
 class FakeScreen implements Screen {
   performed: CuAction[] = [];
+  constructor(private readonly targetAt: (x: number, y: number) => ClickTarget | null = () => ({ tagName: 'a', role: 'link', text: 'Invoices', href: 'https://app.example.com/invoices' })) {}
   async screenshot() {
     return PNG;
+  }
+  async inspectAt(x: number, y: number) {
+    return this.targetAt(x, y);
   }
   async perform(a: CuAction) {
     this.performed.push(a);
@@ -72,5 +76,62 @@ describe('computer-use session', () => {
 
   it('maps unknown provider actions to write-classified key presses', () => {
     expect(toAction({ action: 'triple_click' })).toEqual({ kind: 'key', keys: 'triple_click' });
+  });
+
+  it('requires approval when clicking a submit button even if the model labels it "下一页", and blocks external click navigations via context.route (T-85)', async () => {
+    const { model } = fakeAnthropic([{ action: 'left_click', coordinate: [40, 80], label: '下一页' }]);
+    const submitScreen = new FakeScreen(() => ({ tagName: 'button', type: 'submit', inForm: true, submits: true, text: '确认提交' }));
+    const res = await runComputerUse({ runId: 'cu-t85-submit', goal: 'Next page', model, screen: submitScreen, policy: policy(), screenshots: new InMemoryScreenshotStore() });
+    expect(res.status).toBe('needs_approval');
+    expect(submitScreen.performed).toEqual([]);
+
+    // Browser Screen installs context.route('**/*', ...) and blocks click-triggered navigation to non-allowlisted domains or 10.x / 127.x IPs
+    let routeHandler: Parameters<RoutableContext['route']>[1] | null = null;
+    const fakeContext: RoutableContext = {
+      async route(_pattern, handler) {
+        routeHandler = handler;
+      },
+    };
+    const fakePage: RoutablePage = {
+      async screenshot() {
+        return PNG;
+      },
+      async goto() {},
+      mouse: {
+        async click() {
+          // Simulate browser following an external link upon click
+          await routeHandler?.({
+            request: () => ({ url: () => 'https://outside.evil.example/steal' }),
+            continue: () => {},
+            abort: () => {},
+          });
+        },
+        async wheel() {},
+      },
+      keyboard: { async type() {}, async press() {} },
+      async evaluate() {
+        return { tagName: 'a', role: 'link', type: null, inForm: false, submits: false, href: 'https://app.example.com/ok', text: 'Next' } as any;
+      },
+    };
+    const browserScreen = await createBrowserScreen(fakeContext, fakePage, ['app.example.com'], {
+      lookupFn: async (host) => (host === 'app.example.com' ? ['93.184.216.34'] : ['198.51.100.1']),
+    });
+    await browserScreen.perform({ kind: 'click', x: 10, y: 10 });
+    expect(browserScreen.blockedRequests).toContain('https://outside.evil.example/steal');
+
+    // Also blocks allow-listed host if DNS resolves to 10.x or 127.x
+    const rebindScreen = await createBrowserScreen(fakeContext, fakePage, ['app.example.com'], {
+      lookupFn: async () => ['10.0.0.8'],
+    });
+    let aborted = false;
+    await routeHandler!({
+      request: () => ({ url: () => 'https://app.example.com/internal' }),
+      continue: () => {},
+      abort: () => {
+        aborted = true;
+      },
+    });
+    expect(aborted).toBe(true);
+    expect(rebindScreen.blockedRequests).toContain('https://app.example.com/internal');
   });
 });

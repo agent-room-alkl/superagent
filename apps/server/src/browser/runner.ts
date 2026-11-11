@@ -5,7 +5,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { verifyArtifact, isAllowedUrl } from '../modules/sandbox/guards.js';
+import { verifyArtifact, isAllowedUrl, resolveAndCheckUrl } from '../modules/sandbox/guards.js';
 import { validateProcedure, type Procedure } from '../modules/sandbox/replay.js';
 import { InMemoryScreenshotStore, type ScreenshotStore } from '../modules/sandbox/screenshots.js';
 
@@ -46,9 +46,9 @@ export async function runProcedure(spec: RunSpec, opts: RunOptions = {}): Promis
   const page = await context.newPage();
   page.setDefaultTimeout(spec.timeoutMs ?? 15_000);
   const blocked: string[] = [];
-  await context.route('**/*', (route) => {
+  await context.route('**/*', async (route) => {
     const url = route.request().url();
-    if (url.startsWith('data:') || isAllowedUrl(url, spec.egressAllowlist)) return route.continue();
+    if (url.startsWith('data:') || (await resolveAndCheckUrl(url, spec.egressAllowlist))) return route.continue();
     blocked.push(url);
     return route.abort('blockedbyclient');
   });

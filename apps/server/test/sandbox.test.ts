@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { assertNoLoginState, digestOf, GrantStore, isAllowedUrl, verifyArtifact, DigestMismatchError } from '../src/modules/sandbox/guards.js';
+import { assertNoLoginState, digestOf, GrantStore, isAllowedUrl, isPrivateOrReservedIp, resolveAndCheckUrl, verifyArtifact, DigestMismatchError } from '../src/modules/sandbox/guards.js';
 import { parameterize, validateProcedure, type Procedure } from '../src/modules/sandbox/replay.js';
-import { ComputerUsePolicy, actionHash, assertComputerUseCapable } from '../src/modules/sandbox/computer-use.js';
+import { classify, ComputerUsePolicy, actionHash, assertComputerUseCapable } from '../src/modules/sandbox/computer-use.js';
 import { AzureJobLauncher } from '../src/modules/sandbox/launcher.js';
 
 describe('artifact digest', () => {
@@ -21,6 +21,23 @@ describe('egress allowlist', () => {
     expect(isAllowedUrl('https://evil.com/?u=app.example.com', allow)).toBe(false);
     expect(isAllowedUrl('http://app.example.com/', allow)).toBe(false);
     expect(isAllowedUrl('https://app.example.com.evil.com/', allow)).toBe(false);
+  });
+
+  it('rejects allow-listed domains that resolve to private (10.x, 172.16.x, 192.168.x), loopback (127.x, ::1), or link-local (169.254.x) IPs (T-85)', async () => {
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['93.184.216.34'])).toBe(true);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['10.0.0.1'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['127.0.0.1'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['169.254.169.254'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['172.16.0.5'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['192.168.1.1'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['::1'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['fe80::1'])).toBe(false);
+    expect(isAllowedUrl('https://app.example.com/x', allow, ['fd00::1'])).toBe(false);
+    expect(isPrivateOrReservedIp('::ffff:10.1.2.3')).toBe(true);
+    expect(isPrivateOrReservedIp('::ffff:127.0.0.1')).toBe(true);
+    expect(await resolveAndCheckUrl('https://app.example.com/x', allow, async () => ['10.20.30.40'])).toBe(false);
+    expect(await resolveAndCheckUrl('https://app.example.com/x', allow, async () => ['127.0.0.1'])).toBe(false);
+    expect(await resolveAndCheckUrl('https://app.example.com/x', allow, async () => ['93.184.216.34'])).toBe(true);
   });
 });
 
@@ -57,14 +74,21 @@ describe('recorded procedures', () => {
 
 describe('computer use policy', () => {
   const policy = () => new ComputerUsePolicy((u) => isAllowedUrl(u, ['app.example.com']));
-  it('allows observation and labeled navigation, blocks writes without approval', () => {
+  it('classifies clicks by the real element at coordinates rather than trusting model label, and blocks writes without approval (T-85)', () => {
     const p = policy();
     expect(p.decide({ kind: 'screenshot' }).allowed).toBe(true);
-    expect(p.decide({ kind: 'click', x: 1, y: 2, label: 'Invoices' }).reason).toBe('navigate');
-    const d = p.decide({ kind: 'click', x: 1, y: 2, label: '保存' });
-    expect(d.allowed).toBe(false);
-    expect(d.workItem?.kind).toBe('action_approval');
-    expect(p.decide({ kind: 'click', x: 9, y: 9 }).allowed).toBe(false); // unlabeled = write
+    expect(p.decide({ kind: 'click', x: 1, y: 2, label: 'Invoices' }, { tagName: 'a', role: 'link', text: 'Invoices', href: 'https://app.example.com/invoices' }).reason).toBe('navigate');
+    // Submit button disguised by the model with label "下一页" still requires approval
+    expect(classify({ kind: 'click', x: 10, y: 20, label: '下一页' }, { tagName: 'button', type: 'submit', inForm: true, submits: true, text: '提交' })).toBe('write');
+    const disguised = p.decide({ kind: 'click', x: 10, y: 20, label: '下一页' }, { tagName: 'button', type: 'submit', inForm: true, submits: true, text: '提交' });
+    expect(disguised.allowed).toBe(false);
+    expect(disguised.reason).toBe('needs_approval');
+    expect(disguised.workItem?.kind).toBe('action_approval');
+    // Missing element metadata at coordinates defaults to write (requires approval) even if label looks benign
+    expect(p.decide({ kind: 'click', x: 9, y: 9, label: '下一页' }, null).allowed).toBe(false);
+    expect(p.decide({ kind: 'click', x: 9, y: 9 }).allowed).toBe(false);
+    // Clicking an external link is blocked by egress allowlist
+    expect(p.decide({ kind: 'click', x: 5, y: 5, label: 'Help' }, { tagName: 'a', role: 'link', href: 'https://evil.com/out', text: 'Help' }).reason).toBe('egress_blocked');
     expect(p.decide({ kind: 'type', text: '480' }).allowed).toBe(false);
     expect(p.decide({ kind: 'navigate', url: 'https://evil.com' }).reason).toBe('egress_blocked');
   });
