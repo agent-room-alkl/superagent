@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  actorLabel, approvalLine, attemptsLine, CommandRoomPage, draftStorageKey, insertMention, mergeRoomMessages, messageKindLabel, nextRoomCursor,
-  roomDraftKey, roomEventsFromSse, taskActions, taskLine, taskReports, taskStatusLabel,
+  actorLabel, applyAsyncReport, approvalLine, attemptsLine, CommandRoomPage, draftStorageKey, insertMention, mergeRoomMessages, messageKindLabel, nextRoomCursor,
+  resultOverview, roomDraftKey, roomEventsFromSse, supplementError, taskActions, taskLine, taskReports, taskStatusLabel,
+  unsentDraftBoundary,
   type ApiMessage, type ApiTask, type RosterEmployee,
 } from './CommandRoomPage';
 import { canDecide, decisionWhy, GROUPS, inboxFromServer, KIND_LABEL, RENDERER_LABEL, WorkInboxPage } from './WorkInboxPage';
@@ -29,6 +30,7 @@ describe('execution pages reuse the v12 copy', () => {
     expect(html).toContain('不展示隐藏思维链');
     expect(html).toContain('同事的新消息不会清掉这里的草稿');
     expect(html).toContain('当前没有由对话产生的任务。');
+    expect(html).toContain('暂无事项');
     expect(html).not.toContain('销售员工'); // nothing is written into the page; people and work come from the server
     expect(html).not.toContain('询价草稿');
     expect(html).not.toContain('模拟同事回报');
@@ -106,6 +108,18 @@ describe('execution pages reuse the v12 copy', () => {
     expect(taskActions(task({ status: 'reported' }), OWNER)).toEqual({ report: false, review: true, cancel: false, followup: true, resume: false, contract: true });
     expect(taskActions(task({ status: 'reviewed' }), SALES).report).toBe(false);
     expect(taskActions(task({ status: 'cancelled' }), OWNER)).toEqual({ report: false, review: false, cancel: false, followup: false, resume: false, contract: false });
+    const draft = task({
+      title: '整理询价草稿',
+      evidence: { fields: { subject: '内部字段', body: '请核对报价' }, sent: false },
+    });
+    expect(unsentDraftBoundary(draft)).toBe('尚未发送');
+    expect(resultOverview(draft)).toBe('整理询价草稿。尚未发送');
+    expect(resultOverview(draft)).not.toContain('subject');
+    expect(resultOverview(draft)).not.toContain('"subject"');
+    expect(supplementError('  ')).toBe('请填写');
+    expect(supplementError('客户ID C-DEMO-002')).toBeNull();
+    const editing = { steps: [{ task: '保持正在编辑的业务步骤' }] };
+    expect(applyAsyncReport(editing)).toBe(editing);
     // what counts as done is changed by whoever asked for the work
     expect(taskActions(task({ status: 'reviewed' }), OWNER).contract).toBe(true);
     expect(approvalLine({ id: 'a', status: 'decided', standing: true, actionStatus: null })).toBe('批准有效');

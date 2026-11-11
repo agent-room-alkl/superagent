@@ -22,6 +22,9 @@ interface Employee { id: string; name: string; ownerUserId: string }
 interface Task {
   id: string; title: string; status: string; employeeId: string; assigneeUserId: string; messageId: string; createdByUserId: string;
   followupTo: string | null; approval: string; waitingReason: string | null;
+  verification?: string;
+  inputSupplement?: string | null;
+  hold?: { responsible: string } | null;
   promptSnapshot: { employeeId: string; promptVersion: number | null; modelTier: string | null; takenAt: string } | null;
 }
 interface Message { id: string; seq: number; body: string; kind: string; taskIds: string[] }
@@ -311,6 +314,69 @@ test('an employee sees and assigns only their own digital employee; drafts stay 
   await expect(taskCards(page)).toHaveCount(3);
 });
 
+test('an empty summary invents nothing; an unsent draft stays unsent; failed evidence cannot be accepted', async ({ page }) => {
+  await as(page, OWNER);
+  await expect(page.locator('[data-outcome="summary"]')).toContainText('暂无事项');
+  await expect(page.locator('[data-outcome="summary-message"]')).toHaveCount(0);
+
+  const staff = `e2e-room-staff-${tag()}`;
+  const fin = `e2e-room-fin-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  const finance = await employee(page, '财务员工', fin);
+  const draftTask = (await post(page, OWNER, `@${sales.name} 请整理询价草稿`)).task!;
+  const financeTask = (await post(page, OWNER, `@${finance.name} 请核对预算`)).task!;
+  expect((await report(page, staffHeader(staff), draftTask.id, '询价草稿已放在对话里')).status()).toBe(200);
+
+  await as(page, staffHeader(staff));
+  await expect(page.locator('[data-outcome="summary"]')).toContainText('请整理询价草稿');
+  await expect(page.locator('[data-outcome="summary"]')).not.toContainText('请核对预算');
+  await expect(page.locator('[data-outcome="summary"]')).not.toContainText(finance.name);
+  await page.locator('[data-outcome="summary-message"]').click();
+  await expect(stream(page).locator(`#room-msg-${draftTask.messageId}`)).toBeVisible();
+
+  await as(page, OWNER);
+  await page.locator(`[data-task="${draftTask.id}"]`).click();
+  await expect(drawer(page).locator('[data-overview]')).toContainText('尚未发送');
+  await expect(drawer(page).locator('[data-overview]')).not.toContainText('"subject"');
+  await expect(drawer(page).locator('[data-boundary]')).toHaveText('尚未发送');
+
+  expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/verify`, {
+    data: { body: null },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
+  await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === draftTask.id)?.verification).toBe('failed');
+  await expect(drawer(page).locator('[data-review]')).toBeDisabled();
+
+  expect((await page.request.post(`/api/v1/room/tasks/${draftTask.id}/verify`, {
+    data: { body: '请核对报价、可交付数量与交期。' },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
+  await expect(drawer(page).locator('[data-review]')).toBeEnabled();
+
+  expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/ask-input`, { headers: { 'x-dev-user': OWNER } })).status()).toBe(200);
+  await page.reload();
+  await page.locator(`[data-task="${financeTask.id}"]`).click();
+  await page.locator('#outcome-input').fill('   ');
+  await page.getByRole('button', { name: '保存补充' }).click();
+  await expect(page.locator('#outcome-input-help')).toHaveText('请填写');
+  await page.locator('#outcome-input').fill('客户ID C-DEMO-002');
+  await page.getByRole('button', { name: '保存补充' }).click();
+  await expect.poll(async () => (await tasksOf(page, OWNER)).find((task) => task.id === financeTask.id)?.inputSupplement).toBe('客户ID C-DEMO-002');
+  expect(await tasksOf(page, OWNER)).toHaveLength(2);
+
+  expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/hold`, { headers: { 'x-dev-user': OWNER } })).status()).toBe(200);
+  await page.reload();
+  await page.locator(`[data-task="${financeTask.id}"]`).click();
+  await expect(drawer(page).locator('[data-blocker]')).toContainText('企业负责人');
+  expect((await page.request.post(`/api/v1/room/tasks/${financeTask.id}/release-hold`, {
+    data: { clientMessageId: `e2e-release-${tag()}` },
+    headers: { 'x-dev-user': OWNER },
+  })).status()).toBe(200);
+  const resumed = (await tasksOf(page, OWNER)).find((task) => task.id === financeTask.id);
+  expect(resumed).toMatchObject({ id: financeTask.id, status: 'assigned', hold: null });
+  expect(await tasksOf(page, OWNER)).toHaveLength(2);
+});
+
 test('an employee that disconnects keeps the same task waiting; the owner reconnects it and resumes that task, never a new one', async ({ page }) => {
   const staff = `e2e-room-staff-${tag()}`;
   const ops = await employee(page, '运营员工', staff);
@@ -351,4 +417,48 @@ test('an employee that disconnects keeps the same task waiting; the owner reconn
   // the employee's report lands on that same task
   expect((await report(page, staffHeader(staff), task!.id, '客户资料已核对')).status()).toBe(200);
   expect((await tasksOf(page, OWNER))[0]).toMatchObject({ id: task!.id, status: 'reported' });
+});
+
+test('an async report leaves the SOP draft and the field being edited', async ({ page }) => {
+  await page.setExtraHTTPHeaders({ 'x-dev-user': OWNER });
+  const staff = `e2e-room-staff-${tag()}`;
+  const sales = await employee(page, '销售员工', staff);
+  const task = (await post(page, OWNER, `@${sales.name} 请整理询价草稿`)).task!;
+  const sopId = `e2e.keep-draft-${tag()}`;
+  const step = '保持正在编辑的业务步骤';
+  expect((await page.request.post('/api/v1/sop/drafts', {
+    data: {
+      sopId,
+      definition: {
+        requiredFields: ['发票号'],
+        employeeStatus: 'active',
+        graph: { nodes: [{ id: 't', kind: 'trigger', label: '原草稿步骤', ref: 'date:month-end' }], edges: [] },
+      },
+    },
+  })).status()).toBe(200);
+
+  await page.goto('/#brain');
+  await page.getByLabel('选择流程').selectOption(sopId);
+  const field = page.getByLabel('必填字段');
+  const name = page.getByLabel('节点名称');
+  await expect(field).toHaveValue('发票号');
+  await field.fill(step);
+  await name.fill(step);
+  await field.evaluate((el) => {
+    const mark = window as unknown as { __sopField?: Element; __sopForm?: Element | null };
+    mark.__sopField = el;
+    mark.__sopForm = el.closest('fieldset');
+  });
+
+  expect((await report(page, staffHeader(staff), task.id, '询价草稿已放在对话里，尚未发送')).status()).toBe(200);
+  await page.waitForTimeout(1200);
+
+  await expect(field).toHaveValue(step);
+  await expect(name).toHaveValue(step);
+  await expect(page.getByRole('group', { name: '流程图' })).toContainText('原草稿步骤');
+  expect(await page.evaluate(() => {
+    const mark = window as unknown as { __sopField?: Element; __sopForm?: Element | null };
+    const current = document.querySelector('[aria-label="必填字段"]');
+    return current === mark.__sopField && current?.closest('fieldset') === mark.__sopForm;
+  })).toBe(true);
 });

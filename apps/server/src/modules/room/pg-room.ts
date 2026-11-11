@@ -1,3 +1,4 @@
+import type { ResultEvidence, ResultHold, ResultVerification } from './result-gate.js';
 import type { MessageKind, PromptSnapshot, RoomSnapshot, RoomTask, TaskContract } from './room.js';
 import {
   LOAD_MEMBERS_SQL,
@@ -46,6 +47,10 @@ interface TaskContext {
   promptSnapshot?: PromptSnapshot | null;
   approval?: RoomTask['approval'];
   reviewedByUserId?: string | null;
+  evidence?: ResultEvidence | null;
+  verification?: ResultVerification;
+  inputSupplement?: string | null;
+  hold?: ResultHold | null;
   contract?: TaskContract | null;
   runId?: string | null;
 }
@@ -102,6 +107,10 @@ export async function saveRoomRows(db: Queryable, snapshot: RoomSnapshot): Promi
         promptSnapshot: task.promptSnapshot,
         approval: task.approval,
         reviewedByUserId: task.reviewedByUserId,
+        evidence: task.evidence,
+        verification: task.verification,
+        inputSupplement: task.inputSupplement,
+        hold: task.hold,
         contract: task.contract,
         runId: task.runId,
       } satisfies TaskContext),
@@ -159,6 +168,10 @@ export async function loadRoomRows(db: Queryable): Promise<RoomSnapshot> {
         promptSnapshot: context.promptSnapshot ?? null,
         approval: context.approval === 'required' ? 'required' : 'none',
         reviewedByUserId: context.reviewedByUserId ?? null,
+        evidence: context.evidence ?? null,
+        verification: context.verification === 'verified' || context.verification === 'failed' ? context.verification : 'none',
+        inputSupplement: context.inputSupplement ?? null,
+        hold: context.hold ?? null,
         contract: context.contract ?? null,
         runId: context.runId ?? null,
       };

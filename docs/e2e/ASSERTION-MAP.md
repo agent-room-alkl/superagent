@@ -4,13 +4,13 @@ Generated from the v9–v12 prototype QA scripts: every `ok(…, message)` site,
 
 | Status | Meaning | Count |
 |---|---|---|
-| e2e | Covered by a Playwright test against the real app | 170 |
+| e2e | Covered by a Playwright test against the real app | 185 |
 | unit | Behaviour covered by a server test; the UI-level E2E follows when the owning page ships | 70 |
-| pending | Feature not built yet; the owner task will add the E2E | 17 |
+| pending | Feature not built yet; the owner task will add the E2E | 2 |
 | n/a | Prototype-only behaviour, with the reason given | 18 |
 | **total** | | **275** |
 
-Pending by owner: T-41 17
+Pending by owner: T-41 2
 
 CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid status, if a `pending` row has no owner task, if an `n/a` row has no reason, or if an `e2e` reference points to a missing file. A `unit` reference to a test file still in an open PR is reported, not failed.
 
@@ -59,7 +59,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 39 | Mismatched readback stops without resubmission | e2e | apps/e2e/tests/mainline.spec.ts |
 | 40 | Manual note cannot erase mismatched system outcome | e2e | apps/e2e/tests/work-inbox.spec.ts |
 | 41 | Existing conversation still produces draft | pending | T-41 |
-| 42 | Existing task evidence boundary retained | pending | T-41 |
+| 42 | Existing task evidence boundary retained | e2e | apps/e2e/tests/command-room.spec.ts |
 | 43 | Human dialog styles do not leak to task drawer | n/a | prototype single-file CSS isolation; React components are scoped |
 | 44 | No browser errors | e2e | apps/e2e/tests/fixtures.ts (every test fails on page/console errors) |
 
@@ -173,23 +173,23 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | # | Assertion | Status | Where / owner |
 |---|---|---|---|
 | 1 | Primary navigation changed | e2e | apps/e2e/tests/shell.spec.ts |
-| 2 | Empty summary invents work | pending | T-41 |
+| 2 | Empty summary invents work | e2e | apps/e2e/tests/command-room.spec.ts |
 | 3 | Greeting forced business form/task | e2e | apps/e2e/tests/command-room.spec.ts |
 | 4 | Async employee report replaced composer | e2e | apps/e2e/tests/command-room.spec.ts |
 | 5 | Draft incorrectly marked human-accepted | e2e | apps/e2e/tests/command-room.spec.ts — a reported task is not accepted until a person reviews it |
-| 6 | Draft boundary missing | pending | T-41 |
+| 6 | Draft boundary missing | e2e | apps/e2e/tests/command-room.spec.ts |
 | 7 | Execution identity untraceable | e2e | apps/e2e/tests/mainline.spec.ts |
-| 8 | Raw implementation JSON in result | pending | T-41 |
-| 9 | Verified result cannot be reviewed | pending | T-41 |
-| 10 | Malformed evidence passed | pending | T-41 |
-| 11 | Failed evidence can be accepted | pending | T-41 |
+| 8 | Raw implementation JSON in result | e2e | apps/e2e/tests/command-room.spec.ts |
+| 9 | Verified result cannot be reviewed | e2e | apps/e2e/tests/command-room.spec.ts |
+| 10 | Malformed evidence passed | e2e | apps/e2e/tests/command-room.spec.ts |
+| 11 | Failed evidence can be accepted | e2e | apps/e2e/tests/command-room.spec.ts |
 | 12 | Human result acceptance missing | e2e | apps/e2e/tests/command-room.spec.ts |
 | 13 | Missing information fake-executed | e2e | apps/e2e/tests/mainline.spec.ts |
-| 14 | Empty supplement accepted | pending | T-41 |
-| 15 | Supplement restarted/replaced task | pending | T-41 |
+| 14 | Empty supplement accepted | e2e | apps/e2e/tests/command-room.spec.ts |
+| 15 | Supplement restarted/replaced task | e2e | apps/e2e/tests/command-room.spec.ts |
 | 16 | Revoked tool still usable | unit | apps/server/test/tools.test.ts |
-| 17 | Blocker has no responsible person | pending | T-41 |
-| 18 | Authorized original task failed to resume | pending | T-41 |
+| 17 | Blocker has no responsible person | e2e | apps/e2e/tests/command-room.spec.ts |
+| 18 | Authorized original task failed to resume | e2e | apps/e2e/tests/command-room.spec.ts |
 | 19 | Tool gap missing | unit | apps/server/test/tools.test.ts |
 | 20 | Unreleased tool treated as reusable | unit | apps/server/test/tools.test.ts |
 | 21 | Independent verification record absent | unit | apps/server/test/tools.test.ts |
@@ -197,7 +197,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 23 | Capability delivery lost original task or did not resume | pending | T-41 |
 | 24 | Executing version differs from approved version | unit | apps/server/test/tools.test.ts |
 | 25 | Tool release leaked to other employee | unit | apps/server/test/tools.test.ts |
-| 26 | Summary leaks other owner | pending | T-41 |
+| 26 | Summary leaks other owner | e2e | apps/e2e/tests/command-room.spec.ts |
 | 27 | Employee navigation expanded | e2e | apps/e2e/tests/command-room.spec.ts |
 | 28 | Write rehearsal auto-approved | e2e | apps/e2e/tests/mainline.spec.ts — A real published SOP stops for human approval; the external ledger stays empty before the decision. |
 | 29 | Approval does not bind parameters | unit | apps/server/test/execution.test.ts |
@@ -215,8 +215,8 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 41 | Existing client incorrectly promises remote start | n/a | prototype copy about the desktop client; no such client in the product |
 | 42 | Manual pause bypassed during readback | e2e | apps/e2e/tests/mainline.spec.ts — A paused employee is denied before the read-only probe; the probe count remains zero. |
 | 43 | Paused readback repeated/finished external write | e2e | apps/e2e/tests/mainline.spec.ts — Denied paused reconciliation keeps the original run unknown and the external write count at one. |
-| 44 | Async report erased SOP input | pending | T-41 |
-| 45 | Async report replaced or lost workflow draft | pending | T-41 |
+| 44 | Async report erased SOP input | e2e | apps/e2e/tests/command-room.spec.ts |
+| 45 | Async report replaced or lost workflow draft | e2e | apps/e2e/tests/command-room.spec.ts |
 | 46 | Unvalidated draft can be published | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
 | 47 | Baseline validation missing regression cases | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 48 | Valid draft cannot publish | e2e | apps/e2e/tests/superagent.spec.ts (runtime contract test double until T-41 merges) |
@@ -231,7 +231,7 @@ CI runs `apps/e2e/check-assertion-map.mjs`. It fails if a row has no valid statu
 | 57 | Unconfirmed package can publish | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 58 | Confirmed package cannot validate | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
 | 59 | Knowledge change has no impact/context | e2e | apps/e2e/tests/sop-validation-packs.spec.ts (runtime contract test double until T-41 merges) |
-| 60 | Summary not linked to room | pending | T-41 |
+| 60 | Summary not linked to room | e2e | apps/e2e/tests/command-room.spec.ts |
 | 61 | File origin outcome interactions broken | n/a | prototype opened from file://; product is served over HTTPS |
 
 ## qa-database-knowledge

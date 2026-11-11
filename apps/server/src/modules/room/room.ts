@@ -1,5 +1,9 @@
 import type { TaskStatus } from '@superagent/shared';
 import { asksAvailability, isExternalAction, isGreeting, needsParameters, workText } from './intent.js';
+import {
+  acceptSupplement, applyAsyncReport, evidenceFromReport, PERMISSION_HOLD, resultOverview, summaryLabel, verificationOf,
+  type ResultEvidence, type ResultHold, type ResultVerification,
+} from './result-gate.js';
 
 export interface Viewer {
   userId: string;
@@ -71,6 +75,12 @@ export interface RoomTask {
   /** "required" when the request is an outward action; reading and drafting need none. */
   approval: 'none' | 'required';
   reviewedByUserId: string | null;
+  /** Structured result. Null until someone reports. Never rendered by stringifying it. */
+  evidence: ResultEvidence | null;
+  verification: ResultVerification;
+  inputSupplement: string | null;
+  /** Set while the task is waiting on a person. Cleared on release; the task id stays. */
+  hold: ResultHold | null;
   contract: TaskContract | null;
   /** The execution run that carries this task's external action, linked by the runtime or the person who asked. */
   runId: string | null;
@@ -123,6 +133,15 @@ function withDefaults(task: RoomTask): RoomTask {
     promptSnapshot: task.promptSnapshot ? { ...task.promptSnapshot } : null,
     approval: task.approval ?? 'none',
     reviewedByUserId: task.reviewedByUserId ?? null,
+    evidence: task.evidence
+      ? {
+          fields: { subject: task.evidence.fields?.subject ?? null, body: task.evidence.fields?.body ?? null },
+          sent: task.evidence.sent === true,
+        }
+      : null,
+    verification: task.verification === 'verified' || task.verification === 'failed' ? task.verification : 'none',
+    inputSupplement: task.inputSupplement ?? null,
+    hold: task.hold?.responsible ? { reason: task.hold.reason, responsible: task.hold.responsible } : null,
     contract: task.contract ? { ...task.contract } : null,
     runId: task.runId ?? null,
   };
@@ -278,6 +297,11 @@ export class CommandRoom {
       },
       approval: isExternalAction(body) ? 'required' : 'none',
       reviewedByUserId: null,
+      // A draft is unsent from the moment it exists. Nothing is marked done until a person reports it.
+      evidence: workText(body).includes('草稿') ? { fields: { subject: null, body: null }, sent: false } : null,
+      verification: 'none',
+      inputSupplement: null,
+      hold: null,
       contract: null,
       runId: null,
     };
@@ -305,6 +329,8 @@ export class CommandRoom {
     if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
     task.status = 'reported';
     task.waitingReason = null;
+    task.evidence = evidenceFromReport(body);
+    task.verification = verificationOf(task.evidence);
     return this.push({
       roomId: task.roomId,
       tenantId: task.tenantId,
@@ -345,6 +371,7 @@ export class CommandRoom {
     const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
     if (prior) return prior;
     if (task.status !== 'reported') throw new Error('not_reported');
+    if (task.verification === 'failed') throw new Error('evidence_failed');
     task.status = 'reviewed';
     task.reviewedByUserId = viewer.userId;
     return this.push({
@@ -357,6 +384,92 @@ export class CommandRoom {
       taskIds: [task.id],
       kind: 'review',
     });
+  }
+
+  /** Re-checks the stored evidence. A missing body fails the check and blocks acceptance. */
+  verifyEvidence(taskId: string, viewer: Viewer, body: string | null): RoomTask {
+    const task = this.editableTask(taskId, viewer);
+    const current = task.evidence ?? { fields: { subject: null, body: null }, sent: false };
+    task.evidence = { fields: { subject: current.fields.subject, body }, sent: current.sent };
+    task.verification = verificationOf(task.evidence);
+    return task;
+  }
+
+  /** Human text for the drawer. Evidence stays structured and is not printed. */
+  overview(taskId: string, viewer: Viewer): string {
+    const task = this.visibleTask(taskId, viewer);
+    return resultOverview(task.title, task.evidence);
+  }
+
+  /** Marks the same task as waiting for a supplement. Does not open a second task. */
+  askInput(taskId: string, viewer: Viewer): RoomTask {
+    const task = this.askedTask(taskId, viewer);
+    task.status = 'waiting';
+    task.waitingReason = '等待补充';
+    return task;
+  }
+
+  /**
+   * Writes a supplement onto the task that asked for it. An empty note is refused.
+   * The task id and the length of the task list stay the same.
+   */
+  supplement(taskId: string, viewer: Viewer, text: string, clientMessageId: string): { task: RoomTask; message: RoomMessage } {
+    const task = this.editableTask(taskId, viewer);
+    const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
+    if (prior) return { task, message: prior };
+    const accepted = acceptSupplement(text);
+    const id = task.id;
+    const count = this.tasks.length;
+    task.inputSupplement = accepted;
+    if (task.waitingReason === '等待补充') {
+      task.status = 'assigned';
+      task.waitingReason = null;
+    }
+    if (task.id !== id || this.tasks.length !== count) throw new Error('task_replaced');
+    const message = this.push({
+      roomId: task.roomId,
+      tenantId: task.tenantId,
+      authorUserId: viewer.userId,
+      body: `已补充：${accepted}`,
+      clientMessageId,
+      mentions: [],
+      taskIds: [task.id],
+      kind: 'message',
+    });
+    return { task, message };
+  }
+
+  /** The task waits, named to the enterprise owner. The task itself is not replaced. */
+  holdForPermission(taskId: string, viewer: Viewer): RoomTask {
+    const task = this.askedTask(taskId, viewer);
+    task.status = 'waiting';
+    task.waitingReason = '等待企业负责人授权';
+    task.hold = { ...PERMISSION_HOLD };
+    return task;
+  }
+
+  /** Clears a hold and continues the same task. Nothing is rebuilt. */
+  releaseHold(taskId: string, viewer: Viewer, clientMessageId: string): { task: RoomTask; message: RoomMessage } {
+    const task = this.askedTask(taskId, viewer);
+    const prior = this.byClientId.get(`${task.roomId}:${clientMessageId}`);
+    if (prior) return { task, message: prior };
+    if (!task.hold) throw new Error('not_held');
+    const id = task.id;
+    task.hold = null;
+    task.waitingReason = null;
+    task.status = 'assigned';
+    if (task.id !== id) throw new Error('task_replaced');
+    const message = this.push({
+      roomId: task.roomId,
+      tenantId: task.tenantId,
+      authorUserId: viewer.userId,
+      body: `已恢复：${task.title}`,
+      clientMessageId,
+      mentions: [],
+      taskIds: [task.id],
+      kind: 'message',
+    });
+    return { task, message };
   }
 
   /**
@@ -456,6 +569,18 @@ export class CommandRoom {
     return { message, task: withDefaults(task), revised: version > 1 || hadAcceptance };
   }
 
+  /** Visible work only. An empty list is "暂无事项", never a made-up item. */
+  summary(viewer: Viewer): { label: '暂无事项' | null; tasks: RoomTask[] } {
+    const tasks = this.listTasks(viewer);
+    return { label: summaryLabel(tasks.length), tasks };
+  }
+
+  /** A report may arrive while a workflow draft is open. The draft is returned untouched. */
+  reportBesideDraft<T>(taskId: string, authorUserId: string, body: string, clientMessageId: string, draft: T): { message: RoomMessage; draft: T } {
+    const message = this.report(taskId, authorUserId, body, clientMessageId);
+    return { message, draft: applyAsyncReport(draft) };
+  }
+
   /** One task as the caller may see it. */
   task(taskId: string, viewer: Viewer): RoomTask {
     return withDefaults(this.visibleTask(taskId, viewer));
@@ -469,6 +594,22 @@ export class CommandRoom {
 
   listTasks(viewer: Viewer, roomId?: string): RoomTask[] {
     return this.tasks.filter((task) => (roomId === undefined || task.roomId === roomId) && this.canSeeTask(task, viewer));
+  }
+
+  /** The asker, or an owner. Someone who cannot see the task gets task_not_found. */
+  private askedTask(taskId: string, viewer: Viewer): RoomTask {
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId) throw new Error('forbidden');
+    if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    return task;
+  }
+
+  /** The asker, the assignee, or an owner. */
+  private editableTask(taskId: string, viewer: Viewer): RoomTask {
+    const task = this.visibleTask(taskId, viewer);
+    if (!isOwner(viewer) && task.createdByUserId !== viewer.userId && task.assigneeUserId !== viewer.userId) throw new Error('forbidden');
+    if (task.status === 'cancelled' || task.status === 'reviewed') throw new Error('task_closed');
+    return task;
   }
 
   private visibleTask(taskId: string, viewer: Viewer): RoomTask {
