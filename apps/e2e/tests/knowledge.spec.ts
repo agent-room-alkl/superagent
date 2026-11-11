@@ -227,3 +227,26 @@ test('[qa-source-plugins#28] Paused knowledge plugin blocks its source reference
 });
 test('[qa-source-plugins#29] Database plugin leads to existing scoped read-only configuration', async ({ page }) => { await page.getByRole('button', { name: '安装只读数据库插件', exact: true }).click(); await page.getByRole('button', { name: '配置只读数据库来源', exact: true }).click(); await expect(page.getByRole('heading', { name: '只读数据库来源', exact: true })).toBeInViewport(); await expect(page.getByLabel('DBA 批准的资源')).toBeVisible(); await expect(page.locator('.database-source-scope')).toContainText('approved_lots'); });
 test('[qa-source-plugins#30] Installing knowledge plugins did not install employee business tools', async ({ page }) => { const before = await response(page.request.get('/api/v1/tools/')); for (const id of ['database', 'email', 'sharepoint']) await install(page, id); expect(await response(page.request.get('/api/v1/tools/'))).toEqual(before); expect((await getOverview(page)).connections).toEqual([]); await refresh(page); await expect(page.getByTestId('plugin-email')).toContainText('已启用'); });
+
+test('[qa-enablement#52] No browser errors or imported script execution', async ({ page }) => {
+  const hostile = ['角色：采购专员；责任：核对采购申请。', '<script>window.__kbPwned = 1</script>', '<img src="x" onerror="window.__kbPwned = 2">'].join('\n');
+  await localFile(page, false, hostile);
+  await page.getByText('查看当前版本原文与定位', { exact: true }).click();
+  const preview = page.locator('.knowledge-item-preview');
+  await expect(preview).toContainText('<script>window.__kbPwned = 1</script>');
+  await expect(preview.locator('script, img')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __kbPwned?: number }).__kbPwned)).toBeUndefined();
+});
+
+test('[qa-database-knowledge#38] No browser errors or real SQL execution', async ({ page }) => {
+  const { connection } = await querySetup(page);
+  const reads = async () => (await response<{ counters: { database: number } }>(page.request.get('/__test/knowledge/audit'))).counters.database;
+  const before = await reads();
+  for (const sql of ['DELETE FROM approved_lots WHERE lot_id = $1', 'UPDATE approved_lots SET quantity = 0 WHERE lot_id = $1', `${SQL}; DROP TABLE approved_lots`]) {
+    const refused = await page.request.post(`${ROOT}/connections/${connection.id}/templates`, { data: { sql, params: ['lot_id'] } });
+    expect(refused.status(), sql).toBe(422);
+  }
+  expect(await reads()).toBe(before);
+  await queryUi(page);
+  await expect(page.getByRole('cell', { name: 'LOT-P1', exact: true })).toBeVisible();
+});

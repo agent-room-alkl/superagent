@@ -133,6 +133,20 @@ test('main line: knowledge → employee and tool → SOP → trigger → approva
     await expect(run.locator('[data-step="w"] .readback')).toContainText('"amount":480');
   });
 
+  await test.step('the run can be traced to who started it and who approved its write, and nobody else can claim it (qa-outcomes#7)', async () => {
+    const { executions } = await json<{ executions: { id: string; eventId: string; startedBy: string }[] }>(page.request.get(`/api/v1/executions?sopId=${encodeURIComponent(SOP)}`));
+    const run = executions.find((r) => r.eventId === 'INV-480')!;
+    expect(run.startedBy).toBe('e2e-knowledge-owner');
+    type Item = { id: string; kind: string; payloadVersion: number; payload: Record<string, unknown>; decision: { by: string } | null };
+    const approvalOf = async () => (await json<{ items: Item[] }>(page.request.get('/api/v1/work-items/'))).items.find((i) => i.kind === 'action_approval' && i.payload.executionId === run.id)!;
+    const approval = await approvalOf();
+    expect(approval.decision?.by).toBe(run.startedBy);
+    // another reviewer cannot decide it or overwrite who approved it
+    const forged = await page.request.post(`/api/v1/work-items/${approval.id}/decide`, { data: { expectedVersion: approval.payloadVersion }, headers: { 'x-dev-user': REVIEWER } });
+    expect([403, 404]).toContain(forged.status());
+    expect((await approvalOf()).decision?.by).toBe(run.startedBy);
+  });
+
   await test.step('missing required input: blocked and asks for it, nothing runs or is written', async () => {
     const runs = page.getByRole('region', { name: '运行记录' });
     await runs.getByLabel('事件编号').fill('INV-000');
