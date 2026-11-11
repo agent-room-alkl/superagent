@@ -116,7 +116,7 @@ test('batch: conflict rows cannot be selected, only selected clean rows run, exc
     rows: [{ id: 'r1', clean: true, selected: false }, { id: 'r2', clean: false, selected: false }, { id: 'r3', clean: true, selected: false }],
   });
   const other = await item(page, { kind: 'supply_info', assigneeUserId: staff, projectId: 'P-3', payload: { title: '另一个项目的事' } });
-  await as(page, `${staff}|employee|`);
+  await as(page, `${staff}|employee|P-2,P-3`);
 
   // the project filter selects only that project's work
   await page.getByLabel('项目筛选').selectOption('P-2');
@@ -152,7 +152,7 @@ test('project filter hides batch rows that belong to another project', async ({ 
       { id: 'd', clean: false, selected: false, projectId: 'P-D' },
     ],
   });
-  await as(page, `${staff}|employee|`);
+  await as(page, `${staff}|employee|P-A,P-C,P-D`);
   await page.getByLabel('项目筛选').selectOption('P-C');
   await expect(page.locator(`[data-item="${batch}"]`)).toBeVisible();
   await openItem(page, batch);
