@@ -243,4 +243,12 @@ test('exception ruling keeps the evidence; a note cannot erase the mismatched sy
   await expect(drawer(page).locator('[data-note]')).toContainText('备注不会改变系统结果');
   await expect(drawer(page)).toContainText('批准的值：{"amount":990}');
   await expect(drawer(page)).toContainText('系统回读：{"amount":9900}');
+  // the manager rules on the exception: a decision, not an execution grant; the evidence and the read-back stay
+  await drawer(page).getByRole('button', { name: /按版本 \d+ 决定/ }).click();
+  await expect(drawer(page).locator('[data-decision]')).toContainText('这是决定，不是执行授权。');
+  await expect(drawer(page)).toContainText('例外原因：readback_mismatch');
+  await expect(drawer(page)).toContainText('批准的值：{"amount":990}');
+  await expect(drawer(page)).toContainText('系统回读：{"amount":9900}');
+  await expect(drawer(page).locator('[data-note]')).toContainText('备注不会改变系统结果');
+  await expect(drawer(page).getByRole('button', { name: /决定/ })).toHaveCount(0);
 });

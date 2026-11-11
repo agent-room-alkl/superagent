@@ -928,8 +928,9 @@
    "id": "qa-enablement#49",
    "suite": "qa-enablement",
    "assertion": "Tool list exposes same compact lifecycle progress",
-   "status": "e2e",
-   "ref": "apps/e2e/tests/tools.spec.ts"
+   "status": "pending",
+   "owner": "T-39",
+   "note": "没有工具列表页。员工工具页只能按 ID 打开单张卡。"
   },
   {
    "id": "qa-enablement#50",
@@ -953,7 +954,7 @@
    "suite": "qa-enablement",
    "assertion": "No browser errors or imported script execution",
    "status": "e2e",
-   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-enablement#52])"
   },
   {
    "id": "qa-enablement-guide#1",
@@ -1769,7 +1770,7 @@
    "suite": "qa-database-knowledge",
    "assertion": "No browser errors or real SQL execution",
    "status": "e2e",
-   "ref": "apps/e2e/tests/fixtures.ts (every test fails on page/console errors)"
+   "ref": "apps/e2e/tests/knowledge.spec.ts ([qa-database-knowledge#38])"
   },
   {
    "id": "qa-database-guide#1",
