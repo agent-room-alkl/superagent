@@ -235,6 +235,7 @@ it('a bound database stores one work ref and rejects a non-uuid tenant before an
     },
   });
   const app = Fastify();
+  signIn(app);
   await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
   const tenant = '11111111-1111-4111-8111-111111111111';
   const bad = await app.inject({
@@ -249,6 +250,7 @@ it('a bound database stores one work ref and rejects a non-uuid tenant before an
   const created = await app.inject({
     method: 'POST',
     url: '/api/v1/runtime/work',
+    headers: { 'x-test-user': `worker|admin|${tenant}` },
     payload: { kind: 'knowledge.sync', payload: { tenantId: tenant, runId: 'run-1', operationId: 'poll' }, notBefore: 0 },
   });
   expect(created.statusCode).toBe(200);
@@ -325,4 +327,33 @@ it('an employee or reviewer is refused on every runtime write', async () => {
   });
   expect(created.statusCode).toBe(200);
   expect(created.json().tenantId).toBe('tenant-a');
+});
+
+it('a work payload for another tenant is stored for the signed-in tenant and cannot be claimed there', async () => {
+  const app = Fastify();
+  signIn(app);
+  await app.register(runtimeModule, { prefix: '/api/v1/runtime' });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/work',
+    headers: { 'x-test-user': 'admin-a|admin|tenant-a' },
+    payload: { kind: 'knowledge.sync', payload: { tenantId: 'tenant-b', runId: 'run-b', operationId: 'poll' } },
+  });
+  expect(created.statusCode).toBe(200);
+  expect(created.json().tenantId).toBe('tenant-a');
+  const stolen = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/claim',
+    headers: { 'x-test-user': 'worker-b|admin|tenant-b' },
+    payload: { workerId: 'worker-b' },
+  });
+  expect(stolen.json().task).toBeNull();
+  const own = await app.inject({
+    method: 'POST',
+    url: '/api/v1/runtime/claim',
+    headers: { 'x-test-user': 'worker-a|admin|tenant-a' },
+    payload: { workerId: 'worker-a' },
+  });
+  expect(own.json().task.id).toBe(created.json().id);
+  expect(own.json().task.tenantId).toBe('tenant-a');
 });

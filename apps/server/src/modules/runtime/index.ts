@@ -49,13 +49,17 @@ export const runtimeModule: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/work', async (req, reply) => {
+    const tenantId = req.user?.tenantId;
+    if (!tenantId) return reply.code(401).send({ error: 'unauthenticated' });
     const body = (req.body ?? {}) as { kind?: string; payload?: WorkRef; notBefore?: number };
     if (!body.kind || !WORK_KINDS.includes(body.kind as (typeof WORK_KINDS)[number]) || !body.payload) {
       return reply.code(400).send({ error: 'bad_work' });
     }
+    // The signed-in tenant wins. A tenant id in the payload cannot enqueue work for someone else.
+    const payload = { ...body.payload, tenantId };
     try {
-      if (runtimeState.db) return await enqueueWork(runtimeState.db, body.kind, body.payload, body.notBefore);
-      return runtimeState.queue.enqueue(body.kind as (typeof WORK_KINDS)[number], body.payload, body.notBefore);
+      if (runtimeState.db) return await enqueueWork(runtimeState.db, body.kind, payload, body.notBefore);
+      return runtimeState.queue.enqueue(body.kind as (typeof WORK_KINDS)[number], payload, body.notBefore);
     } catch (error) {
       return reply.code(400).send({ error: (error as Error).message });
     }
