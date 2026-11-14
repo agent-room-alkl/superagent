@@ -94,3 +94,25 @@ test('release still needs a healthy deployment; a failed health check blocks ins
   await expect(page.locator('main')).toContainText('health check failed');
   expect((await request.post(`/api/v1/tools/${TOOL}/install`, { data: { employeeId: 'emp-1' } })).status()).toBeGreaterThanOrEqual(400);
 });
+
+test('tool store lists preset tools, keeps unimplemented connectors disabled, and installs onto an employee', async ({ page, request }) => {
+  const empRes = await request.post('/api/v1/employees/', {
+    data: { name: 'Store Tester', duty: 'Answer questions', prompt: 'Use knowledge base' },
+  });
+  expect(empRes.status()).toBe(200);
+  const emp = (await empRes.json()) as { id: string; name: string };
+
+  await page.goto('/#tools');
+  const store = page.getByRole('region', { name: '工具商店' });
+  await expect(store).toBeVisible();
+  await expect(store.getByText('知识库问答')).toBeVisible();
+  await expect(store.getByRole('button', { name: '即将提供' }).first()).toBeDisabled();
+
+  const card = store.locator('article').filter({ hasText: 'knowledge.search' });
+  await card.getByRole('button', { name: '安装到员工' }).click();
+  await card.getByLabel('选择员工').selectOption(emp.id);
+  await card.getByRole('button', { name: '确认安装' }).click();
+
+  await expect(store.getByRole('status')).toContainText(emp.name);
+  await expect(card).toContainText('已安装');
+});
