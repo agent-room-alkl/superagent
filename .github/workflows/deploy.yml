@@ -1,12 +1,18 @@
 name: deploy
 
-# Manual deploys. Azure login uses OIDC federated credentials — no long-lived secrets in GitHub.
+# Deploys to staging on push to main (ignoring doc-only changes), or staging/prod via manual workflow_dispatch.
+# Azure login uses OIDC federated credentials — no long-lived secrets in GitHub.
 # Required repository/environment variables (not secrets): AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID,
 # AZURE_RESOURCE_GROUP, ENTRA_TENANT_ID, ENTRA_CLIENT_ID, PG_ADMIN_GROUP_ID, PG_ADMIN_GROUP_NAME.
 # Optional: LOCATION, DOC_INTEL_LOCATION, EXISTING_CONTAINERAPPS_ENVIRONMENT_ID.
 # Unset or empty means the template default. An empty string is not passed, so it cannot override that default.
 # Staging sets EXISTING_CONTAINERAPPS_ENVIRONMENT_ID to the innopro Container Apps environment (subscription quota is one).
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
     inputs:
       environment:
@@ -20,14 +26,18 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-${{ inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     # The prod environment should be configured with required reviewers (manual approval).
-    environment: ${{ inputs.environment }}
+    environment: ${{ inputs.environment || 'staging' }}
     env:
       RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-      ENV_NAME: ${{ inputs.environment }}
+      ENV_NAME: ${{ inputs.environment || 'staging' }}
       SOURCE_DATABASES_JSON: ${{ vars.SOURCE_DATABASES_JSON }}
       KNOWLEDGE_SOURCES_JSON: ${{ vars.KNOWLEDGE_SOURCES_JSON }}
     steps:

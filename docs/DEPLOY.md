@@ -69,7 +69,8 @@ Production hardening (both optional parameters):
 
 ## Deploy
 
-Run the **deploy** workflow (Actions → deploy → Run workflow → staging). It:
+Pushing to `main` (excluding `docs/**` and `**/*.md`) automatically runs the **deploy** workflow against `staging`.
+For `prod` (or to re-run `staging` manually), trigger **Actions → deploy → Run workflow** and choose the environment (`prod` requires approval from configured reviewers). It:
 1. creates or updates infrastructure (this first pass runs every app and job, including the sandbox, on a public
    placeholder image because the registry is still empty),
 2. builds and pushes `superagent:<git sha>` to the registry,
