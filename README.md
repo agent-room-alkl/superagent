@@ -17,16 +17,21 @@ infra/          Azure Bicep (Container Apps, PostgreSQL, Blob, Key Vault, Docume
 
 ## Develop
 
-Requires Node 22 and a local PostgreSQL 16.
+Requires Node 22.9 or later. PostgreSQL 16 is optional: with `AUTH_MODE=dev` (the default in `.env.example`) the
+server keeps everything in memory, so data is lost on restart and the PostgreSQL tests are skipped.
 
 ```bash
 npm install
 cp .env.example .env
 npm run build -w @superagent/shared
 npm run dev:server   # http://localhost:8080
-npm run dev:web      # http://localhost:5173 (proxies /api to the server)
+npm run dev:web      # http://localhost:5173 (proxies /api, /auth and /healthz to the server)
 npm test
 ```
+
+Both dev commands read the `.env` at the repository root. Run them from the root, each in its own terminal.
+`test/sandbox-isolation.test.ts` needs `infra/main.json`; create it with
+`az bicep build --file infra/main.bicep --outfile infra/main.json` (CI does this), otherwise that one file fails.
 
 ## Run as a container
 
