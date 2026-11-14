@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { ToolContract, ToolRoute } from '@superagent/shared';
+import { employeesState } from '../employees/index.js';
 import { roomState } from '../room/index.js';
+import { findPresetTool, installPresetTool, listPresetCatalog } from './catalog.js';
 import { GateError, ToolService } from './lifecycle.js';
 
 /** Process-wide tool service, shared with the SOP executor (tool availability and effect). */
@@ -42,6 +44,25 @@ export const toolsModule: FastifyPluginAsync<{ service?: ToolService }> = async 
       return { toolId: t.toolId, name: t.name, state: t.state, effect: t.contract.effect, stage: p.done.length === 7 ? 'available' : p.current };
     }),
   );
+  /** Preset tool store catalog grounded in implemented server capabilities. */
+  app.get<{ Querystring: { employeeId?: string } }>('/catalog', async (req) => {
+    const empId = typeof req.query?.employeeId === 'string' && req.query.employeeId.trim() ? req.query.employeeId.trim() : undefined;
+    return { tools: listPresetCatalog(svc, empId) };
+  });
+  /** Install an installable preset tool onto a specific digital employee. */
+  app.post<{ Params: { id: string }; Body: { employeeId?: string } }>('/catalog/:id/install', async (req, reply) => {
+    const preset = findPresetTool(req.params.id);
+    if (!preset) return reply.code(404).send({ error: 'preset_not_found', message: `Preset tool ${req.params.id} not found` });
+    if (!preset.installable) return reply.code(409).send({ error: 'coming_soon', message: `${preset.toolId} is coming soon and cannot be installed yet` });
+    const employeeId = typeof req.body?.employeeId === 'string' ? req.body.employeeId.trim() : '';
+    if (!employeeId) return reply.code(400).send({ error: 'employee_required', message: 'employeeId is required' });
+    const knownEmployees = employeesState.current.list();
+    if (!knownEmployees.some((emp) => emp.id === employeeId)) {
+      return reply.code(404).send({ error: 'employee_not_found', message: `Employee ${employeeId} not found` });
+    }
+    installPresetTool(svc, preset, employeeId);
+    return { installed: true, tool: listPresetCatalog(svc, employeeId).find((item) => item.toolId === preset.toolId), card: view(preset.toolId, employeeId) };
+  });
   app.get<{ Params: { id: string }; Querystring: { employeeId?: string } }>('/:id', async (req) => view(req.params.id, req.query?.employeeId));
   app.post<{ Params: { id: string } }>('/:id/confirm', async (req) => (svc.confirmContract(req.params.id), view(req.params.id)));
   app.post<{ Params: { id: string }; Body: { route: ToolRoute; artifact: string; developerOnline?: boolean } }>('/:id/acquire', async (req) => {
