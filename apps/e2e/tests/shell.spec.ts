@@ -33,6 +33,19 @@ test('no horizontal page scroll at phone width', async ({ page, isMobile }) => {
   }
 });
 
+test('the language switch fits inside the top bar (desktop and phone width)', async ({ page }) => {
+  await page.goto('/');
+  const bar = await page.locator('.topbar').boundingBox();
+  const sw = await page.locator('.lang-switch').boundingBox();
+  expect(bar && sw).toBeTruthy();
+  expect(sw!.x).toBeGreaterThanOrEqual(bar!.x);
+  expect(sw!.x + sw!.width).toBeLessThanOrEqual(bar!.x + bar!.width);
+  expect(sw!.y).toBeGreaterThanOrEqual(bar!.y);
+  expect(sw!.y + sw!.height).toBeLessThanOrEqual(bar!.y + bar!.height);
+  const product = await page.locator('.topbar .product').boundingBox();
+  expect(product!.x + product!.width, 'product name and switch do not overlap').toBeLessThanOrEqual(sw!.x);
+});
+
 test('unbuilt modules say who owns them instead of showing invented data', async ({ page }) => {
   await page.goto('/#employees');
   await expect(page.locator('main')).toContainText('T-42');
